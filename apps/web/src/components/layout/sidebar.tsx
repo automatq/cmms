@@ -1,0 +1,129 @@
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { cn } from '@/lib/utils'
+import { useAuth } from '@/providers/auth-provider'
+import { Button } from '@/components/ui/button'
+import {
+  LayoutDashboard,
+  Package,
+  ClipboardList,
+  Calendar,
+  Warehouse,
+  BarChart3,
+  Bell,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  Wrench,
+} from 'lucide-react'
+import { useState } from 'react'
+
+const navigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Assets', href: '/dashboard/assets', icon: Package },
+  { name: 'Work Orders', href: '/dashboard/work-orders', icon: ClipboardList },
+  { name: 'PM Plans', href: '/dashboard/pm', icon: Calendar },
+  { name: 'Inventory', href: '/dashboard/inventory', icon: Warehouse },
+  { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
+]
+
+export function Sidebar() {
+  const pathname = usePathname()
+  const { user, logout } = useAuth()
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  return (
+    <>
+      {/* Mobile menu button */}
+      <div className="lg:hidden fixed top-4 left-4 z-50">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setMobileOpen(!mobileOpen)}
+        >
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
+      </div>
+
+      {/* Sidebar */}
+      <div
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 w-64 bg-card border-r transform transition-transform duration-200 ease-in-out lg:translate-x-0',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        <div className="flex flex-col h-full">
+          {/* Logo */}
+          <div className="flex items-center gap-2 px-6 py-5 border-b">
+            <Wrench className="h-8 w-8 text-primary" />
+            <span className="text-xl font-bold">CMMS</span>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+            {navigation.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.name}
+                </Link>
+              )
+            })}
+          </nav>
+
+          {/* User section */}
+          <div className="border-t p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+                <span className="text-sm font-medium text-primary">
+                  {user?.firstName?.[0] || user?.username?.[0] || 'U'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {user?.email}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" className="flex-1 justify-start" asChild>
+                <Link href="/dashboard/settings">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Link>
+              </Button>
+              <Button variant="ghost" size="icon" onClick={logout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+    </>
+  )
+}

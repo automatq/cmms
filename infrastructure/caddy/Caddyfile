@@ -1,0 +1,15 @@
+{
+	:80 {
+		handle /api/* {
+			reverse_proxy cmms-api:4000
+		}
+
+		handle /auth/* {
+			reverse_proxy keycloak:8080
+		}
+
+		handle {
+			reverse_proxy cmms-web:3000
+		}
+	}
+}

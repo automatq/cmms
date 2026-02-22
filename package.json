@@ -1,0 +1,21 @@
+{
+  "name": "cmms",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=@cmms/api",
+    "dev:web": "npm run dev --workspace=@cmms/web",
+    "dev:mobile": "npm run start --workspace=@cmms/mobile",
+    "build:api": "npm run build --workspace=@cmms/api",
+    "build:web": "npm run build --workspace=@cmms/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "realm": "cmms",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Full system access" },
+      { "name": "manager", "description": "Read/write most, no delete, no settings" },
+      { "name": "technician", "description": "Read assets, read/write own WOs, read inventory" },
+      { "name": "planner", "description": "Full WO and PM access, read-only assets/inventory" },
+      { "name": "requestor", "description": "Create work requests only" },
+      { "name": "inventory_manager", "description": "Full inventory access, read-only WOs" },
+      { "name": "viewer", "description": "Read-only everything" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "cmms-api",
+      "name": "CMMS API",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "cmms-web",
+      "name": "CMMS Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid", "email", "profile", "roles"],
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@cmms.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "System",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "technician",
+      "email": "tech@cmms.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "John",
+      "lastName": "Technician",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "tech123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["technician"]
+    },
+    {
+      "username": "manager",
+      "email": "manager@cmms.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Jane",
+      "lastName": "Manager",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "manager123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["manager"]
+    }
+  ]
+}

@@ -1,0 +1,388 @@
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, LessThanOrEqual, Between } from 'typeorm';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { addDays, addWeeks, addMonths, addYears, startOfDay, endOfDay } from 'date-fns';
+import { PmPlan, TriggerType, FrequencyUnit, ChecklistTemplate, PmHistory, PmHistoryStatus } from './entities';
+import {
+  CreatePmPlanDto,
+  UpdatePmPlanDto,
+  PmQueryDto,
+  CreateChecklistTemplateDto,
+  UpdateChecklistTemplateDto,
+} from './dto';
+import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
+import { WorkOrdersService } from '../work-orders/work-orders.service';
+import { WorkOrderType, Priority } from '../work-orders/entities/work-order.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+
+@Injectable()
+export class PmService {
+  constructor(
+    @InjectRepository(PmPlan)
+    private readonly pmPlanRepository: Repository<PmPlan>,
+    @InjectRepository(ChecklistTemplate)
+    private readonly templateRepository: Repository<ChecklistTemplate>,
+    @InjectRepository(PmHistory)
+    private readonly historyRepository: Repository<PmHistory>,
+    @Inject(forwardRef(() => WorkOrdersService))
+    private readonly workOrdersService: WorkOrdersService,
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService: NotificationsService,
+    @InjectQueue('pm-scheduler')
+    private readonly pmQueue: Queue,
+  ) {}
+
+  // ==================== PM PLAN CRUD ====================
+
+  async create(dto: CreatePmPlanDto): Promise<PmPlan> {
+    const plan = this.pmPlanRepository.create({
+      ...dto,
+      nextDueAt: dto.nextDueAt ? new Date(dto.nextDueAt) : undefined,
+    });
+
+    const savedPlan = await this.pmPlanRepository.save(plan);
+    return Array.isArray(savedPlan) ? savedPlan[0] : savedPlan;
+  }
+
+  async findAll(query: PmQueryDto): Promise<PaginatedResult<PmPlan>> {
+    const { page, limit, search, triggerType, assetId, isActive } = query;
+
+    const queryBuilder = this.pmPlanRepository
+      .createQueryBuilder('pm')
+      .leftJoinAndSelect('pm.asset', 'asset');
+
+    if (search) {
+      queryBuilder.andWhere('pm.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    if (triggerType) {
+      queryBuilder.andWhere('pm.triggerType = :triggerType', { triggerType });
+    }
+
+    if (assetId) {
+      queryBuilder.andWhere('pm.assetId = :assetId', { assetId });
+    }
+
+    if (isActive !== undefined) {
+      queryBuilder.andWhere('pm.isActive = :isActive', { isActive });
+    }
+
+    const [data, total] = await queryBuilder
+      .skip((page - 1) * limit)
+      .take(limit)
+      .orderBy('pm.nextDueAt', 'ASC')
+      .getManyAndCount();
+
+    return paginate(data, total, page, limit);
+  }
+
+  async findOne(id: string): Promise<PmPlan> {
+    const plan = await this.pmPlanRepository.findOne({
+      where: { id },
+      relations: ['asset'],
+    });
+
+    if (!plan) {
+      throw new NotFoundException(`PM Plan with ID ${id} not found`);
+    }
+
+    return plan;
+  }
+
+  async update(id: string, dto: UpdatePmPlanDto): Promise<PmPlan> {
+    const plan = await this.findOne(id);
+    
+    if (dto.nextDueAt) {
+      dto.nextDueAt = new Date(dto.nextDueAt).toISOString();
+    }
+
+    Object.assign(plan, dto);
+    return this.pmPlanRepository.save(plan);
+  }
+
+  async toggleActive(id: string): Promise<PmPlan> {
+    const plan = await this.findOne(id);
+    plan.isActive = !plan.isActive;
+    return this.pmPlanRepository.save(plan);
+  }
+
+  async delete(id: string): Promise<void> {
+    const plan = await this.findOne(id);
+    await this.pmPlanRepository.remove(plan);
+  }
+
+  // ==================== SCHEDULING ====================
+
+  async getDueToday(): Promise<PmPlan[]> {
+    const today = new Date();
+    return this.pmPlanRepository.find({
+      where: {
+        isActive: true,
+        nextDueAt: Between(startOfDay(today), endOfDay(today)),
+      },
+      relations: ['asset'],
+    });
+  }
+
+  async getDueThisWeek(): Promise<PmPlan[]> {
+    const today = new Date();
+    const weekEnd = addDays(today, 7);
+    return this.pmPlanRepository.find({
+      where: {
+        isActive: true,
+        nextDueAt: Between(startOfDay(today), endOfDay(weekEnd)),
+      },
+      relations: ['asset'],
+      order: { nextDueAt: 'ASC' },
+    });
+  }
+
+  async getOverdue(): Promise<PmPlan[]> {
+    const today = new Date();
+    return this.pmPlanRepository.find({
+      where: {
+        isActive: true,
+        nextDueAt: LessThanOrEqual(startOfDay(today)),
+      },
+      relations: ['asset'],
+      order: { nextDueAt: 'ASC' },
+    });
+  }
+
+  // ==================== TRIGGER ====================
+
+  async triggerNow(id: string, userId: string): Promise<{ woId: string }> {
+    const plan = await this.findOne(id);
+
+    // Create work order from PM plan
+    const workOrder = await this.workOrdersService.create(
+      {
+        title: `PM: ${plan.name}`,
+        description: plan.description,
+        type: WorkOrderType.PREVENTIVE,
+        priority: plan.priority as Priority,
+        assetId: plan.assetId,
+        assignedTo: plan.assignedTo,
+        estimatedHours: plan.estimatedHours,
+        pmPlanId: plan.id,
+        checklistTemplateId: plan.checklistTemplateId,
+      },
+      userId,
+    );
+
+    // Record history
+    await this.historyRepository.save({
+      pmPlanId: plan.id,
+      woId: workOrder.id,
+      dueAt: plan.nextDueAt || new Date(),
+    });
+
+    // Update plan
+    plan.lastTriggeredAt = new Date();
+    plan.nextDueAt = this.calculateNextDueDate(plan);
+    await this.pmPlanRepository.save(plan);
+
+    // Notify assigned users
+    await this.notificationsService.onPmDue(plan, plan.assignedTo);
+
+    return { woId: workOrder.id };
+  }
+
+  // ==================== AUTO-GENERATION (Worker) ====================
+
+  async processScheduledPMs(): Promise<{ triggered: number; skipped: number }> {
+    const now = new Date();
+    let triggered = 0;
+    let skipped = 0;
+
+    // Find all active PM plans due for triggering
+    const duePlans = await this.pmPlanRepository.find({
+      where: {
+        isActive: true,
+        nextDueAt: LessThanOrEqual(now),
+      },
+    });
+
+    for (const plan of duePlans) {
+      try {
+        // Check if we already have an open WO for this PM
+        const existingWo = await this.workOrdersService.findAll({
+          page: 1,
+          limit: 1,
+          pmPlanId: plan.id,
+          status: ['open', 'in_progress', 'on_hold'] as any,
+        });
+
+        if (existingWo.total > 0) {
+          skipped++;
+          continue;
+        }
+
+        // Create work order
+        const workOrder = await this.workOrdersService.create(
+          {
+            title: `PM: ${plan.name}`,
+            description: plan.description,
+            type: WorkOrderType.PREVENTIVE,
+            priority: plan.priority as Priority,
+            assetId: plan.assetId,
+            assignedTo: plan.assignedTo,
+            estimatedHours: plan.estimatedHours,
+            pmPlanId: plan.id,
+            checklistTemplateId: plan.checklistTemplateId,
+          },
+          'system', // Created by system
+        );
+
+        // Record history
+        await this.historyRepository.save({
+          pmPlanId: plan.id,
+          woId: workOrder.id,
+          dueAt: plan.nextDueAt,
+        });
+
+        // Update next due date
+        plan.lastTriggeredAt = new Date();
+        plan.nextDueAt = this.calculateNextDueDate(plan);
+        await this.pmPlanRepository.save(plan);
+
+        // Notify
+        await this.notificationsService.onPmDue(plan, plan.assignedTo);
+
+        triggered++;
+      } catch (error) {
+        console.error(`Failed to trigger PM ${plan.id}:`, error);
+        skipped++;
+      }
+    }
+
+    return { triggered, skipped };
+  }
+
+  async checkMeterTriggers(assetId: string, newReading: number): Promise<string[]> {
+    const createdWoIds: string[] = [];
+
+    // Find meter-based PM plans for this asset
+    const plans = await this.pmPlanRepository.find({
+      where: {
+        assetId,
+        triggerType: TriggerType.METER,
+        isActive: true,
+      },
+    });
+
+    for (const plan of plans) {
+      if (!plan.meterInterval || !plan.lastMeterReading) continue;
+
+      const nextTriggerAt = plan.lastMeterReading + plan.meterInterval;
+      if (newReading >= nextTriggerAt) {
+        const workOrder = await this.workOrdersService.create(
+          {
+            title: `PM: ${plan.name}`,
+            description: `Meter-triggered PM at ${newReading} ${plan.meterUnit || 'units'}`,
+            type: WorkOrderType.PREVENTIVE,
+            priority: plan.priority as Priority,
+            assetId: plan.assetId,
+            assignedTo: plan.assignedTo,
+            estimatedHours: plan.estimatedHours,
+            pmPlanId: plan.id,
+            checklistTemplateId: plan.checklistTemplateId,
+          },
+          'system',
+        );
+
+        plan.lastMeterReading = newReading;
+        plan.lastTriggeredAt = new Date();
+        await this.pmPlanRepository.save(plan);
+
+        createdWoIds.push(workOrder.id);
+      }
+    }
+
+    return createdWoIds;
+  }
+
+  private calculateNextDueDate(plan: PmPlan): Date {
+    const baseDate = plan.rollingSchedule
+      ? new Date()
+      : plan.nextDueAt || new Date();
+
+    if (plan.triggerType === TriggerType.TIME && plan.frequencyValue && plan.frequencyUnit) {
+      switch (plan.frequencyUnit) {
+        case FrequencyUnit.DAY:
+          return addDays(baseDate, plan.frequencyValue);
+        case FrequencyUnit.WEEK:
+          return addWeeks(baseDate, plan.frequencyValue);
+        case FrequencyUnit.MONTH:
+          return addMonths(baseDate, plan.frequencyValue);
+        case FrequencyUnit.YEAR:
+          return addYears(baseDate, plan.frequencyValue);
+      }
+    }
+
+    // Default: add 30 days
+    return addDays(baseDate, 30);
+  }
+
+  // ==================== CHECKLIST TEMPLATES ====================
+
+  async createTemplate(dto: CreateChecklistTemplateDto): Promise<ChecklistTemplate> {
+    const template = this.templateRepository.create(dto);
+    return this.templateRepository.save(template);
+  }
+
+  async findAllTemplates(): Promise<ChecklistTemplate[]> {
+    return this.templateRepository.find({
+      order: { name: 'ASC' },
+    });
+  }
+
+  async findOneTemplate(id: string): Promise<ChecklistTemplate> {
+    const template = await this.templateRepository.findOne({ where: { id } });
+    if (!template) {
+      throw new NotFoundException(`Checklist template with ID ${id} not found`);
+    }
+    return template;
+  }
+
+  async updateTemplate(id: string, dto: UpdateChecklistTemplateDto): Promise<ChecklistTemplate> {
+    const template = await this.findOneTemplate(id);
+    Object.assign(template, dto);
+    return this.templateRepository.save(template);
+  }
+
+  async deleteTemplate(id: string): Promise<void> {
+    const template = await this.findOneTemplate(id);
+    await this.templateRepository.remove(template);
+  }
+
+  // ==================== PM COMPLIANCE ====================
+
+  async getComplianceRate(from: Date, to: Date): Promise<number> {
+    const history = await this.historyRepository.find({
+      where: {
+        triggeredAt: Between(from, to),
+      },
+    });
+
+    if (history.length === 0) return 100;
+
+    const onTime = history.filter((h) => h.status === PmHistoryStatus.ON_TIME).length;
+    return Math.round((onTime / history.length) * 100);
+  }
+
+  async getHistory(pmPlanId: string): Promise<PmHistory[]> {
+    return this.historyRepository.find({
+      where: { pmPlanId },
+      order: { triggeredAt: 'DESC' },
+      take: 50,
+    });
+  }
+}

@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+.expo/
+
+# Environment files
+.env
+.env.local
+apps/api/.env
+apps/api/.env.local
+apps/web/.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker volumes
+postgres_data/
+redis_data/
+minio_data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Coverage
+coverage/
+
+# Misc
+*.tgz
+.turbo
