@@ -1,4 +1,4 @@
-.PHONY: up down build logs shell-api shell-db migrate seed pull-models reset
+.PHONY: up down build logs shell-api shell-db migrate seed pull-models reset prod-up prod-down prod-build prod-logs docker-build docker-push
 
 up:
 	docker compose up -d
@@ -35,3 +35,27 @@ pull-models:
 reset:
 	docker compose down -v
 	docker compose up -d
+
+# Production commands (uses docker-compose.prod.yml)
+prod-up:
+	docker compose -f docker-compose.prod.yml up -d
+
+prod-down:
+	docker compose -f docker-compose.prod.yml down
+
+prod-build:
+	docker compose -f docker-compose.prod.yml build
+
+prod-logs:
+	docker compose -f docker-compose.prod.yml logs -f
+
+# Docker image build and push commands
+docker-build:
+	@read -p "Enter registry URL (e.g., registry.example.com/cmms): " registry; \
+	read -p "Enter tag (default: latest): " tag; \
+	./scripts/docker-build.sh $$registry $${tag:-latest}
+
+docker-push:
+	@read -p "Enter registry URL (e.g., registry.example.com/cmms): " registry; \
+	read -p "Enter tag (default: latest): " tag; \
+	./scripts/docker-push.sh $$registry $${tag:-latest}

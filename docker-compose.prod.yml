@@ -1,0 +1,218 @@
+version: '3.9'
+
+# Production Docker Compose for CMMS
+# This file uses pre-built images from a private registry
+#
+# Usage:
+#   1. Set environment variables (see .env.example)
+#   2. Update image paths below to match your registry
+#   3. Run: docker compose -f docker-compose.prod.yml up -d
+
+services:
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - cmms-web
+      - cmms-api
+    networks:
+      - cmms-network
+
+  cmms-api:
+    image: ${REGISTRY:-localhost}/cmms-api:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_DATABASE: ${POSTGRES_DB}
+      DB_SYNCHRONIZE: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: cmms-files
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: cmms
+      KEYCLOAK_CLIENT_ID: cmms-api
+      OLLAMA_URL: http://ollama:11434
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      JWT_SECRET: ${JWT_SECRET}
+      PORT: 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - api_uploads:/app/uploads
+    networks:
+      - cmms-network
+
+  cmms-worker:
+    image: ${REGISTRY:-localhost}/cmms-worker:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_DATABASE: ${POSTGRES_DB}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OLLAMA_URL: http://ollama:11434
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cmms-network
+
+  cmms-web:
+    image: ${REGISTRY:-localhost}/cmms-web:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api
+      NEXT_PUBLIC_KEYCLOAK_URL: ${PUBLIC_URL}/auth
+      NEXT_PUBLIC_KEYCLOAK_REALM: cmms
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: cmms-web
+    networks:
+      - cmms-network
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cmms-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cmms-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    restart: unless-stopped
+    command: start --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME_URL: ${PUBLIC_URL}/auth
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY: edge
+    volumes:
+      - ./infrastructure/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/auth/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - cmms-network
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - cmms-network
+
+  # Optional: Mail server for production email
+  # Uncomment and configure for production use
+  # mailpit:
+  #   image: axllent/mailpit:latest
+  #   restart: unless-stopped
+  #   volumes:
+  #     - mailpit_data:/data
+  #   environment:
+  #     MP_MAX_MESSAGES: 5000
+  #     MP_DATABASE: /data/mailpit.db
+  #     MP_SMTP_AUTH_ACCEPT_ANY: 1
+  #     MP_SMTP_AUTH_ALLOW_INSECURE: 1
+  #   networks:
+  #     - cmms-network
+
+  # Optional: AI features with Ollama
+  # Enable with: docker compose -f docker-compose.prod.yml --profile ai up -d
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    profiles:
+      - ai
+    networks:
+      - cmms-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
+  api_uploads:
+  ollama_models:
+  # mailpit_data:
+
+networks:
+  cmms-network:
+    driver: bridge
