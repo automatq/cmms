@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,8 +59,10 @@ export default function PmPlansPage() {
 
       {/* PM Plans List */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-[140px] w-full rounded-xl" />
+          ))}
         </div>
       ) : plans.length === 0 ? (
         <Card>
@@ -86,9 +89,8 @@ export default function PmPlansPage() {
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-lg">{plan.name}</CardTitle>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        plan.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${plan.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                        }`}>
                         {plan.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </div>

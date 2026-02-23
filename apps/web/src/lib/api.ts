@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosInstance } from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1'
 
 class ApiClient {
   private client: AxiosInstance
@@ -174,6 +174,15 @@ class ApiClient {
 
   async markNotificationRead(id: string) {
     return this.client.patch(`/notifications/${id}/read`)
+  }
+
+  // Organization / Settings
+  async getOrganization() {
+    return this.client.get('/organization/config')
+  }
+
+  async updateOrganization(data: any) {
+    return this.client.patch('/organization', data)
   }
 }
 

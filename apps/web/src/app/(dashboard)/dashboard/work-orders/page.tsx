@@ -2,10 +2,12 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
+import { PageHeader } from '@/components/ui/page-header'
 import { Plus, Search, ClipboardList, AlertCircle, Clock, CheckCircle } from 'lucide-react'
 import { useState } from 'react'
 import { formatDate } from '@/lib/utils'
@@ -34,11 +36,11 @@ export default function WorkOrdersPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['work-orders', search, statusFilter, page],
     queryFn: async () => {
-      const res = await api.getWorkOrders({ 
-        search, 
+      const res = await api.getWorkOrders({
+        search,
         status: statusFilter || undefined,
-        page, 
-        limit: 20 
+        page,
+        limit: 20
       })
       return res.data
     },
@@ -49,21 +51,18 @@ export default function WorkOrdersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Work Orders</h1>
-          <p className="text-muted-foreground">
-            Track and manage maintenance work orders
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/dashboard/work-orders/new">
-            <Plus className="h-4 w-4 mr-2" />
-            New Work Order
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Work Orders"
+        description="Track and manage maintenance work orders"
+        actions={
+          <Button asChild>
+            <Link href="/dashboard/work-orders/new">
+              <Plus className="h-4 w-4 mr-2" />
+              New Work Order
+            </Link>
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-4">
@@ -77,29 +76,29 @@ export default function WorkOrdersPage() {
           />
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant={statusFilter === '' ? 'default' : 'outline'} 
+          <Button
+            variant={statusFilter === '' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setStatusFilter('')}
           >
             All
           </Button>
-          <Button 
-            variant={statusFilter === 'open' ? 'default' : 'outline'} 
+          <Button
+            variant={statusFilter === 'open' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setStatusFilter('open')}
           >
             Open
           </Button>
-          <Button 
-            variant={statusFilter === 'in_progress' ? 'default' : 'outline'} 
+          <Button
+            variant={statusFilter === 'in_progress' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setStatusFilter('in_progress')}
           >
             In Progress
           </Button>
-          <Button 
-            variant={statusFilter === 'completed' ? 'default' : 'outline'} 
+          <Button
+            variant={statusFilter === 'completed' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setStatusFilter('completed')}
           >
@@ -110,8 +109,10 @@ export default function WorkOrdersPage() {
 
       {/* Work Orders List */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <div className="space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
         </div>
       ) : workOrders.length === 0 ? (
         <Card>
@@ -133,41 +134,38 @@ export default function WorkOrdersPage() {
         <>
           <div className="space-y-3">
             {workOrders.map((wo: any) => (
-              <Link key={wo.id} href={`/dashboard/work-orders/${wo.id}`}>
-                <Card className="hover:border-primary transition-colors cursor-pointer">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-4">
-                      <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                        wo.status === 'completed' ? 'bg-green-100' :
-                        wo.status === 'in_progress' ? 'bg-amber-100' :
-                        wo.status === 'open' ? 'bg-blue-100' : 'bg-gray-100'
+              <Link key={wo.id} href={`/dashboard/work-orders/${wo.id}`} className="block">
+                <Card className="hover:border-primary/50 hover:shadow-md transition-all cursor-pointer">
+                  <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 ${wo.status === 'completed' ? 'bg-green-500/10' :
+                      wo.status === 'in_progress' ? 'bg-amber-500/10' :
+                        wo.status === 'open' ? 'bg-blue-500/10' : 'bg-gray-100 dark:bg-gray-800'
                       }`}>
-                        {wo.status === 'completed' ? (
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                        ) : wo.status === 'in_progress' ? (
-                          <Clock className="h-5 w-5 text-amber-600" />
-                        ) : (
-                          <AlertCircle className="h-5 w-5 text-blue-600" />
-                        )}
+                      {wo.status === 'completed' ? (
+                        <CheckCircle className="h-6 w-6 text-green-500" />
+                      ) : wo.status === 'in_progress' ? (
+                        <Clock className="h-6 w-6 text-amber-500" />
+                      ) : (
+                        <AlertCircle className="h-6 w-6 text-blue-500" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span className="text-sm font-semibold text-muted-foreground">
+                          {wo.woNumber}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${statusColors[wo.status] || ''}`}>
+                          {wo.status.replace('_', ' ')}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${priorityColors[wo.priority] || ''}`}>
+                          {wo.priority}
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium text-muted-foreground">
-                            {wo.woNumber}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[wo.status] || ''}`}>
-                            {wo.status.replace('_', ' ')}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[wo.priority] || ''}`}>
-                            {wo.priority}
-                          </span>
-                        </div>
-                        <h3 className="font-medium truncate">{wo.title}</h3>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                          {wo.asset && <span>{wo.asset.name}</span>}
-                          <span>Type: {wo.type}</span>
-                          {wo.dueDate && <span>Due: {formatDate(wo.dueDate)}</span>}
-                        </div>
+                      <h3 className="font-semibold text-lg truncate leading-tight">{wo.title}</h3>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+                        {wo.asset && <span><span className="font-medium">Asset:</span> {wo.asset.name}</span>}
+                        <span><span className="font-medium">Type:</span> {wo.type}</span>
+                        {wo.dueDate && <span><span className="font-medium">Due:</span> {formatDate(wo.dueDate)}</span>}
                       </div>
                     </div>
                   </CardContent>

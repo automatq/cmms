@@ -19,13 +19,13 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   user: null,
   token: null,
-  login: () => {},
-  logout: () => {},
+  login: () => { },
+  logout: () => { },
   hasRole: () => false,
 })
 
 const keycloakConfig: KeycloakConfig = {
-  url: process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'http://localhost:8080',
+  url: process.env.NEXT_PUBLIC_KEYCLOAK_URL || '/auth',
   realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'cmms',
   clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || 'cmms-web',
 }

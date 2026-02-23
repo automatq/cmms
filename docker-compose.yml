@@ -15,6 +15,8 @@ services:
     depends_on:
       - cmms-web
       - cmms-api
+    networks:
+      - cmms-network
 
   cmms-api:
     build:
@@ -51,6 +53,8 @@ services:
         condition: service_healthy
     volumes:
       - api_uploads:/app/uploads
+    networks:
+      - cmms-network
 
   cmms-worker:
     build:
@@ -78,17 +82,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - cmms-network
 
   cmms-web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api/v1
+        NEXT_PUBLIC_KEYCLOAK_URL: ${PUBLIC_URL}/auth
+        NEXT_PUBLIC_KEYCLOAK_REALM: cmms
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: cmms-web
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api
+      NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api/v1
       NEXT_PUBLIC_KEYCLOAK_URL: ${PUBLIC_URL}/auth
       NEXT_PUBLIC_KEYCLOAK_REALM: cmms
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: cmms-web
+    networks:
+      - cmms-network
 
   postgres:
     image: timescale/timescaledb:latest-pg16
@@ -105,6 +118,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - cmms-network
 
   redis:
     image: redis:7-alpine
@@ -117,6 +132,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - cmms-network
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
@@ -131,6 +148,7 @@ services:
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KC_HOSTNAME_URL: ${PUBLIC_URL}/auth
       KC_HTTP_RELATIVE_PATH: /auth
+      KC_HEALTH_ENABLED: "true"
     volumes:
       - ./infrastructure/keycloak:/opt/keycloak/data/import:ro
     depends_on:
@@ -141,6 +159,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
+    networks:
+      - cmms-network
 
   minio:
     image: minio/minio:latest
@@ -156,12 +176,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - cmms-network
 
   gotenberg:
     image: gotenberg/gotenberg:8
     restart: unless-stopped
     profiles:
       - tools
+    networks:
+      - cmms-network
 
   mailpit:
     image: axllent/mailpit:latest
@@ -173,6 +197,8 @@ services:
       MP_DATABASE: /data/mailpit.db
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    networks:
+      - cmms-network
 
   ollama:
     image: ollama/ollama:latest
@@ -181,6 +207,8 @@ services:
       - ollama_models:/root/.ollama
     profiles:
       - ai
+    networks:
+      - cmms-network
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -192,6 +220,8 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     profiles:
       - debug
+    networks:
+      - cmms-network
 
 volumes:
   postgres_data:
@@ -203,3 +233,7 @@ volumes:
   caddy_config:
   api_uploads:
   pgadmin_data:
+
+networks:
+  cmms-network:
+    driver: bridge

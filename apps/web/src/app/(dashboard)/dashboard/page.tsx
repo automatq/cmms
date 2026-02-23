@@ -2,9 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { PageHeader } from '@/components/ui/page-header'
 import {
   ClipboardList,
   Package,
@@ -13,11 +15,13 @@ import {
   TrendingUp,
   ArrowRight,
   Wrench,
-  Calendar,
+  Calendar as CalendarIcon,
 } from 'lucide-react'
+import { DashboardCalendar, CalendarEvent } from '@/components/dashboard/dashboard-calendar'
+import { useMemo } from 'react'
 
 export default function DashboardPage() {
-  const { data: dashboard, isLoading } = useQuery({
+  const { data: dashboard, isLoading: isLoadingDashboard } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
       const res = await api.getDashboard({ days: 30 })
@@ -25,10 +29,79 @@ export default function DashboardPage() {
     },
   })
 
+  // Fetch Work Orders for the calendar
+  const { data: workOrdersData, isLoading: isLoadingWO } = useQuery({
+    queryKey: ['work-orders', 'calendar'],
+    queryFn: async () => {
+      const res = await api.getWorkOrders({ limit: 100 }) // Fetching a reasonable amount for the current view
+      return res.data
+    },
+  })
+
+  // Fetch PM Plans for the calendar
+  const { data: pmPlansData, isLoading: isLoadingPM } = useQuery({
+    queryKey: ['pm-plans', 'calendar'],
+    queryFn: async () => {
+      const res = await api.getPmPlans({ limit: 100 })
+      return res.data
+    },
+  })
+
+  const isLoading = isLoadingDashboard || isLoadingWO || isLoadingPM
+
+  const calendarEvents = useMemo<CalendarEvent[]>(() => {
+    const events: CalendarEvent[] = []
+
+    // Map Work Orders
+    if (workOrdersData?.data) {
+      workOrdersData.data.forEach((wo: any) => {
+        if (wo.dueDate || wo.createdAt) {
+          events.push({
+            id: `wo-${wo.id}`,
+            title: wo.title,
+            date: new Date(wo.dueDate || wo.createdAt),
+            type: wo.type === 'emergency' ? 'downtime' : 'work_order',
+            status: wo.status,
+            priority: wo.priority,
+            asset: wo.asset?.name,
+          })
+        }
+      })
+    }
+
+    // Map PM Plans
+    if (pmPlansData?.data) {
+      pmPlansData.data.forEach((pm: any) => {
+        if (pm.nextDueAt) {
+          events.push({
+            id: `pm-${pm.id}`,
+            title: pm.name,
+            date: new Date(pm.nextDueAt),
+            type: 'pm',
+            status: pm.isActive ? 'Active' : 'Inactive',
+            asset: pm.asset?.name,
+          })
+        }
+      })
+    }
+
+    return events
+  }, [workOrdersData, pmPlansData])
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="space-y-6">
+        <Skeleton className="h-20 w-full md:w-1/2" />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-[120px] w-full rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-[300px] w-full rounded-xl" />
+          <Skeleton className="h-[300px] w-full rounded-xl" />
+        </div>
       </div>
     )
   }
@@ -41,76 +114,102 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Overview of your maintenance operations
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/dashboard/work-orders/new">
-            <ClipboardList className="h-4 w-4 mr-2" />
-            New Work Order
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        description="Overview of your maintenance operations"
+        actions={
+          <Button asChild>
+            <Link href="/dashboard/work-orders/new">
+              <ClipboardList className="h-4 w-4 mr-2" />
+              New Work Order
+            </Link>
+          </Button>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Open Work Orders</CardTitle>
-            <ClipboardList className="h-4 w-4 text-muted-foreground" />
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+              <ClipboardList className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{openWOs}</div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-1">
               Awaiting completion
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Completed (30 days)</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <div className="h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{completedWOs}</div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-1">
               Work orders completed
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Overdue</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">{overdueWOs}</div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-1">
               Requires attention
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">PM Compliance</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <div className="h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+              <CalendarIcon className="h-4 w-4 text-blue-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pmCompliance}%</div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-1">
               On-time completion rate
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Big Calendar Section */}
+      <Card className="col-span-1 border-t-4 border-t-primary">
+        <CardHeader>
+          <CardTitle>Operations Calendar</CardTitle>
+          <CardDescription>
+            Schedule of all maintenance activities, preventive maintenance plans, and reported downtimes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[700px]">
+            <DashboardCalendar
+              events={calendarEvents}
+              onEventClick={(event) => {
+                // Open a simple alert for now, could be upgraded to a shadcn dialog
+                alert(`Event: ${event.title}\nType: ${event.type}\nAsset: ${event.asset || 'N/A'}`)
+              }}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Recent Activity & Upcoming */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -125,22 +224,22 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-4">
               {(dashboard?.recentActivity || []).slice(0, 5).map((wo: any) => (
-                <div key={wo.id} className="flex items-center gap-4">
-                  <div className="h-9 w-9 rounded-full bg-green-100 flex items-center justify-center">
-                    <Wrench className="h-4 w-4 text-green-600" />
+                <div key={wo.id} className="flex items-center gap-4 border-b last:border-b-0 pb-3 last:pb-0">
+                  <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
+                    <Wrench className="h-5 w-5 text-green-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{wo.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {wo.woNumber} • {wo.asset || 'No asset'}
+                    <p className="text-sm font-semibold truncate leading-none">{wo.title}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {wo.woNumber} <span className="mx-1">•</span> {wo.asset || 'No asset'}
                     </p>
                   </div>
                 </div>
               ))}
               {(!dashboard?.recentActivity || dashboard.recentActivity.length === 0) && (
-                <p className="text-sm text-muted-foreground text-center py-4">
+                <div className="h-24 flex items-center justify-center text-sm text-muted-foreground border border-dashed rounded-lg">
                   No recent activity
-                </p>
+                </div>
               )}
             </div>
             <Button variant="ghost" className="w-full mt-4" asChild>
@@ -163,22 +262,22 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-4">
               {(dashboard?.upcomingPMs || []).slice(0, 5).map((pm: any) => (
-                <div key={pm.id} className="flex items-center gap-4">
-                  <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Clock className="h-4 w-4 text-blue-600" />
+                <div key={pm.id} className="flex items-center gap-4 border-b last:border-b-0 pb-3 last:pb-0">
+                  <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
+                    <Clock className="h-5 w-5 text-blue-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{pm.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {pm.asset || 'No asset'} • Due: {new Date(pm.nextDueAt).toLocaleDateString()}
+                    <p className="text-sm font-semibold truncate leading-none">{pm.name}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {pm.asset || 'No asset'} <span className="mx-1">•</span> Date: {new Date(pm.nextDueAt).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
               ))}
               {(!dashboard?.upcomingPMs || dashboard.upcomingPMs.length === 0) && (
-                <p className="text-sm text-muted-foreground text-center py-4">
+                <div className="h-24 flex items-center justify-center text-sm text-muted-foreground border border-dashed rounded-lg">
                   No upcoming PMs
-                </p>
+                </div>
               )}
             </div>
             <Button variant="ghost" className="w-full mt-4" asChild>
@@ -206,13 +305,20 @@ export default function DashboardPage() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {dashboard.lowStockAlerts.slice(0, 6).map((part: any) => (
-                <div key={part.partId} className="flex items-center gap-3 p-3 rounded-lg border">
-                  <Package className="h-8 w-8 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium text-sm">{part.partName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      SKU: {part.sku} • Qty: {part.qtyOnHand}/{part.reorderPoint}
+                <div key={part.partId} className="flex items-center gap-4 p-4 rounded-xl border bg-card hover:border-amber-500/50 transition-colors">
+                  <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                    <Package className="h-5 w-5 text-amber-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate">{part.partName}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      SKU: {part.sku}
                     </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-600 ring-1 ring-inset ring-amber-500/20">
+                      {part.qtyOnHand} / {part.reorderPoint}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/providers/auth-provider'
 import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Wrench, Shield, BarChart3, Clock } from 'lucide-react'
 
@@ -11,7 +12,10 @@ export default function HomePage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <div className="w-1/3 sm:w-1/4 space-y-2 max-w-sm">
+          <Progress />
+          <p className="text-sm text-muted-foreground text-center">Authenticating...</p>
+        </div>
       </div>
     )
   }
@@ -38,8 +42,8 @@ export default function HomePage() {
             CMMS
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Computerized Maintenance Management System. 
-            Streamline your maintenance operations with our self-hosted, 
+            Computerized Maintenance Management System.
+            Streamline your maintenance operations with our self-hosted,
             AI-powered solution.
           </p>
           <Button size="lg" onClick={login}>
@@ -56,7 +60,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Track all your equipment, machinery, and facilities in one place 
+                Track all your equipment, machinery, and facilities in one place
                 with hierarchical organization.
               </CardDescription>
             </CardContent>
@@ -69,7 +73,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Schedule and automate PM tasks based on time, meter readings, 
+                Schedule and automate PM tasks based on time, meter readings,
                 or custom triggers.
               </CardDescription>
             </CardContent>
@@ -82,7 +86,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Gain insights with KPIs, MTTR, MTBF analysis, and 
+                Gain insights with KPIs, MTTR, MTBF analysis, and
                 customizable dashboards.
               </CardDescription>
             </CardContent>
@@ -95,7 +99,7 @@ export default function HomePage() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Keep your data on-premises with full control. 
+                Keep your data on-premises with full control.
                 No cloud dependencies required.
               </CardDescription>
             </CardContent>

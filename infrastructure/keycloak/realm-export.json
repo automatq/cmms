@@ -10,13 +10,34 @@
   "bruteForceProtected": true,
   "roles": {
     "realm": [
-      { "name": "admin", "description": "Full system access" },
-      { "name": "manager", "description": "Read/write most, no delete, no settings" },
-      { "name": "technician", "description": "Read assets, read/write own WOs, read inventory" },
-      { "name": "planner", "description": "Full WO and PM access, read-only assets/inventory" },
-      { "name": "requestor", "description": "Create work requests only" },
-      { "name": "inventory_manager", "description": "Full inventory access, read-only WOs" },
-      { "name": "viewer", "description": "Read-only everything" }
+      {
+        "name": "admin",
+        "description": "Full system access"
+      },
+      {
+        "name": "manager",
+        "description": "Read/write most, no delete, no settings"
+      },
+      {
+        "name": "technician",
+        "description": "Read assets, read/write own WOs, read inventory"
+      },
+      {
+        "name": "planner",
+        "description": "Full WO and PM access, read-only assets/inventory"
+      },
+      {
+        "name": "requestor",
+        "description": "Create work requests only"
+      },
+      {
+        "name": "inventory_manager",
+        "description": "Full inventory access, read-only WOs"
+      },
+      {
+        "name": "viewer",
+        "description": "Read-only everything"
+      }
     ]
   },
   "clients": [
@@ -38,10 +59,28 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "redirectUris": ["*"],
-      "webOrigins": ["*"],
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*",
+        "http://localhost",
+        "http://localhost:3000",
+        "http://localhost.",
+        "http://localhost:80",
+        "+"
+      ],
+      "attributes": {
+        "cors.allow.origin": "http://localhost,http://localhost:3000,http://localhost.",
+        "cors.max.age": "3600"
+      },
       "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "email", "profile", "roles"],
+      "defaultClientScopes": [
+        "openid",
+        "email",
+        "profile",
+        "roles"
+      ],
       "protocolMappers": [
         {
           "name": "realm-roles",
@@ -74,7 +113,9 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["admin"]
+      "realmRoles": [
+        "admin"
+      ]
     },
     {
       "username": "technician",
@@ -90,7 +131,9 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["technician"]
+      "realmRoles": [
+        "technician"
+      ]
     },
     {
       "username": "manager",
@@ -106,7 +149,9 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["manager"]
+      "realmRoles": [
+        "manager"
+      ]
     }
   ]
 }

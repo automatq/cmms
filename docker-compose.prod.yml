@@ -27,7 +27,7 @@ services:
       - cmms-network
 
   cmms-api:
-    image: ${REGISTRY:-localhost}/cmms-api:${TAG:-latest}
+    image: cb37/cmms:api-0.1.1
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -63,7 +63,7 @@ services:
       - cmms-network
 
   cmms-worker:
-    image: ${REGISTRY:-localhost}/cmms-worker:${TAG:-latest}
+    image: cb37/cmms:worker-0.1.1
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -90,7 +90,7 @@ services:
       - cmms-network
 
   cmms-web:
-    image: ${REGISTRY:-localhost}/cmms-web:${TAG:-latest}
+    image: cb37/cmms:web-0.1.1
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api
