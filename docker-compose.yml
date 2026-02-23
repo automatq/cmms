@@ -38,7 +38,8 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: cmms-files
-      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_URL: http://keycloak:8080/auth
+      KEYCLOAK_PUBLIC_URL: ${PUBLIC_URL}/auth
       KEYCLOAK_REALM: cmms
       KEYCLOAK_CLIENT_ID: cmms-api
       OLLAMA_URL: http://ollama:11434
@@ -50,6 +51,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     volumes:
       - api_uploads:/app/uploads
@@ -147,8 +150,10 @@ services:
       KC_DB_USERNAME: ${POSTGRES_USER}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KC_HOSTNAME_URL: ${PUBLIC_URL}/auth
+      KC_HOSTNAME_ADMIN_URL: ${PUBLIC_URL}/auth
       KC_HTTP_RELATIVE_PATH: /auth
       KC_HEALTH_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
     volumes:
       - ./infrastructure/keycloak:/opt/keycloak/data/import:ro
     depends_on:

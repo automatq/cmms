@@ -4,7 +4,10 @@
 	}
 
 	handle /auth/* {
-		reverse_proxy keycloak:8080
+		reverse_proxy keycloak:8080 {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+		}
 	}
 
 	handle {

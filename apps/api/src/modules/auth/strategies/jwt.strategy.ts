@@ -28,20 +28,26 @@ export interface JwtPayload {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(private configService: ConfigService) {
-    const keycloakUrl = configService.get('KEYCLOAK_URL', 'http://keycloak:8080');
+    const keycloakInternalUrl = configService.get('KEYCLOAK_URL', 'http://keycloak:8080');
     const keycloakRealm = configService.get('KEYCLOAK_REALM', 'cmms');
-    const issuerUrl = `${keycloakUrl}/realms/${keycloakRealm}`;
+    // Internal URL for fetching JWKS keys (container-to-container)
+    const internalIssuerUrl = `${keycloakInternalUrl}/realms/${keycloakRealm}`;
+    // Public URL is what appears in the token's "iss" claim (browser-facing)
+    const publicUrl = configService.get('KEYCLOAK_PUBLIC_URL', keycloakInternalUrl);
+    const publicIssuerUrl = `${publicUrl}/realms/${keycloakRealm}`;
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      issuer: issuerUrl,
+      // Match the issuer the browser sees (PUBLIC_URL/auth)
+      issuer: publicIssuerUrl,
       algorithms: ['RS256'],
       secretOrKeyProvider: passportJwtSecret({
         cache: true,
         rateLimit: true,
         jwksRequestsPerMinute: 5,
-        jwksUri: `${issuerUrl}/protocol/openid-connect/certs`,
+        // Fetch certs from internal container URL
+        jwksUri: `${internalIssuerUrl}/protocol/openid-connect/certs`,
       }),
     });
   }
