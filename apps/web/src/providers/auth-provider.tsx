@@ -56,15 +56,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setToken(keycloakInstance.token)
           api.setToken(keycloakInstance.token)
 
-          const profile = await keycloakInstance.loadUserProfile()
-          setUser({
-            id: keycloakInstance.subject,
-            email: profile.email,
-            firstName: profile.firstName,
-            lastName: profile.lastName,
-            username: profile.username,
-            roles: keycloakInstance.realmAccess?.roles || [],
-          })
+          try {
+            const profile = await keycloakInstance.loadUserProfile()
+            setUser({
+              id: keycloakInstance.subject,
+              email: profile.email,
+              firstName: profile.firstName,
+              lastName: profile.lastName,
+              username: profile.username,
+              roles: keycloakInstance.realmAccess?.roles || [],
+            })
+          } catch (profileError) {
+            console.warn('Failed to load user profile:', profileError)
+            setUser({
+              id: keycloakInstance.subject,
+              username: keycloakInstance.tokenParsed?.preferred_username,
+              roles: keycloakInstance.realmAccess?.roles || [],
+            })
+          }
 
           // Token refresh
           setInterval(async () => {

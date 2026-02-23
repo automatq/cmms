@@ -90,7 +90,7 @@ services:
       - cmms-network
 
   cmms-web:
-    image: cb37/cmms:web-0.1.1
+    image: cb37/cmms:web-0.1.2
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api
