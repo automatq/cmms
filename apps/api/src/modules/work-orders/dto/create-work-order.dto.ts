@@ -58,6 +58,11 @@ export class CreateWorkOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   estimatedHours?: number;
 

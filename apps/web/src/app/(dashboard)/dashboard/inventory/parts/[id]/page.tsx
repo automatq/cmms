@@ -20,11 +20,8 @@ export default function PartDetailPage() {
     const { data: partData, isLoading: partLoading } = useQuery({
         queryKey: ['part', id],
         queryFn: async () => {
-            // Assuming api.getParts exists, mock finding specific Part
-            // This is a common pattern when specific detail endpoints aren't explicitly typed yet
-            const res = await api.getParts({ search: id })
-            const items = res.data?.data || []
-            return items.find((p: any) => p.id === id) || items[0]
+            const res = await api.getPart(id)
+            return res.data
         },
         enabled: !!id,
     })

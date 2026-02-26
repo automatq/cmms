@@ -17,10 +17,19 @@ import {
   Wrench,
   Calendar as CalendarIcon,
 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { DashboardCalendar, CalendarEvent } from '@/components/dashboard/dashboard-calendar'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 export default function DashboardPage() {
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const { data: dashboard, isLoading: isLoadingDashboard } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
@@ -203,8 +212,7 @@ export default function DashboardPage() {
             <DashboardCalendar
               events={calendarEvents}
               onEventClick={(event) => {
-                // Open a simple alert for now, could be upgraded to a shadcn dialog
-                alert(`Event: ${event.title}\nType: ${event.type}\nAsset: ${event.asset || 'N/A'}`)
+                setSelectedEvent(event)
               }}
             />
           </div>
@@ -332,6 +340,65 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Event Details Dialog */}
+      <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedEvent?.title}</DialogTitle>
+            <DialogDescription>
+              {selectedEvent?.type === 'pm' ? 'Preventive Maintenance' :
+                selectedEvent?.type === 'work_order' ? 'Work Order' :
+                  selectedEvent?.type === 'downtime' ? 'Downtime Event' : 'Event'} Details
+            </DialogDescription>
+          </DialogHeader>
+          {selectedEvent && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Date</p>
+                  <p className="text-sm">{selectedEvent.date.toLocaleDateString()} {selectedEvent.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Type</p>
+                  <p className="text-sm capitalize">{selectedEvent.type.replace('_', ' ')}</p>
+                </div>
+                {selectedEvent.asset && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Asset</p>
+                    <p className="text-sm">{selectedEvent.asset}</p>
+                  </div>
+                )}
+                {selectedEvent.status && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Status</p>
+                    <p className="text-sm capitalize">{typeof selectedEvent.status === 'string' ? selectedEvent.status.replace('_', ' ') : selectedEvent.status}</p>
+                  </div>
+                )}
+                {selectedEvent.priority && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Priority</p>
+                    <p className="text-sm capitalize">{selectedEvent.priority}</p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSelectedEvent(null)}>Close</Button>
+                {selectedEvent.id.startsWith('wo-') && (
+                  <Button asChild>
+                    <Link href={`/dashboard/work-orders/${selectedEvent.id.replace('wo-', '')}`}>View Work Order</Link>
+                  </Button>
+                )}
+                {selectedEvent.id.startsWith('pm-') && (
+                  <Button asChild>
+                    <Link href={`/dashboard/pm/${selectedEvent.id.replace('pm-', '')}`}>View PM Plan</Link>
+                  </Button>
+                )}
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

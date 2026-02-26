@@ -23,13 +23,14 @@ import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Files')
 @ApiBearerAuth()
 @Controller('files')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class FilesController {
-  constructor(private readonly filesService: FilesService) {}
+  constructor(private readonly filesService: FilesService) { }
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -59,6 +60,7 @@ export class FilesController {
   }
 
   @Get(':key/download')
+  @Public()
   @ApiOperation({ summary: 'Download file directly' })
   @ApiResponse({ status: 200, description: 'File stream' })
   async downloadFile(

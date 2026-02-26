@@ -60,6 +60,11 @@ export class UpdateWorkOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   estimatedHours?: number;
 

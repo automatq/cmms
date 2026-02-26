@@ -12,6 +12,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { Express } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -185,6 +186,20 @@ export class AssetsController {
   @ApiResponse({ status: 200, description: 'QR code URL' })
   generateQrCode(@Param('id', ParseUUIDPipe) id: string) {
     return this.assetsService.generateQrCode(id);
+  }
+
+  @Post(':id/image')
+  @Permissions('assets:write')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload image for asset' })
+  @ApiResponse({ status: 201, description: 'Asset image uploaded' })
+  async uploadAssetImage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.assetsService.uploadAssetImage(id, file, user.sub);
   }
 }
 

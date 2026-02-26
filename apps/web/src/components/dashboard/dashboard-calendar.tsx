@@ -123,9 +123,16 @@ export function DashboardCalendar({ events = [], onEventClick }: DashboardCalend
                                     onClick={() => onEventClick?.(event)}
                                     className={cn(
                                         "text-xs px-2 py-1 rounded-md truncate cursor-pointer transition-colors border group flex items-center gap-1.5",
-                                        event.type === 'work_order' ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20" :
-                                            event.type === 'pm' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" :
-                                                "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20"
+                                        // Color based on status first, fallback to type-based colors if no status
+                                        event.status === 'completed' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" :
+                                            event.status === 'pending' ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/20" :
+                                                event.status === 'in_progress' ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20" :
+                                                    event.status === 'cancelled' ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20" :
+                                                        event.status === 'overdue' ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20" :
+                                                            // Fallback to type-based colors if no status
+                                                            event.type === 'work_order' ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20" :
+                                                                event.type === 'pm' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" :
+                                                                    "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20"
                                     )}
                                     title={`${event.title}${event.asset ? ` - ${event.asset}` : ''}`}
                                 >

@@ -3,7 +3,7 @@ version: '3.9'
 services:
 
   caddy:
-    image: caddy:2-alpine
+    image: docker.io/library/caddy:2-alpine
     restart: unless-stopped
     ports:
       - "80:80"
@@ -107,7 +107,7 @@ services:
       - cmms-network
 
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: docker.io/timescale/timescaledb:latest-pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -117,7 +117,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -125,13 +125,13 @@ services:
       - cmms-network
 
   redis:
-    image: redis:7-alpine
+    image: docker.io/library/redis:7-alpine
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -160,7 +160,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/auth/health/ready || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/auth/health/ready || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -168,7 +168,7 @@ services:
       - cmms-network
 
   minio:
-    image: minio/minio:latest
+    image: docker.io/minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -177,7 +177,7 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -185,7 +185,7 @@ services:
       - cmms-network
 
   gotenberg:
-    image: gotenberg/gotenberg:8
+    image: docker.io/gotenberg/gotenberg:8
     restart: unless-stopped
     profiles:
       - tools
@@ -193,7 +193,7 @@ services:
       - cmms-network
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: docker.io/axllent/mailpit:latest
     restart: unless-stopped
     volumes:
       - mailpit_data:/data
@@ -206,7 +206,7 @@ services:
       - cmms-network
 
   ollama:
-    image: ollama/ollama:latest
+    image: docker.io/ollama/ollama:latest
     restart: unless-stopped
     volumes:
       - ollama_models:/root/.ollama
@@ -216,7 +216,7 @@ services:
       - cmms-network
 
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: docker.io/dpage/pgadmin4:latest
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
@@ -238,6 +238,7 @@ volumes:
   caddy_config:
   api_uploads:
   pgadmin_data:
+
 
 networks:
   cmms-network:

@@ -18,13 +18,8 @@ export default function AssetDetailPage() {
     const { data: assetData, isLoading: assetLoading } = useQuery({
         queryKey: ['asset', id],
         queryFn: async () => {
-            // Assuming api.getAsset(id) exists, or we use a custom fetch if needed
-            // Currently the API class doesn't have `getAsset(id)`, we will mock the fetch
-            // by fetching all and finding it, but ideally we'd add `getAsset(id)` to api.ts
-            const res = await api.getAssets({ search: id }) // Using search as a fallback if getAsset isn't there
-            // We will look for exact match in results
-            const items = res.data?.data || []
-            return items.find((a: any) => a.id === id) || items[0] // fallback to first if search fuzzy
+            const res = await api.getAsset(id)
+            return res.data
         },
         enabled: !!id,
     })

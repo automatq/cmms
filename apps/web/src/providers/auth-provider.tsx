@@ -1,13 +1,22 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
 import Keycloak, { KeycloakConfig } from 'keycloak-js'
 import { api } from '@/lib/api'
+
+interface User {
+  id: string
+  email?: string
+  firstName?: string
+  lastName?: string
+  username?: string
+  roles: string[]
+}
 
 interface AuthContextType {
   isAuthenticated: boolean
   isLoading: boolean
-  user: any | null
+  user: User | null
   token: string | null
   login: () => void
   logout: () => void
@@ -25,57 +34,53 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 const keycloakConfig: KeycloakConfig = {
-  url: process.env.NEXT_PUBLIC_KEYCLOAK_URL || '/auth',
+  url: process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'http://localhost/auth',
   realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'cmms',
   clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || 'cmms-web',
 }
 
 let keycloakInstance: Keycloak | null = null
 
+function extractUserFromToken(kc: Keycloak): User {
+  const parsed = kc.tokenParsed as any
+  return {
+    id: kc.subject || parsed?.sub || '',
+    email: parsed?.email,
+    firstName: parsed?.given_name,
+    lastName: parsed?.family_name,
+    username: parsed?.preferred_username,
+    roles: kc.realmAccess?.roles || [],
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const initialized = useRef(false)
 
   useEffect(() => {
-    const initKeycloak = async () => {
-      if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || initialized.current) return
+    initialized.current = true
 
+    const initKeycloak = async () => {
       try {
         keycloakInstance = new Keycloak(keycloakConfig)
 
         const authenticated = await keycloakInstance.init({
           onLoad: 'check-sso',
-          silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
           checkLoginIframe: false,
+          pkceMethod: 'S256',
         })
 
         if (authenticated && keycloakInstance.token) {
           setIsAuthenticated(true)
           setToken(keycloakInstance.token)
           api.setToken(keycloakInstance.token)
+          setUser(extractUserFromToken(keycloakInstance))
 
-          try {
-            const profile = await keycloakInstance.loadUserProfile()
-            setUser({
-              id: keycloakInstance.subject,
-              email: profile.email,
-              firstName: profile.firstName,
-              lastName: profile.lastName,
-              username: profile.username,
-              roles: keycloakInstance.realmAccess?.roles || [],
-            })
-          } catch (profileError) {
-            console.warn('Failed to load user profile:', profileError)
-            setUser({
-              id: keycloakInstance.subject,
-              username: keycloakInstance.tokenParsed?.preferred_username,
-              roles: keycloakInstance.realmAccess?.roles || [],
-            })
-          }
-
-          // Token refresh
+          // Token refresh interval
           setInterval(async () => {
             try {
               const refreshed = await keycloakInstance?.updateToken(30)
@@ -84,7 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 api.setToken(keycloakInstance.token)
               }
             } catch {
-              logout()
+              setIsAuthenticated(false)
+              setUser(null)
+              setToken(null)
+              api.setToken(null)
             }
           }, 60000)
         }
@@ -98,21 +106,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initKeycloak()
   }, [])
 
-  const login = () => {
+  const login = useCallback(() => {
     keycloakInstance?.login()
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     keycloakInstance?.logout({ redirectUri: window.location.origin })
     setIsAuthenticated(false)
     setUser(null)
     setToken(null)
     api.setToken(null)
-  }
+  }, [])
 
-  const hasRole = (role: string): boolean => {
+  const hasRole = useCallback((role: string): boolean => {
     return keycloakInstance?.hasRealmRole(role) || false
-  }
+  }, [])
 
   return (
     <AuthContext.Provider

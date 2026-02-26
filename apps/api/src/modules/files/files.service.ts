@@ -14,14 +14,14 @@ export class FilesService {
 
   constructor(private readonly configService: ConfigService) {
     this.minioClient = new Minio.Client({
-      endPoint: this.configService.get<string>('minio.endpoint') || 'minio',
-      port: parseInt(this.configService.get<string>('minio.port') || '9000', 10),
-      useSSL: this.configService.get<string>('minio.useSSL') === 'true',
-      accessKey: this.configService.get<string>('minio.accessKey') || '',
-      secretKey: this.configService.get<string>('minio.secretKey') || '',
+      endPoint: this.configService.get<string>('MINIO_ENDPOINT') || 'minio',
+      port: parseInt(this.configService.get<string>('MINIO_PORT') || '9000', 10),
+      useSSL: this.configService.get<string>('MINIO_USE_SSL') === 'true',
+      accessKey: this.configService.get<string>('MINIO_ACCESS_KEY') || '',
+      secretKey: this.configService.get<string>('MINIO_SECRET_KEY') || '',
     });
 
-    this.bucket = this.configService.get<string>('minio.bucket') || 'cmms-files';
+    this.bucket = this.configService.get<string>('MINIO_BUCKET') || 'cmms-files';
     this.ensureBucket();
   }
 

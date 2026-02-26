@@ -44,10 +44,18 @@ export default function NewWorkOrderPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const data = {
+
+    // Clean up data: remove empty strings for optional UUID/Date fields
+    const data: any = {
       ...formData,
+      assetId: formData.assetId || undefined,
+      dueDate: formData.dueDate || undefined,
       estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : undefined,
     }
+
+    // Remove any undefined fields
+    Object.keys(data).forEach(key => data[key] === undefined && delete data[key])
+
     createMutation.mutate(data)
   }
 

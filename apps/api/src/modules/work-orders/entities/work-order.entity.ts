@@ -59,7 +59,7 @@ export class WorkOrder {
   @Column({ type: 'enum', enum: Priority, default: Priority.MEDIUM })
   priority: Priority;
 
-  @Column({ type: 'enum', enum: WorkOrderStatus, default: WorkOrderStatus.DRAFT })
+  @Column({ type: 'enum', enum: WorkOrderStatus, default: WorkOrderStatus.OPEN })
   status: WorkOrderStatus;
 
   @Column({ nullable: true, name: 'asset_id' })

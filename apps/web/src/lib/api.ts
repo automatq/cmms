@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosInstance } from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
 
 class ApiClient {
   private client: AxiosInstance
@@ -27,7 +27,7 @@ class ApiClient {
         if (error.response?.status === 401) {
           // Handle unauthorized - redirect to login
           if (typeof window !== 'undefined') {
-            window.location.href = '/login'
+            window.location.href = '/'
           }
         }
         return Promise.reject(error)
@@ -53,7 +53,7 @@ class ApiClient {
   }
 
   async updateAsset(id: string, data: any) {
-    return this.client.put(`/assets/${id}`, data)
+    return this.client.patch(`/assets/${id}`, data)
   }
 
   async deleteAsset(id: string) {
@@ -84,7 +84,7 @@ class ApiClient {
   }
 
   async updateWorkOrder(id: string, data: any) {
-    return this.client.put(`/work-orders/${id}`, data)
+    return this.client.patch(`/work-orders/${id}`, data)
   }
 
   async updateWorkOrderStatus(id: string, status: string) {
@@ -105,7 +105,7 @@ class ApiClient {
   }
 
   async updatePmPlan(id: string, data: any) {
-    return this.client.put(`/pm-plans/${id}`, data)
+    return this.client.patch(`/pm-plans/${id}`, data)
   }
 
   // Inventory
@@ -122,7 +122,7 @@ class ApiClient {
   }
 
   async updatePart(id: string, data: any) {
-    return this.client.put(`/parts/${id}`, data)
+    return this.client.patch(`/parts/${id}`, data)
   }
 
   async getStorerooms() {
@@ -174,6 +174,27 @@ class ApiClient {
 
   async markNotificationRead(id: string) {
     return this.client.patch(`/notifications/${id}/read`)
+  }
+
+  // Files
+  async uploadFile(file: File, path: string = 'uploads') {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.client.post(`/files/upload?path=${path}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  }
+
+  async uploadAssetImage(assetId: string, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.client.post(`/assets/${assetId}/image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
   }
 
   // Organization / Settings

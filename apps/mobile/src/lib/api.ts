@@ -112,6 +112,51 @@ class ApiClient {
   async getParts(params?: Record<string, any>) {
     return this.client.get('/parts', { params });
   }
+
+  // Files
+  async uploadFile(file: any, path: string = 'uploads') {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const token = await this.getToken();
+    
+    return axios.post(`${API_URL}/files/upload?path=${path}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  }
+
+  async uploadWorkOrderAttachment(woId: string, file: any) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const token = await this.getToken();
+    
+    return axios.post(`${API_URL}/work-orders/${woId}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  }
+
+  async uploadAssetDocument(assetId: string, file: any, meta: any) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', meta.name);
+    if (meta.type) formData.append('type', meta.type);
+    
+    const token = await this.getToken();
+    
+    return axios.post(`${API_URL}/assets/${assetId}/documents`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+  }
 }
 
 export const api = new ApiClient();

@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { passportJwtSecret } from 'jwks-rsa';
+import { UsersService } from '../../users/users.service';
 
 export interface JwtPayload {
   sub: string;
@@ -27,7 +28,10 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private usersService: UsersService,
+  ) {
     const keycloakInternalUrl = configService.get('KEYCLOAK_URL', 'http://keycloak:8080');
     const keycloakRealm = configService.get('KEYCLOAK_REALM', 'cmms');
     // Internal URL for fetching JWKS keys (container-to-container)
@@ -56,6 +60,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!payload.sub) {
       throw new UnauthorizedException('Invalid token: missing subject');
     }
+
+    // Sync user with local database
+    await this.usersService.syncFromKeycloak({
+      sub: payload.sub,
+      preferred_username: payload.preferred_username || payload.email || 'unknown',
+      email: payload.email || '',
+      given_name: payload.given_name || payload.name || '',
+      family_name: payload.family_name || '',
+      realm_access: payload.realm_access,
+    });
+
     return payload;
   }
 }

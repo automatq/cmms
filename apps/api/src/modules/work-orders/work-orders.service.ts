@@ -425,6 +425,37 @@ export class WorkOrdersService {
     });
   }
 
+  async uploadChecklistPhoto(
+    woId: string,
+    stepIndex: number,
+    file: Express.Multer.File,
+    userId: string,
+  ): Promise<string> {
+    const storageKey = await this.filesService.uploadFile(
+      file,
+      `work-orders/${woId}/checklist/${stepIndex}`,
+    );
+
+    const existing = await this.checklistRepository.findOne({
+      where: { woId, stepIndex },
+    });
+
+    if (existing) {
+      // If there was a previous photo, delete it
+      if (existing.photoKey) {
+        try {
+          await this.filesService.deleteFile(existing.photoKey);
+        } catch (error) {
+          console.error('Failed to delete old checklist photo:', error);
+        }
+      }
+      existing.photoKey = storageKey;
+      await this.checklistRepository.save(existing);
+    }
+
+    return storageKey;
+  }
+
   private async createChecklistFromTemplate(woId: string, templateId: string): Promise<void> {
     // TODO: Fetch template from PM module and create checklist items
     // For now, this is a placeholder

@@ -12,6 +12,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { Express } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -218,6 +219,23 @@ export class WorkOrdersController {
     @CurrentUser() user: { sub: string },
   ) {
     return this.workOrdersService.saveChecklistResults(id, dto, user.sub);
+  }
+
+  @Post(':id/checklist/:stepIndex/photo')
+  @Permissions('work_orders:write')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload photo for checklist item' })
+  @ApiResponse({ status: 201, description: 'Photo uploaded and linked to checklist item' })
+  async uploadChecklistPhoto(
+    @Param('id', ParseUUIDPipe) woId: string,
+    @Param('stepIndex') stepIndex: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: { sub: string },
+  ) {
+    const stepIndexNum = parseInt(stepIndex, 10);
+    const storageKey = await this.workOrdersService.uploadChecklistPhoto(woId, stepIndexNum, file, user.sub);
+    return { storageKey };
   }
 }
 

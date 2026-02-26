@@ -311,6 +311,37 @@ export class AssetsService {
     return this.filesService.getSignedUrl(storageKey);
   }
 
+  async uploadAssetImage(
+    assetId: string,
+    file: Express.Multer.File,
+    userId: string,
+  ): Promise<string> {
+    const asset = await this.findOne(assetId);
+
+    // If the asset already has an image in customFields, delete the old one
+    if (asset.customFields && asset.customFields.imageUrl) {
+      try {
+        await this.filesService.deleteFile(asset.customFields.imageUrl as string);
+      } catch (error) {
+        console.error('Failed to delete old asset image:', error);
+      }
+    }
+
+    const storageKey = await this.filesService.uploadFile(
+      file,
+      `assets/${assetId}/images`,
+    );
+
+    // Update the asset with the new image URL in customFields
+    if (!asset.customFields) {
+      asset.customFields = {};
+    }
+    asset.customFields.imageUrl = storageKey;
+    await this.assetRepository.save(asset);
+
+    return this.filesService.getSignedUrl(storageKey);
+  }
+
   // ==================== LOCATION METHODS ====================
 
   async createLocation(dto: CreateLocationDto): Promise<Location> {

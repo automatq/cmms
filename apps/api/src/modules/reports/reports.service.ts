@@ -59,7 +59,7 @@ export class ReportsService {
     private stockRepo: Repository<InventoryStock>,
     @InjectRepository(InventoryTransaction)
     private transactionRepo: Repository<InventoryTransaction>,
-  ) {}
+  ) { }
 
   // ==================== DASHBOARD ====================
 
@@ -423,7 +423,7 @@ export class ReportsService {
       .addSelect('asset.name', 'assetName')
       .addSelect('COUNT(*)', 'total')
       .addSelect(`SUM(CASE WHEN ph.status = 'on_time' THEN 1 ELSE 0 END)`, 'onTime')
-      .where('ph.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('asset.id')
       .addGroupBy('asset.name')
       .getRawMany();
@@ -436,7 +436,7 @@ export class ReportsService {
       .addSelect('plan.name', 'planName')
       .addSelect('COUNT(*)', 'total')
       .addSelect(`SUM(CASE WHEN ph.status = 'on_time' THEN 1 ELSE 0 END)`, 'onTime')
-      .where('ph.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('plan.id')
       .addGroupBy('plan.name')
       .getRawMany();
@@ -444,10 +444,10 @@ export class ReportsService {
     // Trend
     const trend = await this.pmHistoryRepo
       .createQueryBuilder('ph')
-      .select(`TO_CHAR(ph.createdAt, 'YYYY-MM')`, 'period')
+      .select(`TO_CHAR(ph.triggeredAt, 'YYYY-MM')`, 'period')
       .addSelect('COUNT(*)', 'total')
       .addSelect(`SUM(CASE WHEN ph.status = 'on_time' THEN 1 ELSE 0 END)`, 'onTime')
-      .where('ph.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('period')
       .orderBy('period', 'ASC')
       .getRawMany();
@@ -498,7 +498,7 @@ export class ReportsService {
       .createQueryBuilder('ph')
       .select('COUNT(*)', 'total')
       .addSelect(`SUM(CASE WHEN ph.status = 'on_time' THEN 1 ELSE 0 END)`, 'onTime')
-      .where('ph.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .getRawOne();
 
     const total = parseInt(result?.total || '0', 10);
@@ -542,8 +542,8 @@ export class ReportsService {
       .addSelect('part.name', 'partName')
       .addSelect('part.sku', 'sku')
       .addSelect('SUM(ABS(tx.qty))', 'totalConsumed')
-      .where('tx.transactionType = :type', { type: TransactionType.ISSUE })
-      .andWhere('tx.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('tx.type = :type', { type: TransactionType.ISSUE })
+      .andWhere('tx.performedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('part.id')
       .addGroupBy('part.name')
       .addGroupBy('part.sku')
@@ -565,10 +565,10 @@ export class ReportsService {
     // Transaction Trend
     const transactionTrend = await this.transactionRepo
       .createQueryBuilder('tx')
-      .select(`TO_CHAR(tx.createdAt, 'YYYY-MM')`, 'period')
-      .addSelect('tx.transactionType', 'type')
+      .select(`TO_CHAR(tx.performedAt, 'YYYY-MM')`, 'period')
+      .addSelect('tx.type', 'type')
       .addSelect('COUNT(*)', 'count')
-      .where('tx.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('tx.performedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('period')
       .addGroupBy('tx.transactionType')
       .orderBy('period', 'ASC')

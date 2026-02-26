@@ -1,6 +1,8 @@
 'use client'
 
 import { useAuth } from '@/providers/auth-provider'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,24 +10,23 @@ import { Wrench, Shield, BarChart3, Clock } from 'lucide-react'
 
 export default function HomePage() {
   const { isAuthenticated, isLoading, login } = useAuth()
+  const router = useRouter()
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace('/dashboard')
+    }
+  }, [isLoading, isAuthenticated, router])
+
+  if (isLoading || isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-1/3 sm:w-1/4 space-y-2 max-w-sm">
           <Progress />
-          <p className="text-sm text-muted-foreground text-center">Authenticating...</p>
+          <p className="text-sm text-muted-foreground text-center">Loading...</p>
         </div>
       </div>
     )
-  }
-
-  if (isAuthenticated) {
-    // Redirect to dashboard
-    if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard'
-    }
-    return null
   }
 
   return (

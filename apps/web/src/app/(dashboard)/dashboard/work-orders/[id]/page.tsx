@@ -22,25 +22,17 @@ export default function WorkOrderDetailPage() {
     const { data: woData, isLoading: woLoading } = useQuery({
         queryKey: ['work-order', id],
         queryFn: async () => {
-            // Mock finding specific WO from list endpoint
-            const res = await api.getWorkOrders({ search: id })
-            const items = res.data?.data || []
-            return items.find((w: any) => w.id === id) || items[0]
+            const res = await api.getWorkOrder(id)
+            return res.data
         },
         enabled: !!id,
     })
 
     const [statusUpdating, setStatusUpdating] = useState(false)
 
-    // Assuming api.updateWorkOrder exists. If not, this is a placeholder mutation 
-    // that will simulate updating UI optimally until actual API support is confirmed.
     const updateMutation = useMutation({
         mutationFn: async (newStatus: string) => {
-            try {
-                await api.updateWorkOrder(id, { status: newStatus })
-            } catch (err) {
-                console.warn('API route for updateWorkOrder may not exist, mocking UI update.', err)
-            }
+            await api.updateWorkOrderStatus(id, newStatus)
             return newStatus
         },
         onMutate: async (newStatus) => {

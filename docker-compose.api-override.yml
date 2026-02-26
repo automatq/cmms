@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  cmms-api:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Temporarily remove Keycloak dependency to allow startup
+  caddy:
+    depends_on:
+      - cmms-web
+      - cmms-api

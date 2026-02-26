@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { ArrowLeft, Save, Image as ImageIcon } from 'lucide-react'
+import { ArrowLeft, Save, Image as ImageIcon, Upload, Loader2, X } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 
@@ -35,6 +35,7 @@ export default function NewAssetPage() {
 
   // Preview state for the image URL
   const [imageError, setImageError] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -66,6 +67,31 @@ export default function NewAssetPage() {
       toast.error(`Failed to save: ${errorStr}`)
     }
   })
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    try {
+      // For new assets, we'll temporarily store the URL until the asset is created
+      // Then we'll update the asset with the image after creation
+      const res = await api.uploadFile(file, 'temp-assets')
+      const key = res.data.key
+      // Build the public download URL
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
+      const imageUrl = `${API_URL}/files/${encodeURIComponent(key)}/download`
+
+      setFormData({ ...formData, imageUrl })
+      setImageError(false)
+      toast.success('Image uploaded successfully')
+    } catch (error) {
+      console.error('Upload failed:', error)
+      toast.error('Failed to upload image')
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -240,19 +266,40 @@ export default function NewAssetPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="imageUrl">Image URL</Label>
-                  <Input
-                    id="imageUrl"
-                    type="url"
-                    value={formData.imageUrl}
-                    onChange={(e) => {
-                      setFormData({ ...formData, imageUrl: e.target.value })
-                      setImageError(false) // reset error when typing
-                    }}
-                    placeholder="https://example.com/image.jpg"
-                  />
+                  <Label>Asset Image</Label>
+                  <div className="flex items-center gap-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => document.getElementById('image-upload')?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                      {isUploading ? 'Uploading...' : 'Upload Image'}
+                    </Button>
+                    {formData.imageUrl && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setFormData({ ...formData, imageUrl: '' })
+                          setImageError(false)
+                        }}
+                      >
+                        <X className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                    <input
+                      id="image-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Provide a direct link to an image.
+                    Upload a photo of the asset to help with identification.
                   </p>
                 </div>
 

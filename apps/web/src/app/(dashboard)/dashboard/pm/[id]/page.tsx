@@ -22,11 +22,8 @@ export default function PMDetailPage() {
     const { data: pmData, isLoading: pmLoading } = useQuery({
         queryKey: ['pm', id],
         queryFn: async () => {
-            // Assuming api.getPMPlans can return specific ones or we filter.
-            // Mock finding specific PM from list endpoint
-            const res = await api.getPmPlans({ search: id })
-            const items = res.data?.data || []
-            return items.find((p: any) => p.id === id) || items[0]
+            const res = await api.getPmPlan(id)
+            return res.data
         },
         enabled: !!id,
     })
