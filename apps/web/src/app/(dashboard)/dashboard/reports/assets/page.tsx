@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ArrowLeft, Monitor, Wrench, History, Activity } from 'lucide-react'
 import Link from 'next/link'
 import { format, subDays } from 'date-fns'
@@ -14,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 export default function AssetReportPage() {
-    const [dateRange] = useState({
+    const [dateRange, setDateRange] = useState({
         startDate: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
         endDate: format(new Date(), 'yyyy-MM-dd'),
     })
@@ -64,6 +66,16 @@ export default function AssetReportPage() {
                         <p className="text-muted-foreground">
                             Performance metrics for your equipment and infrastructure
                         </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="space-y-1">
+                        <Label className="text-xs">From</Label>
+                        <Input type="date" value={dateRange.startDate} onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })} className="h-9" />
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs">To</Label>
+                        <Input type="date" value={dateRange.endDate} onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })} className="h-9" />
                     </div>
                 </div>
             </div>

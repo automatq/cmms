@@ -23,14 +23,20 @@ import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Public } from '../auth/decorators/public.decorator';
+import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { UsageService } from '../billing/usage.service';
+import { TenantService } from '../../common/tenant/tenant.service';
 
 @ApiTags('Files')
 @ApiBearerAuth()
 @Controller('files')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class FilesController {
-  constructor(private readonly filesService: FilesService) { }
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly usageService: UsageService,
+    private readonly tenantService: TenantService,
+  ) {}
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -39,10 +45,12 @@ export class FilesController {
   @ApiResponse({ status: 201, description: 'File uploaded successfully' })
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Query('path') path: string,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
+    @Query('path') path?: string,
   ) {
-    const key = await this.filesService.uploadFile(file, path || 'uploads');
+    await this.usageService.enforceStorageLimit(user.tenantId, file.size);
+    const key = await this.filesService.uploadFile(file, path || 'uploads', user.tenantId);
+    await this.tenantService.updateStorageUsage(user.tenantId, file.size);
     return {
       key,
       name: file.originalname,
@@ -60,8 +68,7 @@ export class FilesController {
   }
 
   @Get(':key/download')
-  @Public()
-  @ApiOperation({ summary: 'Download file directly' })
+  @ApiOperation({ summary: 'Download file directly (authenticated)' })
   @ApiResponse({ status: 200, description: 'File stream' })
   async downloadFile(
     @Param('key') key: string,

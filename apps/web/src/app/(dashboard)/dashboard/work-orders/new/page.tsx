@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 export default function NewWorkOrderPage() {
   const router = useRouter()
@@ -22,6 +23,9 @@ export default function NewWorkOrderPage() {
     type: 'corrective',
     priority: 'medium',
     assetId: '',
+    locationId: '',
+    assignedTo: '',
+    checklistTemplateId: '',
     dueDate: '',
     estimatedHours: '',
   })
@@ -34,26 +38,59 @@ export default function NewWorkOrderPage() {
     },
   })
 
+  const { data: locations } = useQuery({
+    queryKey: ['locations'],
+    queryFn: async () => {
+      const res = await api.getLocations()
+      return res.data?.data || res.data || []
+    },
+  })
+
+  const { data: users } = useQuery({
+    queryKey: ['users-list'],
+    queryFn: async () => {
+      const res = await api.getUsers({ limit: 200 })
+      return res.data?.data || res.data || []
+    },
+  })
+
+  const { data: checklistTemplates } = useQuery({
+    queryKey: ['checklist-templates'],
+    queryFn: async () => {
+      const res = await api.getChecklistTemplates()
+      return res.data?.data || res.data || []
+    },
+  })
+
   const createMutation = useMutation({
     mutationFn: (data: any) => api.createWorkOrder(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+      toast.success('Work order created')
       router.push('/dashboard/work-orders')
+    },
+    onError: (error: any) => {
+      const msg = error.response?.data?.message
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to create work order')
     },
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Clean up data: remove empty strings for optional UUID/Date fields
     const data: any = {
-      ...formData,
+      title: formData.title,
+      description: formData.description || undefined,
+      type: formData.type,
+      priority: formData.priority,
       assetId: formData.assetId || undefined,
+      locationId: formData.locationId || undefined,
+      assignedTo: formData.assignedTo || undefined,
+      checklistTemplateId: formData.checklistTemplateId || undefined,
       dueDate: formData.dueDate || undefined,
       estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : undefined,
     }
 
-    // Remove any undefined fields
     Object.keys(data).forEach(key => data[key] === undefined && delete data[key])
 
     createMutation.mutate(data)
@@ -134,20 +171,63 @@ export default function NewWorkOrderPage() {
             <CardTitle>Assignment</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="asset">Asset</Label>
-              <Select
-                id="asset"
-                value={formData.assetId}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, assetId: e.target.value })}
-              >
-                <option value="">Select asset (optional)</option>
-                {assets?.data?.map((asset: any) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.assetNumber} - {asset.name}
-                  </option>
-                ))}
-              </Select>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="asset">Asset</Label>
+                <Select
+                  id="asset"
+                  value={formData.assetId}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, assetId: e.target.value })}
+                >
+                  <option value="">Select asset (optional)</option>
+                  {assets?.data?.map((asset: any) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.assetNumber} - {asset.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="location">Location</Label>
+                <Select
+                  id="location"
+                  value={formData.locationId}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, locationId: e.target.value })}
+                >
+                  <option value="">Select location (optional)</option>
+                  {Array.isArray(locations) && locations.map((loc: any) => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="assignedTo">Assign To</Label>
+                <Select
+                  id="assignedTo"
+                  value={formData.assignedTo}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, assignedTo: e.target.value })}
+                >
+                  <option value="">Select technician (optional)</option>
+                  {Array.isArray(users) && users.map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName}{u.jobTitle ? ` — ${u.jobTitle}` : ''}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="checklistTemplate">Checklist Template</Label>
+                <Select
+                  id="checklistTemplate"
+                  value={formData.checklistTemplateId}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, checklistTemplateId: e.target.value })}
+                >
+                  <option value="">None</option>
+                  {Array.isArray(checklistTemplates) && checklistTemplates.map((t: any) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </Select>
+              </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">

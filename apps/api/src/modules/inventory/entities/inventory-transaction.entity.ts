@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Part } from './part.entity';
 import { Storeroom } from './storeroom.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum TransactionType {
   RECEIVE = 'receive',
@@ -20,7 +21,7 @@ export enum TransactionType {
 }
 
 @Entity('inventory_transactions')
-export class InventoryTransaction {
+export class InventoryTransaction extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

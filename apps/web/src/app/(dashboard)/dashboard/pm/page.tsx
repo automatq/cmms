@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
-import { Plus, Search, Calendar, Clock, CheckCircle } from 'lucide-react'
+import { Plus, Search, Calendar, Clock, CheckCircle, Library } from 'lucide-react'
 import { useState } from 'react'
 import { formatDate } from '@/lib/utils'
 
@@ -36,12 +36,20 @@ export default function PmPlansPage() {
             Preventive maintenance schedules and plans
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/pm/new">
-            <Plus className="h-4 w-4 mr-2" />
-            New PM Plan
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/pm/templates">
+              <Library className="h-4 w-4 mr-2" />
+              Templates
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/pm/new">
+              <Plus className="h-4 w-4 mr-2" />
+              New PM Plan
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Search */}

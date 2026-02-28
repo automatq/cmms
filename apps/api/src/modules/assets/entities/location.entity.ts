@@ -8,6 +8,7 @@ import {
   OneToMany,
   JoinColumn,
 } from 'typeorm';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum LocationType {
   SITE = 'site',
@@ -17,7 +18,7 @@ export enum LocationType {
 }
 
 @Entity('locations')
-export class Location {
+export class Location extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

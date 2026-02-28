@@ -39,6 +39,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { RequestUser } from '../../common/interfaces/request-user.interface';
 
 @ApiTags('Assets')
 @ApiBearerAuth()
@@ -51,16 +52,16 @@ export class AssetsController {
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get all assets' })
   @ApiResponse({ status: 200, description: 'List of assets' })
-  findAll(@Query() query: AssetQueryDto) {
-    return this.assetsService.findAll(query);
+  findAll(@Query() query: AssetQueryDto, @CurrentUser() user: RequestUser) {
+    return this.assetsService.findAll(query, user.tenantId);
   }
 
   @Get('hierarchy')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get asset hierarchy' })
   @ApiResponse({ status: 200, description: 'Asset tree structure' })
-  getHierarchy() {
-    return this.assetsService.getHierarchy();
+  getHierarchy(@CurrentUser() user: RequestUser) {
+    return this.assetsService.getHierarchy(user.tenantId);
   }
 
   @Get(':id')
@@ -68,40 +69,44 @@ export class AssetsController {
   @ApiOperation({ summary: 'Get asset by ID' })
   @ApiResponse({ status: 200, description: 'Asset details' })
   @ApiResponse({ status: 404, description: 'Asset not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.assetsService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.findOne(id, user.tenantId);
   }
 
   @Get(':id/history')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get asset with full history' })
   @ApiResponse({ status: 200, description: 'Asset with meter history' })
-  findWithHistory(@Param('id', ParseUUIDPipe) id: string) {
-    return this.assetsService.findWithHistory(id);
+  findWithHistory(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.findWithHistory(id, user.tenantId);
   }
 
   @Get(':id/children')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get child assets' })
   @ApiResponse({ status: 200, description: 'Child assets' })
-  getChildren(@Param('id', ParseUUIDPipe) id: string) {
-    return this.assetsService.getChildren(id);
+  getChildren(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.getChildren(id, user.tenantId);
   }
 
   @Post()
-  @Public()
+  @Permissions('assets:write')
   @ApiOperation({ summary: 'Create a new asset' })
   @ApiResponse({ status: 201, description: 'Asset created' })
-  create(@Body() dto: CreateAssetDto) {
-    return this.assetsService.create(dto, 'system-user-id');
+  create(@Body() dto: CreateAssetDto, @CurrentUser() user: RequestUser) {
+    return this.assetsService.create(dto, user.userId, user.tenantId);
   }
 
   @Patch(':id')
   @Permissions('assets:write')
   @ApiOperation({ summary: 'Update asset' })
   @ApiResponse({ status: 200, description: 'Asset updated' })
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAssetDto) {
-    return this.assetsService.update(id, dto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAssetDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.assetsService.update(id, dto, user.tenantId);
   }
 
   @Post(':id/retire')
@@ -110,9 +115,9 @@ export class AssetsController {
   @ApiResponse({ status: 200, description: 'Asset retired' })
   retire(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.assetsService.retire(id, user.sub);
+    return this.assetsService.retire(id, user.userId, user.tenantId);
   }
 
   // ==================== METERS ====================
@@ -124,9 +129,9 @@ export class AssetsController {
   recordMeterReading(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RecordMeterDto,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.assetsService.recordMeterReading(id, dto, user.sub);
+    return this.assetsService.recordMeterReading(id, dto, user.userId, user.tenantId);
   }
 
   @Get(':id/meters')
@@ -135,6 +140,7 @@ export class AssetsController {
   @ApiResponse({ status: 200, description: 'Meter reading history' })
   getMeterHistory(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
@@ -142,6 +148,7 @@ export class AssetsController {
       id,
       from ? new Date(from) : undefined,
       to ? new Date(to) : undefined,
+      user.tenantId,
     );
   }
 
@@ -157,25 +164,31 @@ export class AssetsController {
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File,
     @Body() meta: DocumentMetaDto,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.assetsService.uploadDocument(id, file, meta, user.sub);
+    return this.assetsService.uploadDocument(id, file, meta, user.userId, user.tenantId);
   }
 
   @Get(':id/documents/:docId/url')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get document download URL' })
   @ApiResponse({ status: 200, description: 'Signed URL for download' })
-  getDocumentUrl(@Param('docId', ParseUUIDPipe) docId: string) {
-    return this.assetsService.getDocumentSignedUrl(docId);
+  getDocumentUrl(
+    @Param('docId', ParseUUIDPipe) docId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.assetsService.getDocumentSignedUrl(docId, user.tenantId);
   }
 
   @Delete(':id/documents/:docId')
   @Permissions('assets:write')
   @ApiOperation({ summary: 'Delete document' })
   @ApiResponse({ status: 200, description: 'Document deleted' })
-  deleteDocument(@Param('docId', ParseUUIDPipe) docId: string) {
-    return this.assetsService.deleteDocument(docId);
+  deleteDocument(
+    @Param('docId', ParseUUIDPipe) docId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.assetsService.deleteDocument(docId, user.tenantId);
   }
 
   // ==================== QR CODE ====================
@@ -184,8 +197,11 @@ export class AssetsController {
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Generate/get QR code for asset' })
   @ApiResponse({ status: 200, description: 'QR code URL' })
-  generateQrCode(@Param('id', ParseUUIDPipe) id: string) {
-    return this.assetsService.generateQrCode(id);
+  generateQrCode(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.assetsService.generateQrCode(id, user.tenantId);
   }
 
   @Post(':id/image')
@@ -197,9 +213,9 @@ export class AssetsController {
   async uploadAssetImage(
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.assetsService.uploadAssetImage(id, file, user.sub);
+    return this.assetsService.uploadAssetImage(id, file, user.userId, user.tenantId);
   }
 }
 
@@ -216,32 +232,32 @@ export class LocationsController {
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get all locations' })
   @ApiResponse({ status: 200, description: 'List of locations' })
-  findAll() {
-    return this.assetsService.findAllLocations();
+  findAll(@CurrentUser() user: RequestUser) {
+    return this.assetsService.findAllLocations(user.tenantId);
   }
 
   @Get('tree')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get location tree' })
   @ApiResponse({ status: 200, description: 'Location tree structure' })
-  getTree() {
-    return this.assetsService.getLocationTree();
+  getTree(@CurrentUser() user: RequestUser) {
+    return this.assetsService.getLocationTree(user.tenantId);
   }
 
   @Get(':id')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get location by ID' })
   @ApiResponse({ status: 200, description: 'Location details' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.assetsService.findLocationById(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.findLocationById(id, user.tenantId);
   }
 
   @Post()
   @Permissions('assets:write')
   @ApiOperation({ summary: 'Create location' })
   @ApiResponse({ status: 201, description: 'Location created' })
-  create(@Body() dto: CreateLocationDto) {
-    return this.assetsService.createLocation(dto);
+  create(@Body() dto: CreateLocationDto, @CurrentUser() user: RequestUser) {
+    return this.assetsService.createLocation(dto, user.tenantId);
   }
 
   @Patch(':id')
@@ -251,16 +267,17 @@ export class LocationsController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateLocationDto,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.assetsService.updateLocation(id, dto);
+    return this.assetsService.updateLocation(id, dto, user.tenantId);
   }
 
   @Delete(':id')
   @Permissions('assets:write')
   @ApiOperation({ summary: 'Delete location' })
   @ApiResponse({ status: 200, description: 'Location deleted' })
-  delete(@Param('id', ParseUUIDPipe) id: string) {
-    return this.assetsService.deleteLocation(id);
+  delete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.deleteLocation(id, user.tenantId);
   }
 }
 
@@ -277,32 +294,32 @@ export class CategoriesController {
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get all categories' })
   @ApiResponse({ status: 200, description: 'List of categories' })
-  findAll() {
-    return this.assetsService.findAllCategories();
+  findAll(@CurrentUser() user: RequestUser) {
+    return this.assetsService.findAllCategories(user.tenantId);
   }
 
   @Get('tree')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get category tree' })
   @ApiResponse({ status: 200, description: 'Category tree structure' })
-  getTree() {
-    return this.assetsService.getCategoryTree();
+  getTree(@CurrentUser() user: RequestUser) {
+    return this.assetsService.getCategoryTree(user.tenantId);
   }
 
   @Get(':id')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get category by ID' })
   @ApiResponse({ status: 200, description: 'Category details' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.assetsService.findCategoryById(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.findCategoryById(id, user.tenantId);
   }
 
   @Post()
   @Permissions('assets:write')
   @ApiOperation({ summary: 'Create category' })
   @ApiResponse({ status: 201, description: 'Category created' })
-  create(@Body() dto: CreateCategoryDto) {
-    return this.assetsService.createCategory(dto);
+  create(@Body() dto: CreateCategoryDto, @CurrentUser() user: RequestUser) {
+    return this.assetsService.createCategory(dto, user.tenantId);
   }
 
   @Patch(':id')
@@ -312,15 +329,16 @@ export class CategoriesController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCategoryDto,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.assetsService.updateCategory(id, dto);
+    return this.assetsService.updateCategory(id, dto, user.tenantId);
   }
 
   @Delete(':id')
   @Permissions('assets:write')
   @ApiOperation({ summary: 'Delete category' })
   @ApiResponse({ status: 200, description: 'Category deleted' })
-  delete(@Param('id', ParseUUIDPipe) id: string) {
-    return this.assetsService.deleteCategory(id);
+  delete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.deleteCategory(id, user.tenantId);
   }
 }

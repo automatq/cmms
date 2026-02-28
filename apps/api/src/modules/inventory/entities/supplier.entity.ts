@@ -5,9 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('suppliers')
-export class Supplier {
+export class Supplier extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

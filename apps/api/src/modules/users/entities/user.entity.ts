@@ -6,8 +6,10 @@ import {
   UpdateDateColumn,
   ManyToMany,
   JoinTable,
+  Unique,
 } from 'typeorm';
 import { Role } from './role.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum UserStatus {
   ACTIVE = 'active',
@@ -16,14 +18,16 @@ export enum UserStatus {
 }
 
 @Entity('users')
-export class User {
+@Unique(['tenantId', 'username'])
+@Unique(['tenantId', 'email'])
+export class User extends TenantAwareEntity {
   @PrimaryColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column()
   username: string;
 
-  @Column({ unique: true })
+  @Column()
   email: string;
 
   @Column({ name: 'first_name' })

@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Asset } from '../../assets/entities/asset.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum TriggerType {
   TIME = 'time',
@@ -25,7 +26,7 @@ export enum FrequencyUnit {
 }
 
 @Entity('pm_plans')
-export class PmPlan {
+export class PmPlan extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

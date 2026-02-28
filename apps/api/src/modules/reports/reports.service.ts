@@ -63,7 +63,7 @@ export class ReportsService {
 
   // ==================== DASHBOARD ====================
 
-  async getDashboardSummary(query: DashboardQueryDto): Promise<{
+  async getDashboardSummary(query: DashboardQueryDto, tenantId: string): Promise<{
     kpis: KpiMetric[];
     workOrdersByStatus: ChartDataPoint[];
     workOrdersByPriority: ChartDataPoint[];
@@ -77,14 +77,15 @@ export class ReportsService {
 
     // Work Order KPIs
     const [totalWOs, openWOs, completedWOs, overdueWOs] = await Promise.all([
-      this.workOrderRepo.count({ where: { createdAt: Between(startDate, new Date()) } }),
-      this.workOrderRepo.count({ where: { status: In([WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS]) } }),
-      this.workOrderRepo.count({ where: { status: WorkOrderStatus.COMPLETED, completedAt: Between(startDate, new Date()) } }),
-      this.workOrderRepo.count({ where: { status: In([WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS]), dueDate: Not(IsNull()) } })
+      this.workOrderRepo.count({ where: { tenantId, createdAt: Between(startDate, new Date()) } }),
+      this.workOrderRepo.count({ where: { tenantId, status: In([WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS]) } }),
+      this.workOrderRepo.count({ where: { tenantId, status: WorkOrderStatus.COMPLETED, completedAt: Between(startDate, new Date()) } }),
+      this.workOrderRepo.count({ where: { tenantId, status: In([WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS]), dueDate: Not(IsNull()) } })
         .then(async () => {
           const now = new Date();
           return this.workOrderRepo.createQueryBuilder('wo')
-            .where('wo.status IN (:...statuses)', { statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS] })
+            .where('wo.tenantId = :tenantId', { tenantId })
+            .andWhere('wo.status IN (:...statuses)', { statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS] })
             .andWhere('wo.dueDate < :now', { now })
             .getCount();
         }),
@@ -94,19 +95,21 @@ export class ReportsService {
     const mttrResult = await this.workOrderRepo
       .createQueryBuilder('wo')
       .select('AVG(wo.actualHours)', 'mttr')
-      .where('wo.status = :status', { status: WorkOrderStatus.COMPLETED })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.status = :status', { status: WorkOrderStatus.COMPLETED })
       .andWhere('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: new Date() })
       .andWhere('wo.actualHours IS NOT NULL')
       .getRawOne();
 
     // PM Compliance
-    const pmCompliance = await this.calculatePmCompliance(startDate, new Date());
+    const pmCompliance = await this.calculatePmCompliance(startDate, new Date(), tenantId);
 
     // Work Orders by Status
     const woByStatus = await this.workOrderRepo
       .createQueryBuilder('wo')
       .select('wo.status', 'status')
       .addSelect('COUNT(*)', 'count')
+      .where('wo.tenantId = :tenantId', { tenantId })
       .groupBy('wo.status')
       .getRawMany();
 
@@ -115,13 +118,14 @@ export class ReportsService {
       .createQueryBuilder('wo')
       .select('wo.priority', 'priority')
       .addSelect('COUNT(*)', 'count')
-      .where('wo.status NOT IN (:...statuses)', { statuses: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED] })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.status NOT IN (:...statuses)', { statuses: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED] })
       .groupBy('wo.priority')
       .getRawMany();
 
     // Recent Activity (last 10 completed WOs)
     const recentActivity = await this.workOrderRepo.find({
-      where: { status: WorkOrderStatus.COMPLETED },
+      where: { tenantId, status: WorkOrderStatus.COMPLETED },
       order: { completedAt: 'DESC' },
       take: 10,
       relations: ['asset'],
@@ -129,14 +133,14 @@ export class ReportsService {
 
     // Upcoming PMs (next 10)
     const upcomingPMs = await this.pmPlanRepo.find({
-      where: { isActive: true, nextDueAt: Not(IsNull()) },
+      where: { tenantId, isActive: true, nextDueAt: Not(IsNull()) },
       order: { nextDueAt: 'ASC' },
       take: 10,
       relations: ['asset'],
     });
 
     // Low Stock Alerts
-    const lowStockAlerts = await this.getLowStockParts();
+    const lowStockAlerts = await this.getLowStockParts(tenantId);
 
     return {
       kpis: [
@@ -167,7 +171,7 @@ export class ReportsService {
 
   // ==================== WORK ORDER REPORTS ====================
 
-  async getWorkOrderReport(query: WorkOrderReportQueryDto): Promise<{
+  async getWorkOrderReport(query: WorkOrderReportQueryDto, tenantId: string): Promise<{
     summary: any;
     byType: ChartDataPoint[];
     byPriority: ChartDataPoint[];
@@ -179,7 +183,8 @@ export class ReportsService {
     const endDate = new Date(query.endDate);
 
     const qb = this.workOrderRepo.createQueryBuilder('wo')
-      .where('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate });
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate });
 
     if (query.type) qb.andWhere('wo.type = :type', { type: query.type });
     if (query.priority) qb.andWhere('wo.priority = :priority', { priority: query.priority });
@@ -206,7 +211,8 @@ export class ReportsService {
       .createQueryBuilder('wo')
       .select('wo.type', 'type')
       .addSelect('COUNT(*)', 'count')
-      .where('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('wo.type')
       .getRawMany();
 
@@ -215,7 +221,8 @@ export class ReportsService {
       .createQueryBuilder('wo')
       .select('wo.priority', 'priority')
       .addSelect('COUNT(*)', 'count')
-      .where('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('wo.priority')
       .getRawMany();
 
@@ -224,7 +231,8 @@ export class ReportsService {
       .createQueryBuilder('wo')
       .select('UNNEST(wo.assignedTo)', 'technician')
       .addSelect('COUNT(*)', 'count')
-      .where('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .andWhere('wo.assignedTo IS NOT NULL')
       .groupBy('UNNEST(wo.assignedTo)')
       .orderBy('count', 'DESC')
@@ -232,7 +240,7 @@ export class ReportsService {
       .getRawMany();
 
     // Trend (group by period)
-    const trend = await this.getWorkOrderTrend(startDate, endDate, query.groupBy || ReportPeriod.DAY);
+    const trend = await this.getWorkOrderTrend(startDate, endDate, query.groupBy || ReportPeriod.DAY, tenantId);
 
     return {
       summary: {
@@ -250,7 +258,7 @@ export class ReportsService {
     };
   }
 
-  private async getWorkOrderTrend(startDate: Date, endDate: Date, period: ReportPeriod): Promise<ChartDataPoint[]> {
+  private async getWorkOrderTrend(startDate: Date, endDate: Date, period: ReportPeriod, tenantId: string): Promise<ChartDataPoint[]> {
     let dateFormat: string;
     switch (period) {
       case ReportPeriod.DAY:
@@ -274,7 +282,8 @@ export class ReportsService {
       .createQueryBuilder('wo')
       .select(`TO_CHAR(wo.createdAt, '${dateFormat}')`, 'period')
       .addSelect('COUNT(*)', 'count')
-      .where('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('period')
       .orderBy('period', 'ASC')
       .getRawMany();
@@ -284,7 +293,7 @@ export class ReportsService {
 
   // ==================== ASSET REPORTS ====================
 
-  async getAssetReport(query: AssetReportQueryDto): Promise<{
+  async getAssetReport(query: AssetReportQueryDto, tenantId: string): Promise<{
     summary: any;
     byStatus: ChartDataPoint[];
     byCategory: ChartDataPoint[];
@@ -297,9 +306,9 @@ export class ReportsService {
 
     // Summary
     const [totalAssets, activeAssets, underRepair] = await Promise.all([
-      this.assetRepo.count(),
-      this.assetRepo.count({ where: { status: AssetStatus.ACTIVE } }),
-      this.assetRepo.count({ where: { status: AssetStatus.UNDER_REPAIR } }),
+      this.assetRepo.count({ where: { tenantId } }),
+      this.assetRepo.count({ where: { tenantId, status: AssetStatus.ACTIVE } }),
+      this.assetRepo.count({ where: { tenantId, status: AssetStatus.UNDER_REPAIR } }),
     ]);
 
     // By Status
@@ -307,6 +316,7 @@ export class ReportsService {
       .createQueryBuilder('asset')
       .select('asset.status', 'status')
       .addSelect('COUNT(*)', 'count')
+      .where('asset.tenantId = :tenantId', { tenantId })
       .groupBy('asset.status')
       .getRawMany();
 
@@ -316,6 +326,7 @@ export class ReportsService {
       .leftJoin('asset.category', 'category')
       .select('COALESCE(category.name, \'Uncategorized\')', 'category')
       .addSelect('COUNT(*)', 'count')
+      .where('asset.tenantId = :tenantId', { tenantId })
       .groupBy('category.name')
       .getRawMany();
 
@@ -325,6 +336,7 @@ export class ReportsService {
       .leftJoin('asset.location', 'location')
       .select('COALESCE(location.name, \'No Location\')', 'location')
       .addSelect('COUNT(*)', 'count')
+      .where('asset.tenantId = :tenantId', { tenantId })
       .groupBy('location.name')
       .orderBy('count', 'DESC')
       .limit(10)
@@ -338,7 +350,8 @@ export class ReportsService {
       .addSelect('asset.name', 'assetName')
       .addSelect('asset.assetNumber', 'assetNumber')
       .addSelect('COUNT(*)', 'failureCount')
-      .where('wo.type = :type', { type: WorkOrderType.CORRECTIVE })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.type = :type', { type: WorkOrderType.CORRECTIVE })
       .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .andWhere('wo.assetId IS NOT NULL')
       .groupBy('asset.id')
@@ -349,7 +362,7 @@ export class ReportsService {
       .getRawMany();
 
     // MTBF by Asset (Mean Time Between Failures)
-    const mtbfByAsset = await this.calculateMTBF(startDate, endDate);
+    const mtbfByAsset = await this.calculateMTBF(startDate, endDate, tenantId);
 
     return {
       summary: {
@@ -371,7 +384,7 @@ export class ReportsService {
     };
   }
 
-  private async calculateMTBF(startDate: Date, endDate: Date): Promise<any[]> {
+  private async calculateMTBF(startDate: Date, endDate: Date, tenantId: string): Promise<any[]> {
     // Simplified MTBF calculation
     const result = await this.workOrderRepo
       .createQueryBuilder('wo')
@@ -380,7 +393,8 @@ export class ReportsService {
       .addSelect('asset.name', 'assetName')
       .addSelect('COUNT(*)', 'failureCount')
       .addSelect(`EXTRACT(EPOCH FROM (:end::timestamp - :start::timestamp)) / 3600 / NULLIF(COUNT(*), 0)`, 'mtbf')
-      .where('wo.type = :type', { type: WorkOrderType.CORRECTIVE })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.type = :type', { type: WorkOrderType.CORRECTIVE })
       .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .andWhere('wo.assetId IS NOT NULL')
       .groupBy('asset.id')
@@ -401,7 +415,7 @@ export class ReportsService {
 
   // ==================== PM COMPLIANCE REPORTS ====================
 
-  async getPmComplianceReport(query: ReportQueryDto): Promise<{
+  async getPmComplianceReport(query: ReportQueryDto, tenantId: string): Promise<{
     overallCompliance: number;
     byAsset: any[];
     byPlan: any[];
@@ -412,7 +426,7 @@ export class ReportsService {
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
 
-    const overallCompliance = await this.calculatePmCompliance(startDate, endDate);
+    const overallCompliance = await this.calculatePmCompliance(startDate, endDate, tenantId);
 
     // Compliance by Asset
     const byAsset = await this.pmHistoryRepo
@@ -423,7 +437,8 @@ export class ReportsService {
       .addSelect('asset.name', 'assetName')
       .addSelect('COUNT(*)', 'total')
       .addSelect(`SUM(CASE WHEN ph.status = 'on_time' THEN 1 ELSE 0 END)`, 'onTime')
-      .where('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('ph.tenantId = :tenantId', { tenantId })
+      .andWhere('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('asset.id')
       .addGroupBy('asset.name')
       .getRawMany();
@@ -436,7 +451,8 @@ export class ReportsService {
       .addSelect('plan.name', 'planName')
       .addSelect('COUNT(*)', 'total')
       .addSelect(`SUM(CASE WHEN ph.status = 'on_time' THEN 1 ELSE 0 END)`, 'onTime')
-      .where('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('ph.tenantId = :tenantId', { tenantId })
+      .andWhere('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('plan.id')
       .addGroupBy('plan.name')
       .getRawMany();
@@ -447,7 +463,8 @@ export class ReportsService {
       .select(`TO_CHAR(ph.triggeredAt, 'YYYY-MM')`, 'period')
       .addSelect('COUNT(*)', 'total')
       .addSelect(`SUM(CASE WHEN ph.status = 'on_time' THEN 1 ELSE 0 END)`, 'onTime')
-      .where('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('ph.tenantId = :tenantId', { tenantId })
+      .andWhere('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('period')
       .orderBy('period', 'ASC')
       .getRawMany();
@@ -455,7 +472,8 @@ export class ReportsService {
     // Overdue PMs
     const overdueCount = await this.pmPlanRepo
       .createQueryBuilder('pm')
-      .where('pm.isActive = true')
+      .where('pm.tenantId = :tenantId', { tenantId })
+      .andWhere('pm.isActive = true')
       .andWhere('pm.nextDueAt < :now', { now: new Date() })
       .getCount();
 
@@ -464,7 +482,8 @@ export class ReportsService {
     nextWeek.setDate(nextWeek.getDate() + 7);
     const upcomingCount = await this.pmPlanRepo
       .createQueryBuilder('pm')
-      .where('pm.isActive = true')
+      .where('pm.tenantId = :tenantId', { tenantId })
+      .andWhere('pm.isActive = true')
       .andWhere('pm.nextDueAt BETWEEN :now AND :next', { now: new Date(), next: nextWeek })
       .getCount();
 
@@ -493,12 +512,13 @@ export class ReportsService {
     };
   }
 
-  private async calculatePmCompliance(startDate: Date, endDate: Date): Promise<number> {
+  private async calculatePmCompliance(startDate: Date, endDate: Date, tenantId: string): Promise<number> {
     const result = await this.pmHistoryRepo
       .createQueryBuilder('ph')
       .select('COUNT(*)', 'total')
       .addSelect(`SUM(CASE WHEN ph.status = 'on_time' THEN 1 ELSE 0 END)`, 'onTime')
-      .where('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('ph.tenantId = :tenantId', { tenantId })
+      .andWhere('ph.triggeredAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .getRawOne();
 
     const total = parseInt(result?.total || '0', 10);
@@ -509,7 +529,7 @@ export class ReportsService {
 
   // ==================== INVENTORY REPORTS ====================
 
-  async getInventoryReport(query: InventoryReportQueryDto): Promise<{
+  async getInventoryReport(query: InventoryReportQueryDto, tenantId: string): Promise<{
     summary: any;
     lowStockItems: any[];
     topConsumedParts: any[];
@@ -521,18 +541,19 @@ export class ReportsService {
 
     // Summary
     const [totalParts, lowStockCount, totalValue] = await Promise.all([
-      this.partRepo.count(),
-      this.getLowStockParts().then((parts) => parts.length),
+      this.partRepo.count({ where: { tenantId } }),
+      this.getLowStockParts(tenantId).then((parts) => parts.length),
       this.stockRepo
         .createQueryBuilder('stock')
         .leftJoin('stock.part', 'part')
         .select('SUM(stock.qtyOnHand * COALESCE(part.unitCost, 0))', 'total')
+        .where('stock.tenantId = :tenantId', { tenantId })
         .getRawOne()
         .then((r) => parseFloat(r?.total || '0')),
     ]);
 
     // Low Stock Items
-    const lowStockItems = await this.getLowStockParts();
+    const lowStockItems = await this.getLowStockParts(tenantId);
 
     // Top Consumed Parts
     const topConsumedParts = await this.transactionRepo
@@ -542,7 +563,8 @@ export class ReportsService {
       .addSelect('part.name', 'partName')
       .addSelect('part.sku', 'sku')
       .addSelect('SUM(ABS(tx.qty))', 'totalConsumed')
-      .where('tx.type = :type', { type: TransactionType.ISSUE })
+      .where('tx.tenantId = :tenantId', { tenantId })
+      .andWhere('tx.type = :type', { type: TransactionType.ISSUE })
       .andWhere('tx.performedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('part.id')
       .addGroupBy('part.name')
@@ -558,6 +580,7 @@ export class ReportsService {
       .leftJoin('stock.part', 'part')
       .select('storeroom.name', 'storeroom')
       .addSelect('SUM(stock.qtyOnHand * COALESCE(part.unitCost, 0))', 'value')
+      .where('stock.tenantId = :tenantId', { tenantId })
       .groupBy('storeroom.name')
       .orderBy('value', 'DESC')
       .getRawMany();
@@ -568,7 +591,8 @@ export class ReportsService {
       .select(`TO_CHAR(tx.performedAt, 'YYYY-MM')`, 'period')
       .addSelect('tx.type', 'type')
       .addSelect('COUNT(*)', 'count')
-      .where('tx.performedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('tx.tenantId = :tenantId', { tenantId })
+      .andWhere('tx.performedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('period')
       .addGroupBy('tx.transactionType')
       .orderBy('period', 'ASC')
@@ -599,14 +623,14 @@ export class ReportsService {
     };
   }
 
-  private async getLowStockParts(): Promise<LowStockPart[]> {
-    const parts = await this.partRepo.find({ where: { reorderPoint: Not(IsNull()) } });
+  private async getLowStockParts(tenantId: string): Promise<LowStockPart[]> {
+    const parts = await this.partRepo.find({ where: { tenantId, reorderPoint: Not(IsNull()) } });
     const lowStockParts: LowStockPart[] = [];
 
     for (const part of parts) {
       if (!part.reorderPoint) continue;
 
-      const stocks = await this.stockRepo.find({ where: { partId: part.id } });
+      const stocks = await this.stockRepo.find({ where: { tenantId, partId: part.id } });
       const totalOnHand = stocks.reduce((sum, s) => sum + s.qtyOnHand, 0);
 
       if (totalOnHand <= part.reorderPoint) {
@@ -626,7 +650,7 @@ export class ReportsService {
 
   // ==================== COST REPORTS ====================
 
-  async getCostReport(query: ReportQueryDto): Promise<{
+  async getCostReport(query: ReportQueryDto, tenantId: string): Promise<{
     totalLaborCost: number;
     totalPartsCost: number;
     totalCost: number;
@@ -641,7 +665,8 @@ export class ReportsService {
     const costSummary = await this.workOrderRepo
       .createQueryBuilder('wo')
       .select('SUM(wo.actualCost)', 'totalCost')
-      .where('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .getRawOne();
 
     // Cost by Asset
@@ -651,7 +676,8 @@ export class ReportsService {
       .select('asset.id', 'assetId')
       .addSelect('asset.name', 'assetName')
       .addSelect('SUM(wo.actualCost)', 'totalCost')
-      .where('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .andWhere('wo.assetId IS NOT NULL')
       .groupBy('asset.id')
       .addGroupBy('asset.name')
@@ -664,7 +690,8 @@ export class ReportsService {
       .createQueryBuilder('wo')
       .select('wo.type', 'type')
       .addSelect('SUM(wo.actualCost)', 'cost')
-      .where('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('wo.type')
       .getRawMany();
 
@@ -673,7 +700,8 @@ export class ReportsService {
       .createQueryBuilder('wo')
       .select(`TO_CHAR(wo.completedAt, 'YYYY-MM')`, 'period')
       .addSelect('SUM(wo.actualCost)', 'cost')
-      .where('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('period')
       .orderBy('period', 'ASC')
       .getRawMany();
@@ -700,7 +728,7 @@ export class ReportsService {
 
   // ==================== TECHNICIAN PERFORMANCE ====================
 
-  async getTechnicianPerformanceReport(query: WorkOrderReportQueryDto): Promise<{
+  async getTechnicianPerformanceReport(query: WorkOrderReportQueryDto, tenantId: string): Promise<{
     technicians: any[];
   }> {
     const startDate = new Date(query.startDate);
@@ -712,7 +740,8 @@ export class ReportsService {
       .addSelect('COUNT(*)', 'totalAssigned')
       .addSelect(`SUM(CASE WHEN wo.status = 'completed' THEN 1 ELSE 0 END)`, 'completed')
       .addSelect('AVG(wo.actualHours)', 'avgHours')
-      .where('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .andWhere('wo.assignedTo IS NOT NULL')
       .groupBy('UNNEST(wo.assignedTo)')
       .orderBy('completed', 'DESC')

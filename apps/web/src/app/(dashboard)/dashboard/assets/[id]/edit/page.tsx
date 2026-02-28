@@ -27,6 +27,7 @@ export default function EditAssetPage() {
     status: 'active',
     categoryId: '',
     locationId: '',
+    parentAssetId: '',
     manufacturer: '',
     model: '',
     serialNumber: '',
@@ -60,6 +61,7 @@ export default function EditAssetPage() {
         status: asset.status || 'active',
         categoryId: asset.categoryId || asset.category?.id || '',
         locationId: asset.locationId || asset.location?.id || '',
+        parentAssetId: asset.parentAssetId || asset.parentAsset?.id || '',
         manufacturer: asset.manufacturer || '',
         model: asset.model || '',
         serialNumber: asset.serialNumber || '',
@@ -86,6 +88,14 @@ export default function EditAssetPage() {
     queryFn: async () => {
       const res = await api.getLocations()
       return res.data
+    },
+  })
+
+  const { data: allAssets } = useQuery({
+    queryKey: ['assets-for-parent'],
+    queryFn: async () => {
+      const res = await api.getAssets({ limit: 200 })
+      return res.data?.data || res.data || []
     },
   })
 
@@ -137,6 +147,7 @@ export default function EditAssetPage() {
       status: formData.status,
       categoryId: formData.categoryId || undefined,
       locationId: formData.locationId || undefined,
+      parentAssetId: formData.parentAssetId || undefined,
       manufacturer: formData.manufacturer,
       model: formData.model,
       serialNumber: formData.serialNumber,
@@ -405,6 +416,21 @@ export default function EditAssetPage() {
                     {locations?.map((loc: any) => (
                       <option key={loc.id} value={loc.id}>
                         {loc.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="parentAsset">Parent Asset</Label>
+                  <Select
+                    id="parentAsset"
+                    value={formData.parentAssetId}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, parentAssetId: e.target.value })}
+                  >
+                    <option value="">None (Top Level)</option>
+                    {Array.isArray(allAssets) && allAssets.filter((a: any) => a.id !== id).map((a: any) => (
+                      <option key={a.id} value={a.id}>
+                        {a.assetNumber} - {a.name}
                       </option>
                     ))}
                   </Select>

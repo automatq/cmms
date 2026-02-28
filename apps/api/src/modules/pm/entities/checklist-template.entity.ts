@@ -4,9 +4,10 @@ import {
   Column,
   CreateDateColumn,
 } from 'typeorm';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('checklist_templates')
-export class ChecklistTemplate {
+export class ChecklistTemplate extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -25,6 +26,12 @@ export class ChecklistTemplate {
     unit?: string;
     passFail?: boolean;
   }>;
+
+  @Column({ name: 'is_library', default: false })
+  isLibrary: boolean;
+
+  @Column({ nullable: true })
+  category: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

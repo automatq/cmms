@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum NotificationType {
   WO_ASSIGNED = 'wo_assigned',
@@ -20,7 +21,7 @@ export enum NotificationType {
 }
 
 @Entity('notifications')
-export class Notification {
+export class Notification extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

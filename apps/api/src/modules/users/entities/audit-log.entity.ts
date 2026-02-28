@@ -4,9 +4,10 @@ import {
   Column,
   CreateDateColumn,
 } from 'typeorm';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('audit_logs')
-export class AuditLog {
+export class AuditLog extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

@@ -13,7 +13,9 @@ import {
   LocationsController,
   CategoriesController,
 } from './assets.controller';
+import { AssetCsvController, LocationCsvController } from './csv.controller';
 import { FilesModule } from '../files/files.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [
@@ -25,9 +27,10 @@ import { FilesModule } from '../files/files.module';
       Location,
     ]),
     forwardRef(() => FilesModule),
+    BillingModule,
   ],
   providers: [AssetsService],
-  controllers: [AssetsController, LocationsController, CategoriesController],
+  controllers: [AssetsController, LocationsController, CategoriesController, AssetCsvController, LocationCsvController],
   exports: [AssetsService],
 })
 export class AssetsModule {}

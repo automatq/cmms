@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ${{ matrix.app }} - ${{ matrix.task }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web]
+        task: [lint, typecheck, test]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-node-modules
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Run lint
+        if: matrix.task == 'lint'
+        run: npm run lint --workspace=@cmms/${{ matrix.app }}
+
+      - name: Run typecheck
+        if: matrix.task == 'typecheck'
+        run: |
+          if [ "${{ matrix.app }}" = "web" ]; then
+            npm run typecheck --workspace=@cmms/web
+          else
+            npx --workspace=@cmms/api tsc --noEmit
+          fi
+
+      - name: Run tests
+        if: matrix.task == 'test'
+        run: npm test --workspace=@cmms/${{ matrix.app }} -- --passWithNoTests

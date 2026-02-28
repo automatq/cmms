@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/providers/auth-provider'
 import { QueryProvider } from '@/providers/query-provider'
+import { SocketProvider } from '@/providers/socket-provider'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from 'sonner'
 
@@ -28,7 +29,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              <SocketProvider>{children}</SocketProvider>
+            </AuthProvider>
           </QueryProvider>
           <Toaster richColors closeButton position="top-right" />
         </ThemeProvider>

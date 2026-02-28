@@ -3,6 +3,7 @@
 import { useAuth } from '@/providers/auth-provider'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,12 +45,22 @@ export default function HomePage() {
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Computerized Maintenance Management System.
-            Streamline your maintenance operations with our self-hosted,
-            AI-powered solution.
+            Streamline your maintenance operations with our
+            AI-powered cloud solution.
           </p>
-          <Button size="lg" onClick={login}>
-            Sign In to Continue
-          </Button>
+          <div className="flex items-center justify-center gap-4">
+            <Link href="/signup">
+              <Button size="lg">Get Started Free</Button>
+            </Link>
+            <Button size="lg" variant="outline" onClick={login}>
+              Sign In
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground mt-4">
+            <Link href="/pricing" className="underline hover:text-foreground">
+              View pricing plans
+            </Link>
+          </p>
         </div>
 
         {/* Features */}
@@ -96,12 +107,12 @@ export default function HomePage() {
           <Card>
             <CardHeader>
               <Shield className="h-10 w-10 text-primary mb-2" />
-              <CardTitle className="text-lg">Self-Hosted</CardTitle>
+              <CardTitle className="text-lg">Secure & Reliable</CardTitle>
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Keep your data on-premises with full control.
-                No cloud dependencies required.
+                Enterprise-grade security with tenant isolation,
+                encrypted storage, and 99.9% uptime.
               </CardDescription>
             </CardContent>
           </Card>

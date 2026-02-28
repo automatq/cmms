@@ -1,0 +1,10 @@
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2 style="color: #dc2626;">Low Stock Alert</h2>
+  <p>The following part has reached its reorder point:</p>
+  <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+    <tr><td style="padding: 8px 0; color: #666;">Part</td><td style="padding: 8px 0;">{{partName}}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666;">SKU</td><td style="padding: 8px 0;">{{sku}}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666;">Current Qty</td><td style="padding: 8px 0; color: #dc2626; font-weight: bold;">{{currentQty}}</td></tr>
+  </table>
+  <a href="{{appUrl}}/dashboard/inventory" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px;">View Inventory</a>
+</div>

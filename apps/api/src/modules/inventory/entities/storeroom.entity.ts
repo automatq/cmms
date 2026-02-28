@@ -7,9 +7,10 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Location } from '../../assets/entities/location.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('storerooms')
-export class Storeroom {
+export class Storeroom extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

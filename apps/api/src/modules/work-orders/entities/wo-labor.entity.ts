@@ -8,9 +8,10 @@ import {
 } from 'typeorm';
 import { WorkOrder } from './work-order.entity';
 import { User } from '../../users/entities/user.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('wo_labor')
-export class WoLabor {
+export class WoLabor extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

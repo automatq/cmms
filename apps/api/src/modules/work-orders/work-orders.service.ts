@@ -31,6 +31,8 @@ import {
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { FilesService } from '../files/files.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { InventoryService } from '../inventory/inventory.service';
+import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 
 // Valid status transitions
 const STATUS_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
@@ -61,17 +63,22 @@ export class WorkOrdersService {
     private readonly filesService: FilesService,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
+    @Inject(forwardRef(() => InventoryService))
+    private readonly inventoryService: InventoryService,
+    @InjectRepository(ChecklistTemplate)
+    private readonly checklistTemplateRepository: Repository<ChecklistTemplate>,
     private readonly dataSource: DataSource,
   ) {}
 
   // ==================== CORE CRUD ====================
 
-  async create(dto: CreateWorkOrderDto, userId: string): Promise<WorkOrder> {
-    const woNumber = await this.generateWoNumber();
+  async create(dto: CreateWorkOrderDto, userId: string, tenantId: string): Promise<WorkOrder> {
+    const woNumber = await this.generateWoNumber(tenantId);
 
     const workOrder = this.workOrderRepository.create({
       ...dto,
       woNumber,
+      tenantId,
       createdById: userId,
       status: WorkOrderStatus.DRAFT,
     });
@@ -80,18 +87,18 @@ export class WorkOrdersService {
 
     // Create checklist items if template provided
     if (dto.checklistTemplateId) {
-      await this.createChecklistFromTemplate(savedWo.id, dto.checklistTemplateId);
+      await this.createChecklistFromTemplate(savedWo.id, dto.checklistTemplateId, tenantId);
     }
 
     // Notify assigned users
     if (dto.assignedTo?.length) {
-      await this.notificationsService.onWoAssigned(savedWo, dto.assignedTo);
+      await this.notificationsService.onWoAssigned(savedWo, dto.assignedTo, tenantId);
     }
 
-    return this.findOne(savedWo.id);
+    return this.findOne(savedWo.id, tenantId);
   }
 
-  async findAll(query: WorkOrderQueryDto): Promise<PaginatedResult<WorkOrder>> {
+  async findAll(query: WorkOrderQueryDto, tenantId: string): Promise<PaginatedResult<WorkOrder>> {
     const {
       page,
       limit,
@@ -112,6 +119,8 @@ export class WorkOrdersService {
       .leftJoinAndSelect('wo.asset', 'asset')
       .leftJoinAndSelect('wo.location', 'location')
       .leftJoinAndSelect('wo.createdBy', 'createdBy');
+
+    queryBuilder.andWhere('wo.tenantId = :tenantId', { tenantId });
 
     if (search) {
       queryBuilder.andWhere(
@@ -165,9 +174,9 @@ export class WorkOrdersService {
     return paginate(data, total, page, limit);
   }
 
-  async findOne(id: string): Promise<WorkOrder> {
+  async findOne(id: string, tenantId: string): Promise<WorkOrder> {
     const workOrder = await this.workOrderRepository.findOne({
-      where: { id },
+      where: { id, tenantId },
       relations: [
         'asset',
         'location',
@@ -187,34 +196,50 @@ export class WorkOrdersService {
     return workOrder;
   }
 
-  async update(id: string, dto: UpdateWorkOrderDto, userId: string): Promise<WorkOrder> {
-    const workOrder = await this.findOne(id);
-    
+  async update(id: string, dto: UpdateWorkOrderDto, userId: string, tenantId: string): Promise<WorkOrder> {
+    const workOrder = await this.findOne(id, tenantId);
+
     const oldAssignedTo = workOrder.assignedTo || [];
     Object.assign(workOrder, dto);
-    
+
     const savedWo = await this.workOrderRepository.save(workOrder);
 
     // Notify newly assigned users
     if (dto.assignedTo) {
       const newlyAssigned = dto.assignedTo.filter((u) => !oldAssignedTo.includes(u));
       if (newlyAssigned.length) {
-        await this.notificationsService.onWoAssigned(savedWo, newlyAssigned);
+        await this.notificationsService.onWoAssigned(savedWo, newlyAssigned, tenantId);
       }
     }
 
-    return this.findOne(id);
+    return this.findOne(id, tenantId);
   }
 
-  async delete(id: string): Promise<void> {
-    const workOrder = await this.findOne(id);
+  async delete(id: string, tenantId: string): Promise<void> {
+    const workOrder = await this.findOne(id, tenantId);
+
+    // Release any reserved inventory before deleting
+    const reservedParts = (workOrder.parts || []).filter((p) => p.reserved);
+    for (const part of reservedParts) {
+      try {
+        await this.inventoryService.releaseReservation(
+          { partId: part.partId, storeroomId: part.storeroomId, workOrderId: id, qty: part.qtyUsed },
+          'system',
+          tenantId,
+        );
+      } catch (error) {
+        // Log but don't block deletion if release fails
+        console.error(`Failed to release reservation for part ${part.partId}:`, error);
+      }
+    }
+
     await this.workOrderRepository.remove(workOrder);
   }
 
   // ==================== STATUS TRANSITIONS ====================
 
-  async updateStatus(id: string, status: WorkOrderStatus, userId: string): Promise<WorkOrder> {
-    const workOrder = await this.findOne(id);
+  async updateStatus(id: string, status: WorkOrderStatus, userId: string, tenantId: string): Promise<WorkOrder> {
+    const workOrder = await this.findOne(id, tenantId);
     const currentStatus = workOrder.status;
 
     // Validate transition
@@ -242,6 +267,29 @@ export class WorkOrdersService {
       }
       // Calculate actual cost from labor and parts
       await this.calculateActualCost(workOrder);
+
+      // Issue reserved stock (deduct from inventory)
+      const woParts = await this.partRepository.find({ where: { woId: id, tenantId } });
+      for (const part of woParts) {
+        if (part.reserved && part.storeroomId) {
+          try {
+            await this.inventoryService.issueStock(
+              { partId: part.partId, storeroomId: part.storeroomId, qty: part.qtyUsed, workOrderId: id, notes: 'Issued on WO completion' },
+              userId,
+              tenantId,
+            );
+            await this.inventoryService.releaseReservation(
+              { partId: part.partId, storeroomId: part.storeroomId, workOrderId: id, qty: part.qtyUsed },
+              userId,
+              tenantId,
+            );
+            part.reserved = false;
+            await this.partRepository.save(part);
+          } catch (error) {
+            console.error(`Failed to issue stock for part ${part.partId}:`, error);
+          }
+        }
+      }
     }
 
     if (status === WorkOrderStatus.CLOSED) {
@@ -249,11 +297,11 @@ export class WorkOrdersService {
     }
 
     const savedWo = await this.workOrderRepository.save(workOrder);
-    
-    // Send notifications
-    await this.notificationsService.onWoStatusChanged(savedWo, oldStatus);
 
-    return this.findOne(id);
+    // Send notifications
+    await this.notificationsService.onWoStatusChanged(savedWo, oldStatus, tenantId);
+
+    return this.findOne(id, tenantId);
   }
 
   private async calculateActualCost(workOrder: WorkOrder): Promise<void> {
@@ -268,11 +316,12 @@ export class WorkOrdersService {
 
   // ==================== NUMBER GENERATION ====================
 
-  async generateWoNumber(): Promise<string> {
+  async generateWoNumber(tenantId: string): Promise<string> {
     const year = new Date().getFullYear();
     const lastWo = await this.workOrderRepository
       .createQueryBuilder('wo')
       .where('wo.woNumber LIKE :pattern', { pattern: `WO-${year}-%` })
+      .andWhere('wo.tenantId = :tenantId', { tenantId })
       .orderBy('wo.woNumber', 'DESC')
       .getOne();
 
@@ -287,20 +336,21 @@ export class WorkOrdersService {
 
   // ==================== LABOR ====================
 
-  async addLabor(woId: string, dto: AddLaborDto, userId: string): Promise<WoLabor> {
-    const workOrder = await this.findOne(woId);
+  async addLabor(woId: string, dto: AddLaborDto, userId: string, tenantId: string): Promise<WoLabor> {
+    const workOrder = await this.findOne(woId, tenantId);
 
     const labor = this.laborRepository.create({
       woId,
+      tenantId,
       ...dto,
     });
 
     return this.laborRepository.save(labor);
   }
 
-  async removeLabor(woId: string, laborId: string): Promise<void> {
+  async removeLabor(woId: string, laborId: string, tenantId: string): Promise<void> {
     const labor = await this.laborRepository.findOne({
-      where: { id: laborId, woId },
+      where: { id: laborId, woId, tenantId },
     });
 
     if (!labor) {
@@ -312,30 +362,56 @@ export class WorkOrdersService {
 
   // ==================== PARTS ====================
 
-  async addPart(woId: string, dto: AddPartDto): Promise<WoPart> {
-    const workOrder = await this.findOne(woId);
+  async addPart(woId: string, dto: AddPartDto, userId: string, tenantId: string): Promise<WoPart> {
+    const workOrder = await this.findOne(woId, tenantId);
 
-    // TODO: Check inventory stock and reserve qty via InventoryService
+    // Resolve storeroom: use provided or find one with available stock
+    let storeroomId: string = dto.storeroomId as string;
+    if (!storeroomId) {
+      const found = await this.inventoryService.findAvailableStoreroom(dto.partId, dto.qtyUsed, tenantId);
+      if (!found) {
+        throw new BadRequestException('No storeroom has sufficient stock for this part. Please specify a storeroom.');
+      }
+      storeroomId = found;
+    }
+
+    // Reserve stock in inventory
+    await this.inventoryService.reserveStock(
+      { partId: dto.partId, storeroomId, qty: dto.qtyUsed, workOrderId: woId, notes: `Reserved for WO ${workOrder.woNumber}` },
+      userId,
+      tenantId,
+    );
 
     const part = this.partRepository.create({
       woId,
-      ...dto,
+      tenantId,
+      partId: dto.partId,
+      qtyUsed: dto.qtyUsed,
+      unitCost: dto.unitCost,
+      storeroomId,
       reserved: true,
     });
 
     return this.partRepository.save(part);
   }
 
-  async removePart(woId: string, partId: string): Promise<void> {
+  async removePart(woId: string, partId: string, tenantId: string): Promise<void> {
     const part = await this.partRepository.findOne({
-      where: { id: partId, woId },
+      where: { id: partId, woId, tenantId },
     });
 
     if (!part) {
       throw new NotFoundException(`Part entry with ID ${partId} not found`);
     }
 
-    // TODO: Release reserved qty via InventoryService
+    // Release reserved inventory
+    if (part.reserved && part.storeroomId) {
+      await this.inventoryService.releaseReservation(
+        { partId: part.partId, storeroomId: part.storeroomId, workOrderId: woId, qty: part.qtyUsed },
+        'system',
+        tenantId,
+      );
+    }
 
     await this.partRepository.remove(part);
   }
@@ -346,16 +422,19 @@ export class WorkOrdersService {
     woId: string,
     file: Express.Multer.File,
     userId: string,
+    tenantId: string,
   ): Promise<WoAttachment> {
-    const workOrder = await this.findOne(woId);
+    const workOrder = await this.findOne(woId, tenantId);
 
     const storageKey = await this.filesService.uploadFile(
       file,
       `work-orders/${woId}/attachments`,
+      tenantId,
     );
 
     const attachment = this.attachmentRepository.create({
       woId,
+      tenantId,
       name: file.originalname,
       storageKey,
       mimeType: file.mimetype,
@@ -366,9 +445,9 @@ export class WorkOrdersService {
     return this.attachmentRepository.save(attachment);
   }
 
-  async removeAttachment(woId: string, attachmentId: string): Promise<void> {
+  async removeAttachment(woId: string, attachmentId: string, tenantId: string): Promise<void> {
     const attachment = await this.attachmentRepository.findOne({
-      where: { id: attachmentId, woId },
+      where: { id: attachmentId, woId, tenantId },
     });
 
     if (!attachment) {
@@ -379,9 +458,9 @@ export class WorkOrdersService {
     await this.attachmentRepository.remove(attachment);
   }
 
-  async getAttachmentUrl(attachmentId: string): Promise<string> {
+  async getAttachmentUrl(attachmentId: string, tenantId: string): Promise<string> {
     const attachment = await this.attachmentRepository.findOne({
-      where: { id: attachmentId },
+      where: { id: attachmentId, tenantId },
     });
 
     if (!attachment) {
@@ -397,12 +476,13 @@ export class WorkOrdersService {
     woId: string,
     dto: SaveChecklistDto,
     userId: string,
+    tenantId: string,
   ): Promise<WoChecklistResult[]> {
-    const workOrder = await this.findOne(woId);
+    const workOrder = await this.findOne(woId, tenantId);
 
     for (const item of dto.items) {
       const existing = await this.checklistRepository.findOne({
-        where: { woId, stepIndex: item.stepIndex },
+        where: { woId, stepIndex: item.stepIndex, tenantId },
       });
 
       if (existing) {
@@ -420,7 +500,7 @@ export class WorkOrdersService {
     }
 
     return this.checklistRepository.find({
-      where: { woId },
+      where: { woId, tenantId },
       order: { stepIndex: 'ASC' },
     });
   }
@@ -430,14 +510,16 @@ export class WorkOrdersService {
     stepIndex: number,
     file: Express.Multer.File,
     userId: string,
+    tenantId: string,
   ): Promise<string> {
     const storageKey = await this.filesService.uploadFile(
       file,
       `work-orders/${woId}/checklist/${stepIndex}`,
+      tenantId,
     );
 
     const existing = await this.checklistRepository.findOne({
-      where: { woId, stepIndex },
+      where: { woId, stepIndex, tenantId },
     });
 
     if (existing) {
@@ -456,26 +538,44 @@ export class WorkOrdersService {
     return storageKey;
   }
 
-  private async createChecklistFromTemplate(woId: string, templateId: string): Promise<void> {
-    // TODO: Fetch template from PM module and create checklist items
-    // For now, this is a placeholder
+  private async createChecklistFromTemplate(woId: string, templateId: string, tenantId: string): Promise<void> {
+    const template = await this.checklistTemplateRepository.findOne({
+      where: { id: templateId, tenantId },
+    });
+    if (!template || !template.items?.length) return;
+
+    const checklistItems = template.items.map((item, index) =>
+      this.checklistRepository.create({
+        woId,
+        tenantId,
+        stepIndex: item.step ?? index,
+        instruction: item.instruction,
+        isCompleted: false,
+      }),
+    );
+
+    await this.checklistRepository.save(checklistItems);
   }
 
   // ==================== WORK REQUESTS ====================
 
-  async createRequest(dto: CreateWorkRequestDto): Promise<WorkRequest> {
-    const request = this.workRequestRepository.create(dto);
+  async createRequest(dto: CreateWorkRequestDto, tenantId: string): Promise<WorkRequest> {
+    const request = this.workRequestRepository.create({
+      ...dto,
+      tenantId,
+    });
     const savedRequest = await this.workRequestRepository.save(request);
-    
-    await this.notificationsService.onWorkRequestSubmitted(savedRequest);
-    
+
+    await this.notificationsService.onWorkRequestSubmitted(savedRequest, tenantId);
+
     return savedRequest;
   }
 
-  async findAllRequests(query: WorkOrderQueryDto): Promise<PaginatedResult<WorkRequest>> {
+  async findAllRequests(query: WorkOrderQueryDto, tenantId: string): Promise<PaginatedResult<WorkRequest>> {
     const { page, limit } = query;
 
     const [data, total] = await this.workRequestRepository.findAndCount({
+      where: { tenantId },
       relations: ['asset', 'location'],
       skip: (page - 1) * limit,
       take: limit,
@@ -485,9 +585,9 @@ export class WorkOrdersService {
     return paginate(data, total, page, limit);
   }
 
-  async approveRequest(id: string, userId: string): Promise<WorkOrder> {
+  async approveRequest(id: string, userId: string, tenantId: string): Promise<WorkOrder> {
     const request = await this.workRequestRepository.findOne({
-      where: { id },
+      where: { id, tenantId },
       relations: ['asset', 'location'],
     });
 
@@ -510,6 +610,7 @@ export class WorkOrdersService {
         locationId: request.locationId,
       },
       userId,
+      tenantId,
     );
 
     // Update request status
@@ -522,9 +623,9 @@ export class WorkOrdersService {
     return workOrder;
   }
 
-  async rejectRequest(id: string, reason: string, userId: string): Promise<WorkRequest> {
+  async rejectRequest(id: string, reason: string, userId: string, tenantId: string): Promise<WorkRequest> {
     const request = await this.workRequestRepository.findOne({
-      where: { id },
+      where: { id, tenantId },
     });
 
     if (!request) {
@@ -545,9 +646,10 @@ export class WorkOrdersService {
 
   // ==================== STATISTICS ====================
 
-  async getOpenCount(): Promise<number> {
+  async getOpenCount(tenantId: string): Promise<number> {
     return this.workOrderRepository.count({
       where: {
+        tenantId,
         status: In([
           WorkOrderStatus.OPEN,
           WorkOrderStatus.IN_PROGRESS,
@@ -557,20 +659,21 @@ export class WorkOrdersService {
     });
   }
 
-  async getOverdueCount(): Promise<number> {
+  async getOverdueCount(tenantId: string): Promise<number> {
     const now = new Date();
     return this.workOrderRepository
       .createQueryBuilder('wo')
       .where('wo.status IN (:...statuses)', {
         statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS],
       })
+      .andWhere('wo.tenantId = :tenantId', { tenantId })
       .andWhere('wo.scheduledEnd < :now', { now })
       .getCount();
   }
 
-  async findByAsset(assetId: string): Promise<WorkOrder[]> {
+  async findByAsset(assetId: string, tenantId: string): Promise<WorkOrder[]> {
     return this.workOrderRepository.find({
-      where: { assetId },
+      where: { assetId, tenantId },
       order: { createdAt: 'DESC' },
       take: 20,
     });

@@ -11,9 +11,12 @@ import {
   ParseUUIDPipe,
   UploadedFile,
   UseInterceptors,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Express } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -37,6 +40,8 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { TenantService } from '../../common/tenant/tenant.service';
 
 @ApiTags('Work Orders')
 @ApiBearerAuth()
@@ -49,24 +54,24 @@ export class WorkOrdersController {
   @Permissions('work_orders:read')
   @ApiOperation({ summary: 'Get all work orders' })
   @ApiResponse({ status: 200, description: 'List of work orders' })
-  findAll(@Query() query: WorkOrderQueryDto) {
-    return this.workOrdersService.findAll(query);
+  findAll(@Query() query: WorkOrderQueryDto, @CurrentUser() user: RequestUser) {
+    return this.workOrdersService.findAll(query, user.tenantId);
   }
 
   @Get('stats/open-count')
   @Permissions('work_orders:read')
   @ApiOperation({ summary: 'Get count of open work orders' })
   @ApiResponse({ status: 200, description: 'Open work orders count' })
-  getOpenCount() {
-    return this.workOrdersService.getOpenCount();
+  getOpenCount(@CurrentUser() user: RequestUser) {
+    return this.workOrdersService.getOpenCount(user.tenantId);
   }
 
   @Get('stats/overdue-count')
   @Permissions('work_orders:read')
   @ApiOperation({ summary: 'Get count of overdue work orders' })
   @ApiResponse({ status: 200, description: 'Overdue work orders count' })
-  getOverdueCount() {
-    return this.workOrdersService.getOverdueCount();
+  getOverdueCount(@CurrentUser() user: RequestUser) {
+    return this.workOrdersService.getOverdueCount(user.tenantId);
   }
 
   @Get(':id')
@@ -74,8 +79,8 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Get work order by ID' })
   @ApiResponse({ status: 200, description: 'Work order details' })
   @ApiResponse({ status: 404, description: 'Work order not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.workOrdersService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.workOrdersService.findOne(id, user.tenantId);
   }
 
   @Post()
@@ -84,9 +89,9 @@ export class WorkOrdersController {
   @ApiResponse({ status: 201, description: 'Work order created' })
   create(
     @Body() dto: CreateWorkOrderDto,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.create(dto, user.sub);
+    return this.workOrdersService.create(dto, user.userId, user.tenantId);
   }
 
   @Patch(':id')
@@ -96,17 +101,17 @@ export class WorkOrdersController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateWorkOrderDto,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.update(id, dto, user.sub);
+    return this.workOrdersService.update(id, dto, user.userId, user.tenantId);
   }
 
   @Delete(':id')
   @Permissions('work_orders:write')
   @ApiOperation({ summary: 'Delete work order' })
   @ApiResponse({ status: 200, description: 'Work order deleted' })
-  delete(@Param('id', ParseUUIDPipe) id: string) {
-    return this.workOrdersService.delete(id);
+  delete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.workOrdersService.delete(id, user.tenantId);
   }
 
   // ==================== STATUS ====================
@@ -118,9 +123,9 @@ export class WorkOrdersController {
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStatusDto,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.updateStatus(id, dto.status, user.sub);
+    return this.workOrdersService.updateStatus(id, dto.status, user.userId, user.tenantId);
   }
 
   // ==================== LABOR ====================
@@ -132,9 +137,9 @@ export class WorkOrdersController {
   addLabor(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddLaborDto,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.addLabor(id, dto, user.sub);
+    return this.workOrdersService.addLabor(id, dto, user.userId, user.tenantId);
   }
 
   @Delete(':id/labor/:laborId')
@@ -144,8 +149,9 @@ export class WorkOrdersController {
   removeLabor(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('laborId', ParseUUIDPipe) laborId: string,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.removeLabor(id, laborId);
+    return this.workOrdersService.removeLabor(id, laborId, user.tenantId);
   }
 
   // ==================== PARTS ====================
@@ -157,8 +163,9 @@ export class WorkOrdersController {
   addPart(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddPartDto,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.addPart(id, dto);
+    return this.workOrdersService.addPart(id, dto, user.userId, user.tenantId);
   }
 
   @Delete(':id/parts/:partId')
@@ -168,8 +175,9 @@ export class WorkOrdersController {
   removePart(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('partId', ParseUUIDPipe) partId: string,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.removePart(id, partId);
+    return this.workOrdersService.removePart(id, partId, user.tenantId);
   }
 
   // ==================== ATTACHMENTS ====================
@@ -183,17 +191,20 @@ export class WorkOrdersController {
   addAttachment(
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.addAttachment(id, file, user.sub);
+    return this.workOrdersService.addAttachment(id, file, user.userId, user.tenantId);
   }
 
   @Get(':id/attachments/:attachmentId/url')
   @Permissions('work_orders:read')
   @ApiOperation({ summary: 'Get attachment download URL' })
   @ApiResponse({ status: 200, description: 'Signed URL' })
-  getAttachmentUrl(@Param('attachmentId', ParseUUIDPipe) attachmentId: string) {
-    return this.workOrdersService.getAttachmentUrl(attachmentId);
+  getAttachmentUrl(
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.getAttachmentUrl(attachmentId, user.tenantId);
   }
 
   @Delete(':id/attachments/:attachmentId')
@@ -203,8 +214,9 @@ export class WorkOrdersController {
   removeAttachment(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.removeAttachment(id, attachmentId);
+    return this.workOrdersService.removeAttachment(id, attachmentId, user.tenantId);
   }
 
   // ==================== CHECKLIST ====================
@@ -216,9 +228,9 @@ export class WorkOrdersController {
   saveChecklist(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SaveChecklistDto,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.saveChecklistResults(id, dto, user.sub);
+    return this.workOrdersService.saveChecklistResults(id, dto, user.userId, user.tenantId);
   }
 
   @Post(':id/checklist/:stepIndex/photo')
@@ -231,63 +243,70 @@ export class WorkOrdersController {
     @Param('id', ParseUUIDPipe) woId: string,
     @Param('stepIndex') stepIndex: string,
     @UploadedFile() file: Express.Multer.File,
-    @CurrentUser() user: { sub: string },
+    @CurrentUser() user: RequestUser,
   ) {
     const stepIndexNum = parseInt(stepIndex, 10);
-    const storageKey = await this.workOrdersService.uploadChecklistPhoto(woId, stepIndexNum, file, user.sub);
+    const storageKey = await this.workOrdersService.uploadChecklistPhoto(woId, stepIndexNum, file, user.userId, user.tenantId);
     return { storageKey };
+  }
+
+  // ==================== WORK REQUESTS (authenticated) ====================
+
+  @Get('requests')
+  @Permissions('work_orders:read')
+  @ApiOperation({ summary: 'Get all work requests' })
+  @ApiResponse({ status: 200, description: 'List of work requests' })
+  findAllRequests(@Query() query: WorkOrderQueryDto, @CurrentUser() user: RequestUser) {
+    return this.workOrdersService.findAllRequests(query, user.tenantId);
+  }
+
+  @Patch('requests/:id/approve')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Approve work request' })
+  @ApiResponse({ status: 200, description: 'Work request approved' })
+  approveRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.approveRequest(id, user.userId, user.tenantId);
+  }
+
+  @Patch('requests/:id/reject')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Reject work request' })
+  @ApiResponse({ status: 200, description: 'Work request rejected' })
+  rejectRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('reason') reason: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.rejectRequest(id, reason, user.userId, user.tenantId);
   }
 }
 
-// ==================== WORK REQUESTS CONTROLLER ====================
+// ==================== PUBLIC WORK REQUESTS (slug-based) ====================
 
 @ApiTags('Work Requests')
-@Controller('work-requests')
+@Controller('tenants/:slug/work-requests')
 export class WorkRequestsController {
-  constructor(private readonly workOrdersService: WorkOrdersService) {}
-
-  @Get()
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('work_orders:read')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all work requests' })
-  @ApiResponse({ status: 200, description: 'List of work requests' })
-  findAll(@Query() query: WorkOrderQueryDto) {
-    return this.workOrdersService.findAllRequests(query);
-  }
+  constructor(
+    private readonly workOrdersService: WorkOrdersService,
+    private readonly tenantService: TenantService,
+  ) {}
 
   @Post()
   @Public()
-  @ApiOperation({ summary: 'Create a work request (public)' })
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({ summary: 'Submit a work request (public)' })
   @ApiResponse({ status: 201, description: 'Work request created' })
-  create(@Body() dto: CreateWorkRequestDto) {
-    return this.workOrdersService.createRequest(dto);
-  }
-
-  @Patch(':id/approve')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('work_orders:write')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Approve work request' })
-  @ApiResponse({ status: 200, description: 'Work request approved' })
-  approve(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: { sub: string },
+  async create(
+    @Param('slug') slug: string,
+    @Body() dto: CreateWorkRequestDto,
   ) {
-    return this.workOrdersService.approveRequest(id, user.sub);
-  }
-
-  @Patch(':id/reject')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions('work_orders:write')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Reject work request' })
-  @ApiResponse({ status: 200, description: 'Work request rejected' })
-  reject(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body('reason') reason: string,
-    @CurrentUser() user: { sub: string },
-  ) {
-    return this.workOrdersService.rejectRequest(id, reason, user.sub);
+    const tenant = await this.tenantService.findBySlug(slug);
+    if (!tenant || tenant.status === 'suspended' || tenant.status === 'cancelled') {
+      throw new NotFoundException('Organization not found');
+    }
+    return this.workOrdersService.createRequest(dto, tenant.id);
   }
 }

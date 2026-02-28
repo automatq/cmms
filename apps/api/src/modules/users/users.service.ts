@@ -1,22 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Like, ILike } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
 import { User, UserStatus } from './entities/user.entity';
 import { Role } from './entities/role.entity';
-import { Organization } from './entities/organization.entity';
+import { Tenant } from './entities/tenant.entity';
 import { CreateUserDto, UpdateUserDto, UserQueryDto, CreateRoleDto, UpdateRoleDto } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
-
-export interface KeycloakUserPayload {
-  sub: string;
-  preferred_username: string;
-  email: string;
-  given_name: string;
-  family_name: string;
-  realm_access?: {
-    roles: string[];
-  };
-}
+import { UsageService } from '../billing/usage.service';
+import { TenantService } from '../../common/tenant/tenant.service';
 
 @Injectable()
 export class UsersService {
@@ -25,15 +17,29 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
-    @InjectRepository(Organization)
-    private readonly organizationRepository: Repository<Organization>,
+    @InjectRepository(Tenant)
+    private readonly tenantRepository: Repository<Tenant>,
+    private readonly usageService: UsageService,
+    private readonly tenantService: TenantService,
   ) {}
 
   // ==================== USER METHODS ====================
 
-  async syncFromKeycloak(keycloakUser: KeycloakUserPayload): Promise<User> {
+  /**
+   * Sync a user from Auth0 on login. Finds by email + tenantId, creates if not found.
+   * Auth0 `sub` (e.g. "auth0|abc123") is not a valid UUID, so we use auto-generated UUIDs
+   * for the user primary key and match on email within the tenant instead.
+   */
+  async syncFromAuth0(
+    auth0Sub: string,
+    email: string,
+    name: string,
+    tenantId: string,
+  ): Promise<User> {
+    // Find existing user by email in this tenant
     let user = await this.userRepository.findOne({
-      where: { id: keycloakUser.sub },
+      where: { email, tenantId },
+      relations: ['roles'],
     });
 
     if (user) {
@@ -41,17 +47,20 @@ export class UsersService {
       return this.userRepository.save(user);
     }
 
-    // Get default technician role
-    let defaultRole = await this.roleRepository.findOne({
-      where: { name: 'technician' },
+    // Auto-provision new user on first login
+    const defaultRole = await this.roleRepository.findOne({
+      where: { name: 'technician', tenantId },
     });
 
+    const [firstName, ...lastParts] = name.split(' ');
+
     user = this.userRepository.create({
-      id: keycloakUser.sub,
-      username: keycloakUser.preferred_username,
-      email: keycloakUser.email,
-      firstName: keycloakUser.given_name || '',
-      lastName: keycloakUser.family_name || '',
+      id: uuidv4(),
+      tenantId,
+      username: email.split('@')[0],
+      email,
+      firstName: firstName || '',
+      lastName: lastParts.join(' ') || '',
       roles: defaultRole ? [defaultRole] : [],
       lastLoginAt: new Date(),
     });
@@ -59,9 +68,14 @@ export class UsersService {
     return this.userRepository.save(user);
   }
 
-  async create(dto: CreateUserDto): Promise<User> {
+  async create(dto: CreateUserDto, tenantId: string): Promise<User> {
+    await this.usageService.enforceUserLimit(tenantId);
+
     const existingUser = await this.userRepository.findOne({
-      where: [{ email: dto.email }, { username: dto.username }],
+      where: [
+        { email: dto.email, tenantId },
+        { username: dto.username, tenantId },
+      ],
     });
 
     if (existingUser) {
@@ -78,17 +92,22 @@ export class UsersService {
     const user = this.userRepository.create({
       ...dto,
       roles,
+      tenantId,
     });
 
-    return this.userRepository.save(user);
+    const savedUser = await this.userRepository.save(user);
+    await this.tenantService.incrementUserCount(tenantId);
+    return savedUser;
   }
 
-  async findAll(query: UserQueryDto): Promise<PaginatedResult<User>> {
+  async findAll(query: UserQueryDto, tenantId: string): Promise<PaginatedResult<User>> {
     const { page, limit, search, status, department, roleId } = query;
 
     const queryBuilder = this.userRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.roles', 'role');
+
+    queryBuilder.andWhere('user.tenantId = :tenantId', { tenantId });
 
     if (search) {
       queryBuilder.andWhere(
@@ -118,9 +137,9 @@ export class UsersService {
     return paginate(data, total, page, limit);
   }
 
-  async findOne(id: string): Promise<User> {
+  async findOne(id: string, tenantId: string): Promise<User> {
     const user = await this.userRepository.findOne({
-      where: { id },
+      where: { id, tenantId },
       relations: ['roles'],
     });
 
@@ -131,15 +150,15 @@ export class UsersService {
     return user;
   }
 
-  async findByEmail(email: string): Promise<User | null> {
+  async findByEmail(email: string, tenantId: string): Promise<User | null> {
     return this.userRepository.findOne({
-      where: { email },
+      where: { email, tenantId },
       relations: ['roles'],
     });
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<User> {
-    const user = await this.findOne(id);
+  async update(id: string, dto: UpdateUserDto, tenantId: string): Promise<User> {
+    const user = await this.findOne(id, tenantId);
 
     if (dto.roleIds !== undefined) {
       user.roles = dto.roleIds.length
@@ -153,21 +172,21 @@ export class UsersService {
     return this.userRepository.save(user);
   }
 
-  async deactivate(id: string): Promise<User> {
-    const user = await this.findOne(id);
+  async deactivate(id: string, tenantId: string): Promise<User> {
+    const user = await this.findOne(id, tenantId);
     user.status = UserStatus.INACTIVE;
     return this.userRepository.save(user);
   }
 
-  async activate(id: string): Promise<User> {
-    const user = await this.findOne(id);
+  async activate(id: string, tenantId: string): Promise<User> {
+    const user = await this.findOne(id, tenantId);
     user.status = UserStatus.ACTIVE;
     return this.userRepository.save(user);
   }
 
-  async assignRole(userId: string, roleId: string): Promise<User> {
-    const user = await this.findOne(userId);
-    const role = await this.roleRepository.findOne({ where: { id: roleId } });
+  async assignRole(userId: string, roleId: string, tenantId: string): Promise<User> {
+    const user = await this.findOne(userId, tenantId);
+    const role = await this.roleRepository.findOne({ where: { id: roleId, tenantId } });
 
     if (!role) {
       throw new NotFoundException(`Role with ID ${roleId} not found`);
@@ -181,43 +200,47 @@ export class UsersService {
     return user;
   }
 
-  async removeRole(userId: string, roleId: string): Promise<User> {
-    const user = await this.findOne(userId);
+  async removeRole(userId: string, roleId: string, tenantId: string): Promise<User> {
+    const user = await this.findOne(userId, tenantId);
     user.roles = user.roles.filter((r) => r.id !== roleId);
     return this.userRepository.save(user);
   }
 
   // ==================== ROLE METHODS ====================
 
-  async createRole(dto: CreateRoleDto): Promise<Role> {
+  async createRole(dto: CreateRoleDto, tenantId: string): Promise<Role> {
     const existing = await this.roleRepository.findOne({
-      where: { name: dto.name },
+      where: { name: dto.name, tenantId },
     });
 
     if (existing) {
       throw new ConflictException(`Role with name ${dto.name} already exists`);
     }
 
-    const role = this.roleRepository.create(dto);
+    const role = this.roleRepository.create({
+      ...dto,
+      tenantId,
+    });
     return this.roleRepository.save(role);
   }
 
-  async findAllRoles(): Promise<Role[]> {
+  async findAllRoles(tenantId: string): Promise<Role[]> {
     return this.roleRepository.find({
+      where: { tenantId },
       order: { name: 'ASC' },
     });
   }
 
-  async findRoleById(id: string): Promise<Role> {
-    const role = await this.roleRepository.findOne({ where: { id } });
+  async findRoleById(id: string, tenantId: string): Promise<Role> {
+    const role = await this.roleRepository.findOne({ where: { id, tenantId } });
     if (!role) {
       throw new NotFoundException(`Role with ID ${id} not found`);
     }
     return role;
   }
 
-  async updateRole(id: string, dto: UpdateRoleDto): Promise<Role> {
-    const role = await this.findRoleById(id);
+  async updateRole(id: string, dto: UpdateRoleDto, tenantId: string): Promise<Role> {
+    const role = await this.findRoleById(id, tenantId);
 
     if (role.isSystem) {
       throw new BadRequestException('Cannot modify system roles');
@@ -225,7 +248,7 @@ export class UsersService {
 
     if (dto.name && dto.name !== role.name) {
       const existing = await this.roleRepository.findOne({
-        where: { name: dto.name },
+        where: { name: dto.name, tenantId },
       });
       if (existing) {
         throw new ConflictException(`Role with name ${dto.name} already exists`);
@@ -236,8 +259,8 @@ export class UsersService {
     return this.roleRepository.save(role);
   }
 
-  async deleteRole(id: string): Promise<void> {
-    const role = await this.findRoleById(id);
+  async deleteRole(id: string, tenantId: string): Promise<void> {
+    const role = await this.findRoleById(id, tenantId);
 
     if (role.isSystem) {
       throw new BadRequestException('Cannot delete system roles');
@@ -246,30 +269,69 @@ export class UsersService {
     await this.roleRepository.remove(role);
   }
 
-  // ==================== ORGANIZATION METHODS ====================
+  // ==================== TENANT / ORGANIZATION METHODS ====================
 
-  async getOrganization(): Promise<Organization> {
-    let org = await this.organizationRepository.findOne({ where: {} });
-    
+  async getOrganization(tenantId?: string): Promise<Tenant> {
+    let org: Tenant | null;
+
+    if (tenantId) {
+      org = await this.tenantRepository.findOne({ where: { id: tenantId } });
+    } else {
+      // Fallback for public endpoints without tenant context
+      org = await this.tenantRepository.findOne({ where: {} });
+    }
+
     if (!org) {
-      org = this.organizationRepository.create({
+      org = this.tenantRepository.create({
         name: 'My Organization',
+        slug: 'default',
       });
-      org = await this.organizationRepository.save(org);
+      org = await this.tenantRepository.save(org);
     }
 
     return org;
   }
 
-  async updateOrganization(data: Partial<Organization>): Promise<Organization> {
-    const org = await this.getOrganization();
-    Object.assign(org, data);
-    return this.organizationRepository.save(org);
+  async updateOrganization(data: Partial<Tenant>, tenantId: string): Promise<Tenant> {
+    const org = await this.getOrganization(tenantId);
+    // Only allow updating safe fields
+    const { name, logoUrl, timezone, currency, modules, settings } = data as any;
+    if (name !== undefined) org.name = name;
+    if (logoUrl !== undefined) org.logoUrl = logoUrl;
+    if (timezone !== undefined) org.timezone = timezone;
+    if (currency !== undefined) org.currency = currency;
+    if (modules !== undefined) org.modules = modules;
+    if (settings !== undefined) org.settings = settings;
+    return this.tenantRepository.save(org);
+  }
+
+  async findTenantById(id: string): Promise<Tenant> {
+    const tenant = await this.tenantRepository.findOne({ where: { id } });
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with ID ${id} not found`);
+    }
+    return tenant;
+  }
+
+  async findTenantBySlug(slug: string): Promise<Tenant | null> {
+    return this.tenantRepository.findOne({ where: { slug } });
+  }
+
+  async findTenantByAuth0OrgId(auth0OrgId: string): Promise<Tenant | null> {
+    return this.tenantRepository.findOne({ where: { auth0OrgId } });
+  }
+
+  async getTenantIdByAuth0OrgId(auth0OrgId: string): Promise<string | null> {
+    const tenant = await this.tenantRepository.findOne({
+      where: { auth0OrgId },
+      select: ['id'],
+    });
+    return tenant?.id || null;
   }
 
   // ==================== SEED DEFAULT ROLES ====================
 
-  async seedDefaultRoles(): Promise<void> {
+  async seedDefaultRoles(tenantId: string): Promise<void> {
     const defaultRoles = [
       {
         name: 'admin',
@@ -350,11 +412,14 @@ export class UsersService {
 
     for (const roleData of defaultRoles) {
       const existing = await this.roleRepository.findOne({
-        where: { name: roleData.name },
+        where: { name: roleData.name, tenantId },
       });
 
       if (!existing) {
-        const role = this.roleRepository.create(roleData);
+        const role = this.roleRepository.create({
+          ...roleData,
+          tenantId,
+        });
         await this.roleRepository.save(role);
       }
     }

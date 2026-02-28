@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, IsEnum, IsNumber, Min, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsEnum, IsNumber, Min, IsDateString, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PurchaseOrderStatus } from '../entities/purchase-order.entity';
 
@@ -36,10 +36,10 @@ export class POQueryDto {
   limit?: number = 20;
 
   @IsOptional()
-  @IsString()
+  @IsIn(['createdAt', 'updatedAt', 'poNumber', 'status', 'totalCost', 'expectedDate'])
   sortBy?: string = 'createdAt';
 
   @IsOptional()
-  @IsString()
+  @IsIn(['ASC', 'DESC'])
   sortOrder?: 'ASC' | 'DESC' = 'DESC';
 }

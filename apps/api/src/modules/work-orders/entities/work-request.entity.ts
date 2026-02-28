@@ -9,6 +9,7 @@ import {
 import { Asset } from '../../assets/entities/asset.entity';
 import { Location } from '../../assets/entities/location.entity';
 import { WorkOrder } from './work-order.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum WorkRequestStatus {
   PENDING = 'pending',
@@ -18,7 +19,7 @@ export enum WorkRequestStatus {
 }
 
 @Entity('work_requests')
-export class WorkRequest {
+export class WorkRequest extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

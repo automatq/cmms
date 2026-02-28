@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Bell, Search, CheckCircle2, AlertTriangle, Info, Clock } from 'lucide-react'
@@ -13,17 +15,19 @@ import { cn, formatTimeAgo } from '@/lib/utils'
 
 export function Header() {
   const { user } = useAuth()
+  const router = useRouter()
   const queryClient = useQueryClient()
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Fetch notifications
   const { data: notificationsData } = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => {
-      const res = await api.getNotifications({ limit: 10 })
+      const res = await api.getNotifications(10)
       return res.data
     },
-    // Poll every 30 seconds for new notifications
-    refetchInterval: 30000,
+    // Fallback polling (WebSocket is primary via SocketProvider)
+    refetchInterval: 300000,
   })
 
   const markReadMutation = useMutation({
@@ -56,13 +60,23 @@ export function Header() {
       <div className="flex items-center justify-between h-16 px-6">
         {/* Search */}
         <div className="flex-1 max-w-md hidden md:block">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search assets, work orders..."
-              className="pl-10 bg-muted/50 border-none focus-visible:ring-1"
-            />
-          </div>
+          <form onSubmit={(e) => {
+            e.preventDefault()
+            const q = searchQuery.trim()
+            if (q) {
+              router.push(`/dashboard/search?q=${encodeURIComponent(q)}`)
+            }
+          }}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search assets, work orders..."
+                className="pl-10 bg-muted/50 border-none focus-visible:ring-1"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </form>
         </div>
 
         {/* Spacer for mobile */}
@@ -142,8 +156,16 @@ export function Header() {
                 )}
               </ScrollArea>
               <div className="p-2 border-t bg-muted/20 text-center">
-                <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground hover:text-foreground">
-                  View all notifications
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs text-muted-foreground hover:text-foreground"
+                  onClick={async () => {
+                    await api.markAllNotificationsRead()
+                    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+                  }}
+                >
+                  Mark all as read
                 </Button>
               </div>
             </PopoverContent>

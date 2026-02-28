@@ -8,9 +8,10 @@ import {
 import { PurchaseOrder } from './purchase-order.entity';
 import { Part } from './part.entity';
 import { Storeroom } from './storeroom.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('po_line_items')
-export class PoLineItem {
+export class PoLineItem extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsBoolean, IsUUID, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsUUID, IsNumber, Min, IsIn } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 export class PartQueryDto {
@@ -37,10 +37,10 @@ export class PartQueryDto {
   limit?: number = 20;
 
   @IsOptional()
-  @IsString()
+  @IsIn(['name', 'sku', 'unitCost', 'category', 'createdAt', 'updatedAt'])
   sortBy?: string = 'name';
 
   @IsOptional()
-  @IsString()
+  @IsIn(['ASC', 'DESC'])
   sortOrder?: 'ASC' | 'DESC' = 'ASC';
 }

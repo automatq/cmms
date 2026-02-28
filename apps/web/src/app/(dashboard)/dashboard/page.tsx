@@ -26,10 +26,19 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { DashboardCalendar, CalendarEvent } from '@/components/dashboard/dashboard-calendar'
+import { ActiveTechnicians } from '@/components/dashboard/active-technicians'
+import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard'
 import { useMemo, useState } from 'react'
 
 export default function DashboardPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(true)
+
+  const { data: organization } = useQuery({
+    queryKey: ['organization'],
+    queryFn: () => api.getOrganization().then((res) => res.data),
+  })
+
   const { data: dashboard, isLoading: isLoadingDashboard } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
@@ -112,6 +121,17 @@ export default function DashboardPage() {
           <Skeleton className="h-[300px] w-full rounded-xl" />
         </div>
       </div>
+    )
+  }
+
+  const needsOnboarding = organization && !organization.onboardingCompleted && showOnboarding
+
+  if (needsOnboarding) {
+    return (
+      <OnboardingWizard
+        onComplete={() => setShowOnboarding(false)}
+        onSkip={() => setShowOnboarding(false)}
+      />
     )
   }
 
@@ -198,6 +218,9 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Active Technicians - Live */}
+      <ActiveTechnicians />
 
       {/* Big Calendar Section */}
       <Card className="col-span-1 border-t-4 border-t-primary">

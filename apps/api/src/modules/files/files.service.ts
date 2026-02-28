@@ -1,62 +1,98 @@
 import {
   Injectable,
-  BadRequestException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as Minio from 'minio';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  CopyObjectCommand,
+  HeadBucketCommand,
+  CreateBucketCommand,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuid } from 'uuid';
+import { Readable } from 'stream';
 
 @Injectable()
 export class FilesService {
-  private readonly minioClient: Minio.Client;
+  private readonly s3: S3Client;
   private readonly bucket: string;
+  private readonly logger = new Logger(FilesService.name);
 
   constructor(private readonly configService: ConfigService) {
-    this.minioClient = new Minio.Client({
-      endPoint: this.configService.get<string>('MINIO_ENDPOINT') || 'minio',
-      port: parseInt(this.configService.get<string>('MINIO_PORT') || '9000', 10),
-      useSSL: this.configService.get<string>('MINIO_USE_SSL') === 'true',
-      accessKey: this.configService.get<string>('MINIO_ACCESS_KEY') || '',
-      secretKey: this.configService.get<string>('MINIO_SECRET_KEY') || '',
-    });
+    const provider = this.configService.get<string>('STORAGE_PROVIDER', 'minio');
 
-    this.bucket = this.configService.get<string>('MINIO_BUCKET') || 'cmms-files';
+    if (provider === 's3') {
+      // AWS S3 - uses default credential chain (env vars, IAM role, etc.)
+      this.s3 = new S3Client({
+        region: this.configService.get<string>('AWS_REGION', 'us-east-1'),
+      });
+    } else {
+      // MinIO (S3-compatible) for local development
+      const endpoint = this.configService.get<string>('MINIO_ENDPOINT', 'minio');
+      const port = this.configService.get<string>('MINIO_PORT', '9000');
+      const useSSL = this.configService.get<string>('MINIO_USE_SSL') === 'true';
+      const protocol = useSSL ? 'https' : 'http';
+
+      this.s3 = new S3Client({
+        region: 'us-east-1',
+        endpoint: `${protocol}://${endpoint}:${port}`,
+        forcePathStyle: true,
+        credentials: {
+          accessKeyId: this.configService.get<string>('MINIO_ACCESS_KEY', ''),
+          secretAccessKey: this.configService.get<string>('MINIO_SECRET_KEY', ''),
+        },
+      });
+    }
+
+    this.bucket = this.configService.get<string>('STORAGE_BUCKET',
+      this.configService.get<string>('MINIO_BUCKET', 'cmms-files'),
+    );
     this.ensureBucket();
   }
 
   private async ensureBucket(): Promise<void> {
     try {
-      const exists = await this.minioClient.bucketExists(this.bucket);
-      if (!exists) {
-        await this.minioClient.makeBucket(this.bucket);
+      await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
+    } catch (error: any) {
+      if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+        try {
+          await this.s3.send(new CreateBucketCommand({ Bucket: this.bucket }));
+          this.logger.log(`Created bucket: ${this.bucket}`);
+        } catch (createError) {
+          this.logger.error('Failed to create bucket:', createError);
+        }
+      } else {
+        this.logger.error('Failed to check bucket:', error);
       }
-    } catch (error) {
-      console.error('Failed to ensure bucket exists:', error);
     }
   }
 
   async uploadFile(
     file: Express.Multer.File,
     path: string,
+    tenantId?: string,
   ): Promise<string> {
     const extension = file.originalname.split('.').pop();
-    const key = `${path}/${uuid()}.${extension}`;
+    const prefix = tenantId ? `${tenantId}/` : '';
+    const key = `${prefix}${path}/${uuid()}.${extension}`;
 
     try {
-      await this.minioClient.putObject(
-        this.bucket,
-        key,
-        file.buffer,
-        file.size,
-        {
-          'Content-Type': file.mimetype,
-        },
-      );
+      await this.s3.send(new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentLength: file.size,
+        ContentType: file.mimetype,
+      }));
 
       return key;
     } catch (error) {
-      console.error('MinIO upload error:', error);
+      this.logger.error('Upload error:', error);
       throw new InternalServerErrorException('Failed to upload file');
     }
   }
@@ -65,68 +101,73 @@ export class FilesService {
     buffer: Buffer,
     key: string,
     contentType: string,
+    tenantId?: string,
   ): Promise<string> {
+    const actualKey = tenantId ? `${tenantId}/${key}` : key;
     try {
-      await this.minioClient.putObject(
-        this.bucket,
-        key,
-        buffer,
-        buffer.length,
-        {
-          'Content-Type': contentType,
-        },
-      );
+      await this.s3.send(new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: actualKey,
+        Body: buffer,
+        ContentLength: buffer.length,
+        ContentType: contentType,
+      }));
 
-      return key;
+      return actualKey;
     } catch (error) {
-      console.error('MinIO upload error:', error);
+      this.logger.error('Upload error:', error);
       throw new InternalServerErrorException('Failed to upload file');
     }
   }
 
   async getSignedUrl(key: string, expirySeconds = 86400): Promise<string> {
     try {
-      return await this.minioClient.presignedGetObject(
-        this.bucket,
-        key,
-        expirySeconds,
-      );
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+      return await getSignedUrl(this.s3, command, { expiresIn: expirySeconds });
     } catch (error) {
-      console.error('MinIO signed URL error:', error);
+      this.logger.error('Signed URL error:', error);
       throw new InternalServerErrorException('Failed to generate download URL');
     }
   }
 
   async deleteFile(key: string): Promise<void> {
     try {
-      await this.minioClient.removeObject(this.bucket, key);
+      await this.s3.send(new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }));
     } catch (error) {
-      console.error('MinIO delete error:', error);
+      this.logger.error('Delete error:', error);
       throw new InternalServerErrorException('Failed to delete file');
     }
   }
 
   async getFileStream(key: string): Promise<NodeJS.ReadableStream> {
     try {
-      return await this.minioClient.getObject(this.bucket, key);
+      const response = await this.s3.send(new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }));
+      return response.Body as Readable;
     } catch (error) {
-      console.error('MinIO get error:', error);
+      this.logger.error('Get file error:', error);
       throw new InternalServerErrorException('Failed to get file');
     }
   }
 
   async copyFile(sourceKey: string, destKey: string): Promise<string> {
     try {
-      const conds = new Minio.CopyConditions();
-      await this.minioClient.copyObject(
-        this.bucket,
-        destKey,
-        `/${this.bucket}/${sourceKey}`,
-        conds,
-      );
+      await this.s3.send(new CopyObjectCommand({
+        Bucket: this.bucket,
+        Key: destKey,
+        CopySource: `${this.bucket}/${sourceKey}`,
+      }));
       return destKey;
     } catch (error) {
-      console.error('MinIO copy error:', error);
+      this.logger.error('Copy error:', error);
       throw new InternalServerErrorException('Failed to copy file');
     }
   }

@@ -7,9 +7,10 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Asset } from './asset.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('asset_meters')
-export class AssetMeter {
+export class AssetMeter extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

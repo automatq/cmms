@@ -8,9 +8,10 @@ import {
   OneToMany,
   JoinColumn,
 } from 'typeorm';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('asset_categories')
-export class AssetCategory {
+export class AssetCategory extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

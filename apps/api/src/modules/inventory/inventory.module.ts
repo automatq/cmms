@@ -15,6 +15,7 @@ import {
   InventoryController,
   PurchaseOrdersController,
 } from './inventory.controller';
+import { PartCsvController } from './csv.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -36,6 +37,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     StoreroomsController,
     InventoryController,
     PurchaseOrdersController,
+    PartCsvController,
   ],
   providers: [InventoryService],
   exports: [InventoryService],

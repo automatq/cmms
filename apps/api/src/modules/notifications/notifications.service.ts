@@ -1,16 +1,23 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import * as nodemailer from 'nodemailer';
 import * as Handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Notification, NotificationType, UserPushToken } from './entities';
+import { User } from '../users/entities/user.entity';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @Injectable()
 export class NotificationsService {
-  private transporter: nodemailer.Transporter;
+  private readonly logger = new Logger(NotificationsService.name);
+  private readonly emailProvider: string;
+  private readonly appUrl: string;
+  private transporter: nodemailer.Transporter | null = null;
+  private sesClient: SESClient | null = null;
   private templates: Map<string, HandlebarsTemplateDelegate> = new Map();
 
   constructor(
@@ -18,19 +25,30 @@ export class NotificationsService {
     private readonly notificationRepository: Repository<Notification>,
     @InjectRepository(UserPushToken)
     private readonly pushTokenRepository: Repository<UserPushToken>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly configService: ConfigService,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {
-    this.initializeTransporter();
+    this.appUrl = this.configService.get<string>('PUBLIC_URL', 'http://localhost');
+    this.emailProvider = this.configService.get<string>('EMAIL_PROVIDER', 'smtp');
+    this.initializeEmailClient();
     this.loadTemplates();
   }
 
-  private initializeTransporter(): void {
-    this.transporter = nodemailer.createTransport({
-      host: this.configService.get<string>('SMTP_HOST') || 'mailpit',
-      port: parseInt(this.configService.get<string>('SMTP_PORT') || '1025', 10),
-      secure: false,
-      ignoreTLS: true,
-    });
+  private initializeEmailClient(): void {
+    if (this.emailProvider === 'ses') {
+      this.sesClient = new SESClient({
+        region: this.configService.get<string>('AWS_REGION', 'us-east-1'),
+      });
+    } else {
+      this.transporter = nodemailer.createTransport({
+        host: this.configService.get<string>('SMTP_HOST') || 'mailpit',
+        port: parseInt(this.configService.get<string>('SMTP_PORT') || '1025', 10),
+        secure: false,
+        ignoreTLS: true,
+      });
+    }
   }
 
   private loadTemplates(): void {
@@ -64,6 +82,7 @@ export class NotificationsService {
     title: string,
     message: string,
     data: Record<string, unknown> = {},
+    tenantId: string,
   ): Promise<Notification> {
     const notification = this.notificationRepository.create({
       userId,
@@ -71,35 +90,52 @@ export class NotificationsService {
       title,
       message,
       data,
+      tenantId,
     });
 
-    return this.notificationRepository.save(notification);
+    const saved = await this.notificationRepository.save(notification);
+
+    // Emit real-time notification via WebSocket
+    try {
+      this.realtimeGateway.emitToUser(userId, 'notification:new', {
+        id: saved.id,
+        type: saved.type,
+        title: saved.title,
+        message: saved.message,
+        data: saved.data,
+        createdAt: saved.createdAt,
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to emit WebSocket notification: ${error instanceof Error ? error.message : error}`);
+    }
+
+    return saved;
   }
 
-  async findUserNotifications(userId: string, limit = 50): Promise<Notification[]> {
+  async findUserNotifications(userId: string, tenantId: string, limit = 50): Promise<Notification[]> {
     return this.notificationRepository.find({
-      where: { userId },
+      where: { userId, tenantId },
       order: { createdAt: 'DESC' },
       take: limit,
     });
   }
 
-  async getUnreadCount(userId: string): Promise<number> {
+  async getUnreadCount(userId: string, tenantId: string): Promise<number> {
     return this.notificationRepository.count({
-      where: { userId, isRead: false },
+      where: { userId, tenantId, isRead: false },
     });
   }
 
-  async markRead(notificationId: string): Promise<void> {
-    await this.notificationRepository.update(notificationId, {
-      isRead: true,
-      readAt: new Date(),
-    });
-  }
-
-  async markAllRead(userId: string): Promise<void> {
+  async markRead(notificationId: string, tenantId: string): Promise<void> {
     await this.notificationRepository.update(
-      { userId, isRead: false },
+      { id: notificationId, tenantId },
+      { isRead: true, readAt: new Date() },
+    );
+  }
+
+  async markAllRead(userId: string, tenantId: string): Promise<void> {
+    await this.notificationRepository.update(
+      { userId, tenantId, isRead: false },
       { isRead: true, readAt: new Date() },
     );
   }
@@ -113,24 +149,32 @@ export class NotificationsService {
     context: Record<string, unknown>,
   ): Promise<void> {
     let html: string;
-    
+
     const template = this.templates.get(templateName);
     if (template) {
       html = template(context);
     } else {
-      // Fallback to simple text
       html = `<p>${context.message || ''}</p>`;
     }
 
+    const from = this.configService.get('EMAIL_FROM') ||
+      this.configService.get('SMTP_FROM') || 'noreply@cmms.local';
+
     try {
-      await this.transporter.sendMail({
-        from: this.configService.get('SMTP_FROM') || 'noreply@cmms.local',
-        to,
-        subject,
-        html,
-      });
+      if (this.emailProvider === 'ses' && this.sesClient) {
+        await this.sesClient.send(new SendEmailCommand({
+          Source: from,
+          Destination: { ToAddresses: [to] },
+          Message: {
+            Subject: { Data: subject, Charset: 'UTF-8' },
+            Body: { Html: { Data: html, Charset: 'UTF-8' } },
+          },
+        }));
+      } else if (this.transporter) {
+        await this.transporter.sendMail({ from, to, subject, html });
+      }
     } catch (error) {
-      console.error('Failed to send email:', error);
+      this.logger.error('Failed to send email:', error);
     }
   }
 
@@ -140,71 +184,157 @@ export class NotificationsService {
     userId: string,
     token: string,
     platform: string,
+    tenantId: string,
   ): Promise<UserPushToken> {
     // Remove existing token if it exists for this user/platform
-    await this.pushTokenRepository.delete({ userId, platform });
+    await this.pushTokenRepository.delete({ userId, platform, tenantId });
 
     const pushToken = this.pushTokenRepository.create({
       userId,
       token,
       platform,
+      tenantId,
     });
 
     return this.pushTokenRepository.save(pushToken);
   }
 
-  async getUserPushTokens(userId: string): Promise<UserPushToken[]> {
-    return this.pushTokenRepository.find({ where: { userId } });
+  async getUserPushTokens(userId: string, tenantId: string): Promise<UserPushToken[]> {
+    return this.pushTokenRepository.find({ where: { userId, tenantId } });
   }
 
   // ==================== EVENT TRIGGERS ====================
 
-  async onWoAssigned(workOrder: { id: string; title: string; woNumber: string }, assignedUserIds: string[]): Promise<void> {
-    for (const userId of assignedUserIds) {
+  async onWoAssigned(workOrder: { id: string; title: string; woNumber: string; priority?: string; description?: string }, assignedUserIds: string[], tenantId: string): Promise<void> {
+    const users = await this.userRepository.find({ where: { id: In(assignedUserIds), tenantId } });
+
+    for (const user of users) {
       await this.createNotification(
-        userId,
+        user.id,
         NotificationType.WO_ASSIGNED,
         'Work Order Assigned',
         `You have been assigned to ${workOrder.woNumber}: ${workOrder.title}`,
         { workOrderId: workOrder.id },
+        tenantId,
       );
+
+      if (user.email && user.notificationPreferences?.email_wo_assigned !== false) {
+        await this.sendEmail(user.email, `WO Assigned: ${workOrder.woNumber}`, 'wo-assigned', {
+          woNumber: workOrder.woNumber,
+          title: workOrder.title,
+          priority: workOrder.priority,
+          description: workOrder.description,
+          woId: workOrder.id,
+          appUrl: this.appUrl,
+        });
+      }
     }
   }
 
   async onWoStatusChanged(
-    workOrder: { id: string; woNumber: string; status: string; assignedTo: string[] },
+    workOrder: { id: string; woNumber: string; title?: string; status: string; assignedTo: string[] },
     oldStatus: string,
+    tenantId: string,
   ): Promise<void> {
-    for (const userId of workOrder.assignedTo || []) {
+    const userIds = workOrder.assignedTo || [];
+    const users = userIds.length > 0
+      ? await this.userRepository.find({ where: { id: In(userIds), tenantId } })
+      : [];
+
+    for (const user of users) {
       await this.createNotification(
-        userId,
+        user.id,
         NotificationType.WO_STATUS_CHANGED,
         'Work Order Status Changed',
         `${workOrder.woNumber} status changed from ${oldStatus} to ${workOrder.status}`,
         { workOrderId: workOrder.id, oldStatus, newStatus: workOrder.status },
+        tenantId,
       );
+
+      if (user.email && user.notificationPreferences?.email_wo_status_changed !== false) {
+        await this.sendEmail(user.email, `WO ${workOrder.status}: ${workOrder.woNumber}`, 'wo-completed', {
+          woNumber: workOrder.woNumber,
+          title: workOrder.title,
+          oldStatus,
+          newStatus: workOrder.status,
+          woId: workOrder.id,
+          appUrl: this.appUrl,
+        });
+      }
     }
   }
 
-  async onPmDue(pmPlan: { id: string; name: string; assetId?: string }, userIds: string[]): Promise<void> {
-    for (const userId of userIds) {
+  async onPmDue(pmPlan: { id: string; name: string; assetId?: string }, userIds: string[], tenantId: string): Promise<void> {
+    const users = userIds?.length > 0
+      ? await this.userRepository.find({ where: { id: In(userIds), tenantId } })
+      : [];
+
+    for (const user of users) {
       await this.createNotification(
-        userId,
+        user.id,
         NotificationType.PM_DUE,
         'PM Plan Due',
         `Preventive maintenance "${pmPlan.name}" is due`,
         { pmPlanId: pmPlan.id },
+        tenantId,
       );
+
+      if (user.email && user.notificationPreferences?.email_pm_due !== false) {
+        await this.sendEmail(user.email, `PM Due: ${pmPlan.name}`, 'pm-due', {
+          planName: pmPlan.name,
+          appUrl: this.appUrl,
+        });
+      }
     }
   }
 
-  async onLowStock(part: { id: string; name: string; sku: string }, currentQty: number): Promise<void> {
-    // This would notify inventory managers - for now just log
-    console.log(`Low stock alert: ${part.name} (${part.sku}) - Qty: ${currentQty}`);
+  async onLowStock(part: { id: string; name: string; sku: string }, currentQty: number, tenantId: string): Promise<void> {
+    // Find users with inventory permissions to notify
+    const users = await this.userRepository.find({ where: { tenantId } });
+
+    for (const user of users) {
+      await this.createNotification(
+        user.id,
+        NotificationType.LOW_STOCK,
+        'Low Stock Alert',
+        `${part.name} (${part.sku}) is low: ${currentQty} remaining`,
+        { partId: part.id },
+        tenantId,
+      );
+
+      if (user.email && user.notificationPreferences?.email_low_stock !== false) {
+        await this.sendEmail(user.email, `Low Stock: ${part.name}`, 'low-stock', {
+          partName: part.name,
+          sku: part.sku,
+          currentQty,
+          appUrl: this.appUrl,
+        });
+      }
+    }
   }
 
-  async onWorkRequestSubmitted(request: { id: string; title: string; submittedBy?: string }): Promise<void> {
-    // This would notify managers/planners - for now just log
-    console.log(`Work request submitted: ${request.title} by ${request.submittedBy}`);
+  async onWorkRequestSubmitted(request: { id: string; title: string; submittedBy?: string; description?: string }, tenantId: string): Promise<void> {
+    // Notify all active users (managers will be filtered by permissions in future)
+    const users = await this.userRepository.find({ where: { tenantId } });
+
+    for (const user of users) {
+      await this.createNotification(
+        user.id,
+        NotificationType.WORK_REQUEST,
+        'New Work Request',
+        `Work request submitted: ${request.title}`,
+        { workRequestId: request.id },
+        tenantId,
+      );
+
+      if (user.email && user.notificationPreferences?.email_work_request !== false) {
+        await this.sendEmail(user.email, `New Work Request: ${request.title}`, 'work-request', {
+          title: request.title,
+          submittedBy: request.submittedBy,
+          description: request.description,
+          appUrl: this.appUrl,
+        });
+      }
+    }
   }
 }

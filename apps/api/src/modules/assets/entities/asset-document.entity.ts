@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Asset } from './asset.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum DocumentType {
   MANUAL = 'manual',
@@ -18,7 +19,7 @@ export enum DocumentType {
 }
 
 @Entity('asset_documents')
-export class AssetDocument {
+export class AssetDocument extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

@@ -7,9 +7,11 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { Supplier } from './supplier.entity';
 import { PoLineItem } from './po-line-item.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum PurchaseOrderStatus {
   DRAFT = 'draft',
@@ -20,11 +22,12 @@ export enum PurchaseOrderStatus {
 }
 
 @Entity('purchase_orders')
-export class PurchaseOrder {
+@Unique(['tenantId', 'poNumber'])
+export class PurchaseOrder extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true, name: 'po_number' })
+  @Column({ name: 'po_number' })
   poNumber: string;
 
   @Column({ name: 'supplier_id' })

@@ -1,0 +1,10 @@
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2 style="color: #1a1a1a;">Work Order Assigned</h2>
+  <p>You have been assigned to work order <strong>{{woNumber}}</strong>.</p>
+  <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+    <tr><td style="padding: 8px 0; color: #666;">Title</td><td style="padding: 8px 0;">{{title}}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666;">Priority</td><td style="padding: 8px 0;">{{priority}}</td></tr>
+    {{#if description}}<tr><td style="padding: 8px 0; color: #666;">Description</td><td style="padding: 8px 0;">{{description}}</td></tr>{{/if}}
+  </table>
+  <a href="{{appUrl}}/dashboard/work-orders/{{woId}}" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px;">View Work Order</a>
+</div>

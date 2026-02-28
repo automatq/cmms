@@ -4,9 +4,10 @@ import {
   Column,
   CreateDateColumn,
 } from 'typeorm';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('user_push_tokens')
-export class UserPushToken {
+export class UserPushToken extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

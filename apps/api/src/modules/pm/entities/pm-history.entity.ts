@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { PmPlan } from './pm-plan.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum PmHistoryStatus {
   ON_TIME = 'on_time',
@@ -15,7 +16,7 @@ export enum PmHistoryStatus {
 }
 
 @Entity('pm_history')
-export class PmHistory {
+export class PmHistory extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

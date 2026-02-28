@@ -7,6 +7,7 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { Asset } from '../../assets/entities/asset.entity';
 import { Location } from '../../assets/entities/location.entity';
@@ -15,6 +16,7 @@ import { WoLabor } from './wo-labor.entity';
 import { WoPart } from './wo-part.entity';
 import { WoAttachment } from './wo-attachment.entity';
 import { WoChecklistResult } from './wo-checklist-result.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum WorkOrderType {
   CORRECTIVE = 'corrective',
@@ -40,11 +42,12 @@ export enum Priority {
 }
 
 @Entity('work_orders')
-export class WorkOrder {
+@Unique(['tenantId', 'woNumber'])
+export class WorkOrder extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true, name: 'wo_number' })
+  @Column({ name: 'wo_number' })
   woNumber: string;
 
   @Column()

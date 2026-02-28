@@ -52,46 +52,47 @@ export class InventoryService {
 
   // ==================== SUPPLIERS ====================
 
-  async createSupplier(dto: CreateSupplierDto): Promise<Supplier> {
-    const supplier = this.supplierRepo.create(dto);
+  async createSupplier(dto: CreateSupplierDto, tenantId: string): Promise<Supplier> {
+    const supplier = this.supplierRepo.create({ ...dto, tenantId });
     return this.supplierRepo.save(supplier);
   }
 
-  async findAllSuppliers(activeOnly = false): Promise<Supplier[]> {
-    const where = activeOnly ? { isActive: true } : {};
+  async findAllSuppliers(tenantId: string, activeOnly = false): Promise<Supplier[]> {
+    const where = activeOnly ? { tenantId, isActive: true } : { tenantId };
     return this.supplierRepo.find({ where, order: { name: 'ASC' } });
   }
 
-  async findSupplierById(id: string): Promise<Supplier> {
-    const supplier = await this.supplierRepo.findOne({ where: { id } });
+  async findSupplierById(id: string, tenantId: string): Promise<Supplier> {
+    const supplier = await this.supplierRepo.findOne({ where: { id, tenantId } });
     if (!supplier) throw new NotFoundException(`Supplier ${id} not found`);
     return supplier;
   }
 
-  async updateSupplier(id: string, dto: UpdateSupplierDto): Promise<Supplier> {
-    const supplier = await this.findSupplierById(id);
+  async updateSupplier(id: string, dto: UpdateSupplierDto, tenantId: string): Promise<Supplier> {
+    const supplier = await this.findSupplierById(id, tenantId);
     Object.assign(supplier, dto);
     return this.supplierRepo.save(supplier);
   }
 
-  async deleteSupplier(id: string): Promise<void> {
-    const supplier = await this.findSupplierById(id);
+  async deleteSupplier(id: string, tenantId: string): Promise<void> {
+    const supplier = await this.findSupplierById(id, tenantId);
     await this.supplierRepo.softRemove(supplier);
   }
 
   // ==================== PARTS ====================
 
-  async createPart(dto: CreatePartDto): Promise<Part> {
-    const existingSku = await this.partRepo.findOne({ where: { sku: dto.sku } });
+  async createPart(dto: CreatePartDto, tenantId: string): Promise<Part> {
+    const existingSku = await this.partRepo.findOne({ where: { sku: dto.sku, tenantId } });
     if (existingSku) throw new ConflictException(`SKU ${dto.sku} already exists`);
 
-    const part = this.partRepo.create(dto);
+    const part = this.partRepo.create({ ...dto, tenantId });
     return this.partRepo.save(part);
   }
 
-  async findAllParts(query: PartQueryDto): Promise<{ data: Part[]; total: number; page: number; limit: number }> {
+  async findAllParts(query: PartQueryDto, tenantId: string): Promise<{ data: Part[]; total: number; page: number; limit: number }> {
     const qb = this.partRepo.createQueryBuilder('part')
-      .leftJoinAndSelect('part.supplier', 'supplier');
+      .leftJoinAndSelect('part.supplier', 'supplier')
+      .andWhere('part.tenantId = :tenantId', { tenantId });
 
     if (query.search) {
       qb.andWhere('(part.name ILIKE :search OR part.sku ILIKE :search OR part.description ILIKE :search)', {
@@ -136,37 +137,38 @@ export class InventoryService {
     return { data, total, page: query.page || 1, limit: query.limit || 20 };
   }
 
-  async findPartById(id: string): Promise<Part> {
+  async findPartById(id: string, tenantId: string): Promise<Part> {
     const part = await this.partRepo.findOne({
-      where: { id },
+      where: { id, tenantId },
       relations: ['supplier'],
     });
     if (!part) throw new NotFoundException(`Part ${id} not found`);
     return part;
   }
 
-  async findPartBySku(sku: string): Promise<Part> {
-    const part = await this.partRepo.findOne({ where: { sku } });
+  async findPartBySku(sku: string, tenantId: string): Promise<Part> {
+    const part = await this.partRepo.findOne({ where: { sku, tenantId } });
     if (!part) throw new NotFoundException(`Part with SKU ${sku} not found`);
     return part;
   }
 
-  async updatePart(id: string, dto: UpdatePartDto): Promise<Part> {
-    const part = await this.findPartById(id);
+  async updatePart(id: string, dto: UpdatePartDto, tenantId: string): Promise<Part> {
+    const part = await this.findPartById(id, tenantId);
     Object.assign(part, dto);
     return this.partRepo.save(part);
   }
 
-  async deletePart(id: string): Promise<void> {
-    const part = await this.findPartById(id);
+  async deletePart(id: string, tenantId: string): Promise<void> {
+    const part = await this.findPartById(id, tenantId);
     await this.partRepo.softRemove(part);
   }
 
-  async getPartCategories(): Promise<string[]> {
+  async getPartCategories(tenantId: string): Promise<string[]> {
     const result = await this.partRepo
       .createQueryBuilder('part')
       .select('DISTINCT part.category', 'category')
       .where('part.category IS NOT NULL')
+      .andWhere('part.tenantId = :tenantId', { tenantId })
       .orderBy('part.category', 'ASC')
       .getRawMany();
     return result.map((r) => r.category);
@@ -174,13 +176,13 @@ export class InventoryService {
 
   // ==================== STOREROOMS ====================
 
-  async createStoreroom(dto: CreateStoreroomDto): Promise<Storeroom> {
-    const storeroom = this.storeroomRepo.create(dto);
+  async createStoreroom(dto: CreateStoreroomDto, tenantId: string): Promise<Storeroom> {
+    const storeroom = this.storeroomRepo.create({ ...dto, tenantId });
     return this.storeroomRepo.save(storeroom);
   }
 
-  async findAllStorerooms(activeOnly = false): Promise<Storeroom[]> {
-    const where = activeOnly ? { isActive: true } : {};
+  async findAllStorerooms(tenantId: string, activeOnly = false): Promise<Storeroom[]> {
+    const where = activeOnly ? { tenantId, isActive: true } : { tenantId };
     return this.storeroomRepo.find({
       where,
       relations: ['location'],
@@ -188,65 +190,65 @@ export class InventoryService {
     });
   }
 
-  async findStoreroomById(id: string): Promise<Storeroom> {
+  async findStoreroomById(id: string, tenantId: string): Promise<Storeroom> {
     const storeroom = await this.storeroomRepo.findOne({
-      where: { id },
+      where: { id, tenantId },
       relations: ['location'],
     });
     if (!storeroom) throw new NotFoundException(`Storeroom ${id} not found`);
     return storeroom;
   }
 
-  async updateStoreroom(id: string, dto: UpdateStoreroomDto): Promise<Storeroom> {
-    const storeroom = await this.findStoreroomById(id);
+  async updateStoreroom(id: string, dto: UpdateStoreroomDto, tenantId: string): Promise<Storeroom> {
+    const storeroom = await this.findStoreroomById(id, tenantId);
     Object.assign(storeroom, dto);
     return this.storeroomRepo.save(storeroom);
   }
 
-  async deleteStoreroom(id: string): Promise<void> {
-    const storeroom = await this.findStoreroomById(id);
+  async deleteStoreroom(id: string, tenantId: string): Promise<void> {
+    const storeroom = await this.findStoreroomById(id, tenantId);
     await this.storeroomRepo.softRemove(storeroom);
   }
 
   // ==================== STOCK MANAGEMENT ====================
 
-  async getStockForPart(partId: string): Promise<InventoryStock[]> {
+  async getStockForPart(partId: string, tenantId: string): Promise<InventoryStock[]> {
     return this.stockRepo.find({
-      where: { partId },
+      where: { partId, tenantId },
       relations: ['storeroom', 'part'],
     });
   }
 
-  async getStockForStoreroom(storeroomId: string): Promise<InventoryStock[]> {
+  async getStockForStoreroom(storeroomId: string, tenantId: string): Promise<InventoryStock[]> {
     return this.stockRepo.find({
-      where: { storeroomId },
+      where: { storeroomId, tenantId },
       relations: ['part', 'part.supplier'],
     });
   }
 
-  async getStockLevel(partId: string, storeroomId: string): Promise<InventoryStock | null> {
+  async getStockLevel(partId: string, storeroomId: string, tenantId: string): Promise<InventoryStock | null> {
     return this.stockRepo.findOne({
-      where: { partId, storeroomId },
+      where: { partId, storeroomId, tenantId },
     });
   }
 
-  async getTotalStockForPart(partId: string): Promise<{ qtyOnHand: number; qtyReserved: number; qtyAvailable: number }> {
-    const stocks = await this.stockRepo.find({ where: { partId } });
+  async getTotalStockForPart(partId: string, tenantId: string): Promise<{ qtyOnHand: number; qtyReserved: number; qtyAvailable: number }> {
+    const stocks = await this.stockRepo.find({ where: { partId, tenantId } });
     const qtyOnHand = stocks.reduce((sum, s) => sum + s.qtyOnHand, 0);
     const qtyReserved = stocks.reduce((sum, s) => sum + s.qtyReserved, 0);
     return { qtyOnHand, qtyReserved, qtyAvailable: qtyOnHand - qtyReserved };
   }
 
-  private async getOrCreateStock(partId: string, storeroomId: string): Promise<InventoryStock> {
-    let stock = await this.stockRepo.findOne({ where: { partId, storeroomId } });
+  private async getOrCreateStock(partId: string, storeroomId: string, tenantId: string): Promise<InventoryStock> {
+    let stock = await this.stockRepo.findOne({ where: { partId, storeroomId, tenantId } });
     if (!stock) {
-      stock = this.stockRepo.create({ partId, storeroomId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
+      stock = this.stockRepo.create({ partId, storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
       stock = await this.stockRepo.save(stock);
     }
     return stock;
   }
 
-  async receiveStock(dto: ReceiveStockDto, performedBy: string): Promise<InventoryTransaction> {
+  async receiveStock(dto: ReceiveStockDto, performedBy: string, tenantId: string): Promise<InventoryTransaction> {
     return this.dataSource.transaction(async (manager) => {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
@@ -256,7 +258,7 @@ export class InventoryService {
 
       let stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId } });
       if (!stock) {
-        stock = stockRepo.create({ partId: dto.partId, storeroomId: dto.storeroomId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
+        stock = stockRepo.create({ partId: dto.partId, storeroomId: dto.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
       }
 
       stock.qtyOnHand += dto.qty;
@@ -270,6 +272,7 @@ export class InventoryService {
       const tx = txRepo.create({
         partId: dto.partId,
         storeroomId: dto.storeroomId,
+        tenantId,
         type: TransactionType.RECEIVE,
         qty: dto.qty,
         unitCost: dto.unitCost || part.unitCost,
@@ -282,7 +285,7 @@ export class InventoryService {
     });
   }
 
-  async issueStock(dto: IssueStockDto, performedBy: string): Promise<InventoryTransaction> {
+  async issueStock(dto: IssueStockDto, performedBy: string, tenantId: string): Promise<InventoryTransaction> {
     return this.dataSource.transaction(async (manager) => {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
@@ -303,6 +306,7 @@ export class InventoryService {
       const tx = txRepo.create({
         partId: dto.partId,
         storeroomId: dto.storeroomId,
+        tenantId,
         type: TransactionType.ISSUE,
         qty: -dto.qty,
         unitCost: part?.unitCost,
@@ -314,20 +318,20 @@ export class InventoryService {
       const savedTx = await txRepo.save(tx);
 
       // Check for low stock notification
-      await this.checkLowStock(dto.partId, manager);
+      await this.checkLowStock(dto.partId, tenantId, manager);
 
       return savedTx;
     });
   }
 
-  async adjustStock(dto: AdjustStockDto, performedBy: string): Promise<InventoryTransaction> {
+  async adjustStock(dto: AdjustStockDto, performedBy: string, tenantId: string): Promise<InventoryTransaction> {
     return this.dataSource.transaction(async (manager) => {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
       let stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId } });
       if (!stock) {
-        stock = stockRepo.create({ partId: dto.partId, storeroomId: dto.storeroomId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
+        stock = stockRepo.create({ partId: dto.partId, storeroomId: dto.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
       }
 
       const newQty = stock.qtyOnHand + dto.adjustmentQty;
@@ -341,6 +345,7 @@ export class InventoryService {
       const tx = txRepo.create({
         partId: dto.partId,
         storeroomId: dto.storeroomId,
+        tenantId,
         type: TransactionType.ADJUST,
         qty: dto.adjustmentQty,
         notes: dto.reason,
@@ -352,7 +357,7 @@ export class InventoryService {
     });
   }
 
-  async transferStock(dto: TransferStockDto, performedBy: string): Promise<{ issueTransaction: InventoryTransaction; receiveTransaction: InventoryTransaction }> {
+  async transferStock(dto: TransferStockDto, performedBy: string, tenantId: string): Promise<{ issueTransaction: InventoryTransaction; receiveTransaction: InventoryTransaction }> {
     return this.dataSource.transaction(async (manager) => {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
@@ -373,7 +378,7 @@ export class InventoryService {
       // Add to destination
       let toStock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.toStoreroomId } });
       if (!toStock) {
-        toStock = stockRepo.create({ partId: dto.partId, storeroomId: dto.toStoreroomId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
+        toStock = stockRepo.create({ partId: dto.partId, storeroomId: dto.toStoreroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
       }
       toStock.qtyOnHand += dto.qty;
       await stockRepo.save(toStock);
@@ -382,6 +387,7 @@ export class InventoryService {
       const issueTx = txRepo.create({
         partId: dto.partId,
         storeroomId: dto.fromStoreroomId,
+        tenantId,
         type: TransactionType.TRANSFER,
         qty: -dto.qty,
         notes: dto.notes ? `Transfer to storeroom: ${dto.notes}` : 'Transfer out',
@@ -391,6 +397,7 @@ export class InventoryService {
       const receiveTx = txRepo.create({
         partId: dto.partId,
         storeroomId: dto.toStoreroomId,
+        tenantId,
         type: TransactionType.TRANSFER,
         qty: dto.qty,
         notes: dto.notes ? `Transfer from storeroom: ${dto.notes}` : 'Transfer in',
@@ -404,7 +411,7 @@ export class InventoryService {
     });
   }
 
-  async reserveStock(dto: ReserveStockDto, performedBy: string): Promise<InventoryTransaction> {
+  async reserveStock(dto: ReserveStockDto, performedBy: string, tenantId: string): Promise<InventoryTransaction> {
     return this.dataSource.transaction(async (manager) => {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
@@ -423,6 +430,7 @@ export class InventoryService {
       const tx = txRepo.create({
         partId: dto.partId,
         storeroomId: dto.storeroomId,
+        tenantId,
         type: TransactionType.RESERVE,
         qty: dto.qty,
         notes: dto.notes,
@@ -434,7 +442,7 @@ export class InventoryService {
     });
   }
 
-  async releaseReservation(dto: ReleaseReservationDto, performedBy: string): Promise<InventoryTransaction> {
+  async releaseReservation(dto: ReleaseReservationDto, performedBy: string, tenantId: string): Promise<InventoryTransaction> {
     return this.dataSource.transaction(async (manager) => {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
@@ -453,6 +461,7 @@ export class InventoryService {
       const tx = txRepo.create({
         partId: dto.partId,
         storeroomId: dto.storeroomId,
+        tenantId,
         type: TransactionType.RELEASE,
         qty: -releaseQty,
         referenceId: dto.workOrderId,
@@ -463,28 +472,39 @@ export class InventoryService {
     });
   }
 
-  private async checkLowStock(partId: string, manager?: any): Promise<void> {
+  private async checkLowStock(partId: string, tenantId: string, manager?: any): Promise<void> {
     const repo = manager ? manager.getRepository(Part) : this.partRepo;
     const stockRepoToUse = manager ? manager.getRepository(InventoryStock) : this.stockRepo;
 
-    const part = await repo.findOne({ where: { id: partId } });
+    const part = await repo.findOne({ where: { id: partId, tenantId } });
     if (!part || !part.reorderPoint) return;
 
-    const stocks = await stockRepoToUse.find({ where: { partId } });
+    const stocks = await stockRepoToUse.find({ where: { partId, tenantId } });
     const totalOnHand = stocks.reduce((sum, s) => sum + s.qtyOnHand, 0);
 
     if (totalOnHand <= part.reorderPoint) {
-      await this.notificationsService.onLowStock(part, totalOnHand);
+      await this.notificationsService.onLowStock(part, totalOnHand, tenantId);
     }
   }
 
-  async getLowStockParts(): Promise<Part[]> {
+  async findAvailableStoreroom(partId: string, requiredQty: number, tenantId: string): Promise<string | null> {
+    const stocks = await this.stockRepo.find({ where: { partId, tenantId } });
+    for (const stock of stocks) {
+      const available = stock.qtyOnHand - stock.qtyReserved;
+      if (available >= requiredQty) {
+        return stock.storeroomId;
+      }
+    }
+    return null;
+  }
+
+  async getLowStockParts(tenantId: string): Promise<Part[]> {
     const parts = await this.partRepo.find({ where: { reorderPoint: LessThanOrEqual(0) } });
     const lowStockParts: Part[] = [];
 
-    for (const part of await this.partRepo.find()) {
+    for (const part of await this.partRepo.find({ where: { tenantId } })) {
       if (!part.reorderPoint) continue;
-      const { qtyOnHand } = await this.getTotalStockForPart(part.id);
+      const { qtyOnHand } = await this.getTotalStockForPart(part.id, tenantId);
       if (qtyOnHand <= part.reorderPoint) {
         lowStockParts.push(part);
       }
@@ -499,10 +519,15 @@ export class InventoryService {
     filters: { partId?: string; storeroomId?: string; transactionType?: TransactionType; fromDate?: Date; toDate?: Date },
     page = 1,
     limit = 50,
+    tenantId?: string,
   ): Promise<{ data: InventoryTransaction[]; total: number }> {
     const qb = this.transactionRepo.createQueryBuilder('tx')
       .leftJoinAndSelect('tx.part', 'part')
       .leftJoinAndSelect('tx.storeroom', 'storeroom');
+
+    if (tenantId) {
+      qb.andWhere('tx.tenantId = :tenantId', { tenantId });
+    }
 
     if (filters.partId) {
       qb.andWhere('tx.partId = :partId', { partId: filters.partId });
@@ -532,7 +557,7 @@ export class InventoryService {
 
   // ==================== PURCHASE ORDERS ====================
 
-  async createPurchaseOrder(dto: CreatePurchaseOrderDto, createdBy: string): Promise<PurchaseOrder> {
+  async createPurchaseOrder(dto: CreatePurchaseOrderDto, createdBy: string, tenantId: string): Promise<PurchaseOrder> {
     return this.dataSource.transaction(async (manager) => {
       const poRepo = manager.getRepository(PurchaseOrder);
       const lineRepo = manager.getRepository(PoLineItem);
@@ -564,6 +589,7 @@ export class InventoryService {
         notes: dto.notes,
         totalCost,
         createdBy,
+        tenantId,
         status: PurchaseOrderStatus.DRAFT,
       });
       const savedPO = await poRepo.save(po);
@@ -576,27 +602,29 @@ export class InventoryService {
           storeroomId: item.storeroomId,
           qtyOrdered: item.qtyOrdered,
           unitCost: item.unitCost,
+          tenantId,
         });
         await lineRepo.save(lineItem);
 
         // Update qty on order
         let stock = await stockRepo.findOne({ where: { partId: item.partId, storeroomId: item.storeroomId } });
         if (!stock) {
-          stock = stockRepo.create({ partId: item.partId, storeroomId: item.storeroomId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
+          stock = stockRepo.create({ partId: item.partId, storeroomId: item.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
         }
         stock.qtyOnOrder += item.qtyOrdered;
         await stockRepo.save(stock);
       }
 
-      return this.findPurchaseOrderById(savedPO.id, manager);
+      return this.findPurchaseOrderById(savedPO.id, tenantId, manager);
     });
   }
 
-  async findAllPurchaseOrders(query: POQueryDto): Promise<{ data: PurchaseOrder[]; total: number; page: number; limit: number }> {
+  async findAllPurchaseOrders(query: POQueryDto, tenantId: string): Promise<{ data: PurchaseOrder[]; total: number; page: number; limit: number }> {
     const qb = this.poRepo.createQueryBuilder('po')
       .leftJoinAndSelect('po.supplier', 'supplier')
       .leftJoinAndSelect('po.lineItems', 'lineItems')
-      .leftJoinAndSelect('lineItems.part', 'part');
+      .leftJoinAndSelect('lineItems.part', 'part')
+      .andWhere('po.tenantId = :tenantId', { tenantId });
 
     if (query.search) {
       qb.andWhere('(po.poNumber ILIKE :search OR supplier.name ILIKE :search)', { search: `%${query.search}%` });
@@ -629,19 +657,19 @@ export class InventoryService {
     return { data, total, page: query.page || 1, limit: query.limit || 20 };
   }
 
-  async findPurchaseOrderById(id: string, manager?: any): Promise<PurchaseOrder> {
+  async findPurchaseOrderById(id: string, tenantId: string, manager?: any): Promise<PurchaseOrder> {
     const repo = manager ? manager.getRepository(PurchaseOrder) : this.poRepo;
     const po = await repo.findOne({
-      where: { id },
+      where: { id, tenantId },
       relations: ['supplier', 'lineItems', 'lineItems.part', 'lineItems.storeroom'],
     });
     if (!po) throw new NotFoundException(`Purchase Order ${id} not found`);
     return po;
   }
 
-  async updatePurchaseOrder(id: string, dto: UpdatePurchaseOrderDto): Promise<PurchaseOrder> {
-    const po = await this.findPurchaseOrderById(id);
-    
+  async updatePurchaseOrder(id: string, dto: UpdatePurchaseOrderDto, tenantId: string): Promise<PurchaseOrder> {
+    const po = await this.findPurchaseOrderById(id, tenantId);
+
     if (po.status === PurchaseOrderStatus.RECEIVED || po.status === PurchaseOrderStatus.CANCELLED) {
       throw new BadRequestException('Cannot update a received or cancelled PO');
     }
@@ -651,12 +679,12 @@ export class InventoryService {
       expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : po.expectedDate,
     });
     await this.poRepo.save(po);
-    return this.findPurchaseOrderById(id);
+    return this.findPurchaseOrderById(id, tenantId);
   }
 
-  async sendPurchaseOrder(id: string): Promise<PurchaseOrder> {
-    const po = await this.findPurchaseOrderById(id);
-    
+  async sendPurchaseOrder(id: string, tenantId: string): Promise<PurchaseOrder> {
+    const po = await this.findPurchaseOrderById(id, tenantId);
+
     if (po.status !== PurchaseOrderStatus.DRAFT) {
       throw new BadRequestException('Only draft POs can be sent');
     }
@@ -664,17 +692,17 @@ export class InventoryService {
     po.status = PurchaseOrderStatus.SENT;
     po.requestedDate = new Date();
     await this.poRepo.save(po);
-    return this.findPurchaseOrderById(id);
+    return this.findPurchaseOrderById(id, tenantId);
   }
 
-  async receivePurchaseOrder(id: string, dto: ReceivePODto, performedBy: string): Promise<PurchaseOrder> {
+  async receivePurchaseOrder(id: string, dto: ReceivePODto, performedBy: string, tenantId: string): Promise<PurchaseOrder> {
     return this.dataSource.transaction(async (manager) => {
       const poRepo = manager.getRepository(PurchaseOrder);
       const lineRepo = manager.getRepository(PoLineItem);
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
-      const po = await this.findPurchaseOrderById(id, manager);
+      const po = await this.findPurchaseOrderById(id, tenantId, manager);
 
       if (po.status === PurchaseOrderStatus.RECEIVED || po.status === PurchaseOrderStatus.CANCELLED) {
         throw new BadRequestException('Cannot receive a completed or cancelled PO');
@@ -695,7 +723,7 @@ export class InventoryService {
           // Update stock
           let stock = await stockRepo.findOne({ where: { partId: lineItem.partId, storeroomId: lineItem.storeroomId } });
           if (!stock) {
-            stock = stockRepo.create({ partId: lineItem.partId, storeroomId: lineItem.storeroomId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
+            stock = stockRepo.create({ partId: lineItem.partId, storeroomId: lineItem.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
           }
           stock.qtyOnHand += item.qtyReceived;
           stock.qtyOnOrder = Math.max(0, stock.qtyOnOrder - item.qtyReceived);
@@ -705,6 +733,7 @@ export class InventoryService {
           const tx = txRepo.create({
             partId: lineItem.partId,
             storeroomId: lineItem.storeroomId,
+            tenantId,
             type: TransactionType.RECEIVE,
             qty: item.qtyReceived,
             unitCost: lineItem.unitCost,
@@ -730,16 +759,16 @@ export class InventoryService {
       }
 
       await poRepo.save(po);
-      return this.findPurchaseOrderById(id, manager);
+      return this.findPurchaseOrderById(id, tenantId, manager);
     });
   }
 
-  async cancelPurchaseOrder(id: string): Promise<PurchaseOrder> {
+  async cancelPurchaseOrder(id: string, tenantId: string): Promise<PurchaseOrder> {
     return this.dataSource.transaction(async (manager) => {
       const poRepo = manager.getRepository(PurchaseOrder);
       const stockRepo = manager.getRepository(InventoryStock);
 
-      const po = await this.findPurchaseOrderById(id, manager);
+      const po = await this.findPurchaseOrderById(id, tenantId, manager);
 
       if (po.status === PurchaseOrderStatus.RECEIVED) {
         throw new BadRequestException('Cannot cancel a received PO');
@@ -759,7 +788,7 @@ export class InventoryService {
 
       po.status = PurchaseOrderStatus.CANCELLED;
       await poRepo.save(po);
-      return this.findPurchaseOrderById(id, manager);
+      return this.findPurchaseOrderById(id, tenantId, manager);
     });
   }
 }

@@ -18,7 +18,11 @@ import {
   AiTroubleshootDto,
 } from './dto';
 import { Permissions } from '../auth/decorators/permissions.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('aiAssistant')
 @Controller('ai')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
@@ -28,22 +32,16 @@ export class AiController {
     return this.aiService.checkHealth();
   }
 
-  @Get('models')
-  @Permissions('ai:read')
-  listModels() {
-    return this.aiService.listModels();
-  }
-
   @Post('query')
   @Permissions('ai:read')
-  processQuery(@Body() dto: AiQueryDto) {
-    return this.aiService.processQuery(dto);
+  processQuery(@Body() dto: AiQueryDto, @CurrentUser() user: RequestUser) {
+    return this.aiService.processQuery(dto, user.tenantId);
   }
 
   @Post('chat')
   @Permissions('ai:read')
-  chat(@Body() dto: AiChatDto) {
-    return this.aiService.chat(dto);
+  chat(@Body() dto: AiChatDto, @CurrentUser() user: RequestUser) {
+    return this.aiService.chat(dto, user.tenantId);
   }
 
   @Delete('chat/:conversationId')
@@ -55,25 +53,25 @@ export class AiController {
 
   @Post('summarize-wo')
   @Permissions('ai:read')
-  summarizeWorkOrder(@Body() dto: AiSummarizeWoDto) {
-    return this.aiService.summarizeWorkOrder(dto);
+  summarizeWorkOrder(@Body() dto: AiSummarizeWoDto, @CurrentUser() user: RequestUser) {
+    return this.aiService.summarizeWorkOrder(dto, user.tenantId);
   }
 
   @Post('predict-failure')
   @Permissions('ai:read')
-  predictFailure(@Body() dto: AiFailurePredictionDto) {
-    return this.aiService.predictFailure(dto);
+  predictFailure(@Body() dto: AiFailurePredictionDto, @CurrentUser() user: RequestUser) {
+    return this.aiService.predictFailure(dto, user.tenantId);
   }
 
   @Post('maintenance-recommendation')
   @Permissions('ai:read')
-  getMaintenanceRecommendation(@Body() dto: AiMaintenanceRecommendationDto) {
-    return this.aiService.getMaintenanceRecommendation(dto);
+  getMaintenanceRecommendation(@Body() dto: AiMaintenanceRecommendationDto, @CurrentUser() user: RequestUser) {
+    return this.aiService.getMaintenanceRecommendation(dto, user.tenantId);
   }
 
   @Post('troubleshoot')
   @Permissions('ai:read')
-  troubleshoot(@Body() dto: AiTroubleshootDto) {
-    return this.aiService.troubleshoot(dto);
+  troubleshoot(@Body() dto: AiTroubleshootDto, @CurrentUser() user: RequestUser) {
+    return this.aiService.troubleshoot(dto, user.tenantId);
   }
 }

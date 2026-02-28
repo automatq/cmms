@@ -6,15 +6,18 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { Supplier } from './supplier.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('parts')
-export class Part {
+@Unique(['tenantId', 'sku'])
+export class Part extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column()
   sku: string;
 
   @Column()

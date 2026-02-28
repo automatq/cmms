@@ -12,6 +12,9 @@ import { WorkOrdersService } from './work-orders.service';
 import { WorkOrdersController, WorkRequestsController } from './work-orders.controller';
 import { FilesModule } from '../files/files.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { InventoryModule } from '../inventory/inventory.module';
+import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
+import { TenantModule } from '../../common/tenant/tenant.module';
 
 @Module({
   imports: [
@@ -22,9 +25,12 @@ import { NotificationsModule } from '../notifications/notifications.module';
       WoAttachment,
       WoChecklistResult,
       WorkRequest,
+      ChecklistTemplate,
     ]),
     forwardRef(() => FilesModule),
     forwardRef(() => NotificationsModule),
+    forwardRef(() => InventoryModule),
+    TenantModule,
   ],
   providers: [WorkOrdersService],
   controllers: [WorkOrdersController, WorkRequestsController],

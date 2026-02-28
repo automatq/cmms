@@ -1,0 +1,10 @@
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2 style="color: #1a1a1a;">New Work Request</h2>
+  <p>A new work request has been submitted and needs your review:</p>
+  <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+    <tr><td style="padding: 8px 0; color: #666;">Title</td><td style="padding: 8px 0;">{{title}}</td></tr>
+    {{#if submittedBy}}<tr><td style="padding: 8px 0; color: #666;">Submitted By</td><td style="padding: 8px 0;">{{submittedBy}}</td></tr>{{/if}}
+    {{#if description}}<tr><td style="padding: 8px 0; color: #666;">Description</td><td style="padding: 8px 0;">{{description}}</td></tr>{{/if}}
+  </table>
+  <a href="{{appUrl}}/dashboard/work-orders?tab=requests" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px;">Review Request</a>
+</div>

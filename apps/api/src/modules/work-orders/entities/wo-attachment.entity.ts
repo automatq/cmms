@@ -7,9 +7,10 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { WorkOrder } from './work-order.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('wo_attachments')
-export class WoAttachment {
+export class WoAttachment extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ArrowLeft, BarChart3, Clock, CheckCircle2, DollarSign } from 'lucide-react'
 import Link from 'next/link'
 import { format, subDays } from 'date-fns'
@@ -13,7 +15,7 @@ import { OverviewBarChart, OverviewLineChart, OverviewPieChart } from '../compon
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkOrderReportPage() {
-    const [dateRange] = useState({
+    const [dateRange, setDateRange] = useState({
         startDate: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
         endDate: format(new Date(), 'yyyy-MM-dd'),
     })
@@ -63,6 +65,26 @@ export default function WorkOrderReportPage() {
                         <p className="text-muted-foreground">
                             {format(new Date(dateRange.startDate), 'MMM d, yyyy')} - {format(new Date(dateRange.endDate), 'MMM d, yyyy')}
                         </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="space-y-1">
+                        <Label className="text-xs">From</Label>
+                        <Input
+                            type="date"
+                            value={dateRange.startDate}
+                            onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
+                            className="h-9"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs">To</Label>
+                        <Input
+                            type="date"
+                            value={dateRange.endDate}
+                            onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
+                            className="h-9"
+                        />
                     </div>
                 </div>
             </div>

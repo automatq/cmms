@@ -5,7 +5,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, Between } from 'typeorm';
+import { Repository, DataSource, LessThanOrEqual, Between } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { addDays, addWeeks, addMonths, addYears, startOfDay, endOfDay } from 'date-fns';
@@ -21,6 +21,7 @@ import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { WorkOrderType, Priority } from '../work-orders/entities/work-order.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
 
 @Injectable()
 export class PmService {
@@ -37,13 +38,15 @@ export class PmService {
     private readonly notificationsService: NotificationsService,
     @InjectQueue('pm-scheduler')
     private readonly pmQueue: Queue,
+    private readonly dataSource: DataSource,
   ) {}
 
   // ==================== PM PLAN CRUD ====================
 
-  async create(dto: CreatePmPlanDto): Promise<PmPlan> {
+  async create(dto: CreatePmPlanDto, tenantId: string): Promise<PmPlan> {
     const plan = this.pmPlanRepository.create({
       ...dto,
+      tenantId,
       nextDueAt: dto.nextDueAt ? new Date(dto.nextDueAt) : undefined,
     });
 
@@ -51,12 +54,14 @@ export class PmService {
     return Array.isArray(savedPlan) ? savedPlan[0] : savedPlan;
   }
 
-  async findAll(query: PmQueryDto): Promise<PaginatedResult<PmPlan>> {
+  async findAll(query: PmQueryDto, tenantId: string): Promise<PaginatedResult<PmPlan>> {
     const { page, limit, search, triggerType, assetId, isActive } = query;
 
     const queryBuilder = this.pmPlanRepository
       .createQueryBuilder('pm')
       .leftJoinAndSelect('pm.asset', 'asset');
+
+    queryBuilder.andWhere('pm.tenantId = :tenantId', { tenantId });
 
     if (search) {
       queryBuilder.andWhere('pm.name ILIKE :search', { search: `%${search}%` });
@@ -83,9 +88,9 @@ export class PmService {
     return paginate(data, total, page, limit);
   }
 
-  async findOne(id: string): Promise<PmPlan> {
+  async findOne(id: string, tenantId: string): Promise<PmPlan> {
     const plan = await this.pmPlanRepository.findOne({
-      where: { id },
+      where: { id, tenantId },
       relations: ['asset'],
     });
 
@@ -96,9 +101,9 @@ export class PmService {
     return plan;
   }
 
-  async update(id: string, dto: UpdatePmPlanDto): Promise<PmPlan> {
-    const plan = await this.findOne(id);
-    
+  async update(id: string, dto: UpdatePmPlanDto, tenantId: string): Promise<PmPlan> {
+    const plan = await this.findOne(id, tenantId);
+
     if (dto.nextDueAt) {
       dto.nextDueAt = new Date(dto.nextDueAt).toISOString();
     }
@@ -107,23 +112,24 @@ export class PmService {
     return this.pmPlanRepository.save(plan);
   }
 
-  async toggleActive(id: string): Promise<PmPlan> {
-    const plan = await this.findOne(id);
+  async toggleActive(id: string, tenantId: string): Promise<PmPlan> {
+    const plan = await this.findOne(id, tenantId);
     plan.isActive = !plan.isActive;
     return this.pmPlanRepository.save(plan);
   }
 
-  async delete(id: string): Promise<void> {
-    const plan = await this.findOne(id);
+  async delete(id: string, tenantId: string): Promise<void> {
+    const plan = await this.findOne(id, tenantId);
     await this.pmPlanRepository.remove(plan);
   }
 
   // ==================== SCHEDULING ====================
 
-  async getDueToday(): Promise<PmPlan[]> {
+  async getDueToday(tenantId: string): Promise<PmPlan[]> {
     const today = new Date();
     return this.pmPlanRepository.find({
       where: {
+        tenantId,
         isActive: true,
         nextDueAt: Between(startOfDay(today), endOfDay(today)),
       },
@@ -131,11 +137,12 @@ export class PmService {
     });
   }
 
-  async getDueThisWeek(): Promise<PmPlan[]> {
+  async getDueThisWeek(tenantId: string): Promise<PmPlan[]> {
     const today = new Date();
     const weekEnd = addDays(today, 7);
     return this.pmPlanRepository.find({
       where: {
+        tenantId,
         isActive: true,
         nextDueAt: Between(startOfDay(today), endOfDay(weekEnd)),
       },
@@ -144,10 +151,11 @@ export class PmService {
     });
   }
 
-  async getOverdue(): Promise<PmPlan[]> {
+  async getOverdue(tenantId: string): Promise<PmPlan[]> {
     const today = new Date();
     return this.pmPlanRepository.find({
       where: {
+        tenantId,
         isActive: true,
         nextDueAt: LessThanOrEqual(startOfDay(today)),
       },
@@ -158,8 +166,8 @@ export class PmService {
 
   // ==================== TRIGGER ====================
 
-  async triggerNow(id: string, userId: string): Promise<{ woId: string }> {
-    const plan = await this.findOne(id);
+  async triggerNow(id: string, userId: string, tenantId: string): Promise<{ woId: string }> {
+    const plan = await this.findOne(id, tenantId);
 
     // Create work order from PM plan
     const workOrder = await this.workOrdersService.create(
@@ -175,12 +183,14 @@ export class PmService {
         checklistTemplateId: plan.checklistTemplateId,
       },
       userId,
+      tenantId,
     );
 
     // Record history
     await this.historyRepository.save({
       pmPlanId: plan.id,
       woId: workOrder.id,
+      tenantId,
       dueAt: plan.nextDueAt || new Date(),
     });
 
@@ -190,7 +200,7 @@ export class PmService {
     await this.pmPlanRepository.save(plan);
 
     // Notify assigned users
-    await this.notificationsService.onPmDue(plan, plan.assignedTo);
+    await this.notificationsService.onPmDue(plan, plan.assignedTo, tenantId);
 
     return { woId: workOrder.id };
   }
@@ -210,69 +220,93 @@ export class PmService {
       },
     });
 
+    // Group by tenantId for proper RLS context
+    const plansByTenant = new Map<string, PmPlan[]>();
     for (const plan of duePlans) {
-      try {
-        // Check if we already have an open WO for this PM
-        const existingWo = await this.workOrdersService.findAll({
-          page: 1,
-          limit: 1,
-          pmPlanId: plan.id,
-          status: ['open', 'in_progress', 'on_hold'] as any,
-        });
+      const existing = plansByTenant.get(plan.tenantId) || [];
+      existing.push(plan);
+      plansByTenant.set(plan.tenantId, existing);
+    }
 
-        if (existingWo.total > 0) {
-          skipped++;
-          continue;
-        }
+    for (const [tenantId, plans] of plansByTenant) {
+      // Set RLS context for this tenant
+      await this.dataSource.query(
+        `SELECT set_config('app.current_tenant_id', $1, false)`,
+        [tenantId],
+      );
 
-        // Create work order
-        const workOrder = await this.workOrdersService.create(
-          {
-            title: `PM: ${plan.name}`,
-            description: plan.description,
-            type: WorkOrderType.PREVENTIVE,
-            priority: plan.priority as Priority,
-            assetId: plan.assetId,
-            assignedTo: plan.assignedTo,
-            estimatedHours: plan.estimatedHours,
+      for (const plan of plans) {
+        try {
+          // Check if we already have an open WO for this PM
+          const existingWo = await this.workOrdersService.findAll({
+            page: 1,
+            limit: 1,
             pmPlanId: plan.id,
-            checklistTemplateId: plan.checklistTemplateId,
-          },
-          'system', // Created by system
-        );
+            status: ['open', 'in_progress', 'on_hold'] as any,
+          }, tenantId);
 
-        // Record history
-        await this.historyRepository.save({
-          pmPlanId: plan.id,
-          woId: workOrder.id,
-          dueAt: plan.nextDueAt,
-        });
+          if (existingWo.total > 0) {
+            skipped++;
+            continue;
+          }
 
-        // Update next due date
-        plan.lastTriggeredAt = new Date();
-        plan.nextDueAt = this.calculateNextDueDate(plan);
-        await this.pmPlanRepository.save(plan);
+          // Create work order
+          const workOrder = await this.workOrdersService.create(
+            {
+              title: `PM: ${plan.name}`,
+              description: plan.description,
+              type: WorkOrderType.PREVENTIVE,
+              priority: plan.priority as Priority,
+              assetId: plan.assetId,
+              assignedTo: plan.assignedTo,
+              estimatedHours: plan.estimatedHours,
+              pmPlanId: plan.id,
+              checklistTemplateId: plan.checklistTemplateId,
+            },
+            'system',
+            tenantId,
+          );
 
-        // Notify
-        await this.notificationsService.onPmDue(plan, plan.assignedTo);
+          // Record history
+          await this.historyRepository.save({
+            pmPlanId: plan.id,
+            tenantId,
+            woId: workOrder.id,
+            dueAt: plan.nextDueAt,
+          });
 
-        triggered++;
-      } catch (error) {
-        console.error(`Failed to trigger PM ${plan.id}:`, error);
-        skipped++;
+          // Update next due date
+          plan.lastTriggeredAt = new Date();
+          plan.nextDueAt = this.calculateNextDueDate(plan);
+          await this.pmPlanRepository.save(plan);
+
+          // Notify
+          await this.notificationsService.onPmDue(plan, plan.assignedTo, tenantId);
+
+          triggered++;
+        } catch (error) {
+          console.error(`Failed to trigger PM ${plan.id}:`, error);
+          skipped++;
+        }
       }
     }
+
+    // Clear RLS context
+    await this.dataSource.query(
+      `SELECT set_config('app.current_tenant_id', '', false)`,
+    );
 
     return { triggered, skipped };
   }
 
-  async checkMeterTriggers(assetId: string, newReading: number): Promise<string[]> {
+  async checkMeterTriggers(assetId: string, newReading: number, tenantId: string): Promise<string[]> {
     const createdWoIds: string[] = [];
 
     // Find meter-based PM plans for this asset
     const plans = await this.pmPlanRepository.find({
       where: {
         assetId,
+        tenantId,
         triggerType: TriggerType.METER,
         isActive: true,
       },
@@ -296,6 +330,7 @@ export class PmService {
             checklistTemplateId: plan.checklistTemplateId,
           },
           'system',
+          tenantId,
         );
 
         plan.lastMeterReading = newReading;
@@ -333,41 +368,67 @@ export class PmService {
 
   // ==================== CHECKLIST TEMPLATES ====================
 
-  async createTemplate(dto: CreateChecklistTemplateDto): Promise<ChecklistTemplate> {
-    const template = this.templateRepository.create(dto);
+  async createTemplate(dto: CreateChecklistTemplateDto, tenantId: string): Promise<ChecklistTemplate> {
+    const template = this.templateRepository.create({ ...dto, tenantId });
     return this.templateRepository.save(template);
   }
 
-  async findAllTemplates(): Promise<ChecklistTemplate[]> {
+  async findAllTemplates(tenantId: string): Promise<ChecklistTemplate[]> {
     return this.templateRepository.find({
+      where: { tenantId },
       order: { name: 'ASC' },
     });
   }
 
-  async findOneTemplate(id: string): Promise<ChecklistTemplate> {
-    const template = await this.templateRepository.findOne({ where: { id } });
+  async findOneTemplate(id: string, tenantId: string): Promise<ChecklistTemplate> {
+    const template = await this.templateRepository.findOne({ where: { id, tenantId } });
     if (!template) {
       throw new NotFoundException(`Checklist template with ID ${id} not found`);
     }
     return template;
   }
 
-  async updateTemplate(id: string, dto: UpdateChecklistTemplateDto): Promise<ChecklistTemplate> {
-    const template = await this.findOneTemplate(id);
+  async updateTemplate(id: string, dto: UpdateChecklistTemplateDto, tenantId: string): Promise<ChecklistTemplate> {
+    const template = await this.findOneTemplate(id, tenantId);
     Object.assign(template, dto);
     return this.templateRepository.save(template);
   }
 
-  async deleteTemplate(id: string): Promise<void> {
-    const template = await this.findOneTemplate(id);
+  async deleteTemplate(id: string, tenantId: string): Promise<void> {
+    const template = await this.findOneTemplate(id, tenantId);
     await this.templateRepository.remove(template);
+  }
+
+  // ==================== TEMPLATE LIBRARY ====================
+
+  async getLibraryTemplates(): Promise<SeedTemplate[]> {
+    return SEED_TEMPLATES;
+  }
+
+  async importLibraryTemplate(index: number, tenantId: string): Promise<ChecklistTemplate> {
+    if (index < 0 || index >= SEED_TEMPLATES.length) {
+      throw new NotFoundException('Library template not found');
+    }
+
+    const seed = SEED_TEMPLATES[index];
+    const template = this.templateRepository.create({
+      name: seed.name,
+      description: seed.description,
+      category: seed.category,
+      items: seed.items,
+      isLibrary: false,
+      tenantId,
+    });
+
+    return this.templateRepository.save(template);
   }
 
   // ==================== PM COMPLIANCE ====================
 
-  async getComplianceRate(from: Date, to: Date): Promise<number> {
+  async getComplianceRate(from: Date, to: Date, tenantId: string): Promise<number> {
     const history = await this.historyRepository.find({
       where: {
+        tenantId,
         triggeredAt: Between(from, to),
       },
     });
@@ -378,9 +439,9 @@ export class PmService {
     return Math.round((onTime / history.length) * 100);
   }
 
-  async getHistory(pmPlanId: string): Promise<PmHistory[]> {
+  async getHistory(pmPlanId: string, tenantId: string): Promise<PmHistory[]> {
     return this.historyRepository.find({
-      where: { pmPlanId },
+      where: { pmPlanId, tenantId },
       order: { triggeredAt: 'DESC' },
       take: 50,
     });

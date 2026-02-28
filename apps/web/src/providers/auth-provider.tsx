@@ -1,15 +1,15 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react'
-import Keycloak, { KeycloakConfig } from 'keycloak-js'
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { Auth0Provider, useAuth0 } from '@auth0/auth0-react'
 import { api } from '@/lib/api'
 
 interface User {
   id: string
-  email?: string
-  firstName?: string
-  lastName?: string
-  username?: string
+  email: string
+  firstName: string
+  lastName: string
+  username: string
   roles: string[]
 }
 
@@ -20,7 +20,6 @@ interface AuthContextType {
   token: string | null
   login: () => void
   logout: () => void
-  hasRole: (role: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -28,99 +27,65 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   user: null,
   token: null,
-  login: () => { },
-  logout: () => { },
-  hasRole: () => false,
+  login: () => {},
+  logout: () => {},
 })
 
-const keycloakConfig: KeycloakConfig = {
-  url: process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'http://localhost/auth',
-  realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'cmms',
-  clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || 'cmms-web',
+export function useAuth() {
+  return useContext(AuthContext)
 }
 
-let keycloakInstance: Keycloak | null = null
-
-function extractUserFromToken(kc: Keycloak): User {
-  const parsed = kc.tokenParsed as any
-  return {
-    id: kc.subject || parsed?.sub || '',
-    email: parsed?.email,
-    firstName: parsed?.given_name,
-    lastName: parsed?.family_name,
-    username: parsed?.preferred_username,
-    roles: kc.realmAccess?.roles || [],
-  }
-}
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+function AuthProviderInner({ children }: { children: React.ReactNode }) {
+  const {
+    isAuthenticated,
+    isLoading,
+    user: auth0User,
+    getAccessTokenSilently,
+    loginWithRedirect,
+    logout: auth0Logout,
+  } = useAuth0()
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
-  const initialized = useRef(false)
 
   useEffect(() => {
-    if (typeof window === 'undefined' || initialized.current) return
-    initialized.current = true
+    const getToken = async () => {
+      if (isAuthenticated && auth0User) {
+        try {
+          const accessToken = await getAccessTokenSilently()
+          setToken(accessToken)
+          api.setToken(accessToken)
 
-    const initKeycloak = async () => {
-      try {
-        keycloakInstance = new Keycloak(keycloakConfig)
-
-        const authenticated = await keycloakInstance.init({
-          onLoad: 'check-sso',
-          checkLoginIframe: false,
-          pkceMethod: 'S256',
-        })
-
-        if (authenticated && keycloakInstance.token) {
-          setIsAuthenticated(true)
-          setToken(keycloakInstance.token)
-          api.setToken(keycloakInstance.token)
-          setUser(extractUserFromToken(keycloakInstance))
-
-          // Token refresh interval
-          setInterval(async () => {
-            try {
-              const refreshed = await keycloakInstance?.updateToken(30)
-              if (refreshed && keycloakInstance?.token) {
-                setToken(keycloakInstance.token)
-                api.setToken(keycloakInstance.token)
-              }
-            } catch {
-              setIsAuthenticated(false)
-              setUser(null)
-              setToken(null)
-              api.setToken(null)
-            }
-          }, 60000)
+          setUser({
+            id: auth0User.sub || '',
+            email: auth0User.email || '',
+            firstName: auth0User.given_name || '',
+            lastName: auth0User.family_name || '',
+            username: auth0User.nickname || auth0User.email || '',
+            roles: [],
+          })
+        } catch (error) {
+          console.error('Error getting access token:', error)
         }
-      } catch (error) {
-        console.error('Keycloak init error:', error)
-      } finally {
-        setIsLoading(false)
       }
     }
 
-    initKeycloak()
-  }, [])
+    getToken()
+  }, [isAuthenticated, auth0User, getAccessTokenSilently])
 
-  const login = useCallback(() => {
-    keycloakInstance?.login()
-  }, [])
+  const login = () => {
+    loginWithRedirect()
+  }
 
-  const logout = useCallback(() => {
-    keycloakInstance?.logout({ redirectUri: window.location.origin })
-    setIsAuthenticated(false)
-    setUser(null)
-    setToken(null)
+  const logout = () => {
     api.setToken(null)
-  }, [])
-
-  const hasRole = useCallback((role: string): boolean => {
-    return keycloakInstance?.hasRealmRole(role) || false
-  }, [])
+    setToken(null)
+    setUser(null)
+    auth0Logout({
+      logoutParams: {
+        returnTo: window.location.origin,
+      },
+    })
+  }
 
   return (
     <AuthContext.Provider
@@ -131,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         login,
         logout,
-        hasRole,
       }}
     >
       {children}
@@ -139,4 +103,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export const useAuth = () => useContext(AuthContext)
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN || ''
+  const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || ''
+  const audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || ''
+  const organization = process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION || undefined
+
+  return (
+    <Auth0Provider
+      domain={domain}
+      clientId={clientId}
+      authorizationParams={{
+        redirect_uri: typeof window !== 'undefined' ? window.location.origin : '',
+        audience,
+        organization,
+        scope: 'openid profile email',
+      }}
+      cacheLocation="localstorage"
+    >
+      <AuthProviderInner>{children}</AuthProviderInner>
+    </Auth0Provider>
+  )
+}

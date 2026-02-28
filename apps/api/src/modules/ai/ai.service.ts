@@ -1,5 +1,4 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkOrder } from '../work-orders/entities/work-order.entity';
@@ -13,74 +12,55 @@ import {
   AiMaintenanceRecommendationDto,
   AiTroubleshootDto,
 } from './dto';
+import { AiProvider, AI_PROVIDER, ChatMessage } from './providers/ai-provider.interface';
 
 interface ConversationContext {
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+  messages: ChatMessage[];
   lastUsed: Date;
 }
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private readonly ollamaBaseUrl: string;
-  private readonly defaultModel: string;
   private conversationCache = new Map<string, ConversationContext>();
 
   constructor(
-    private configService: ConfigService,
+    @Inject(AI_PROVIDER)
+    private readonly provider: AiProvider,
     @InjectRepository(WorkOrder)
     private workOrderRepo: Repository<WorkOrder>,
     @InjectRepository(Asset)
     private assetRepo: Repository<Asset>,
-  ) {
-    this.ollamaBaseUrl = this.configService.get('OLLAMA_BASE_URL', 'http://ollama:11434');
-    this.defaultModel = this.configService.get('OLLAMA_MODEL', 'llama3.2');
-  }
+  ) {}
 
-  private async callOllama(
+  private async callAi(
     prompt: string,
     systemPrompt?: string,
     temperature = 0.7,
   ): Promise<string> {
     try {
-      const messages: Array<{ role: string; content: string }> = [];
+      const messages: ChatMessage[] = [];
       if (systemPrompt) {
         messages.push({ role: 'system', content: systemPrompt });
       }
       messages.push({ role: 'user', content: prompt });
 
-      const response = await fetch(`${this.ollamaBaseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: this.defaultModel,
-          messages,
-          stream: false,
-          options: { temperature },
-        }),
-      });
-
-      if (!response.ok) {
-        throw new HttpException('AI service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
-      }
-
-      const data = await response.json() as any;
-      return data.message?.content || '';
+      return await this.provider.chat(messages, { temperature });
     } catch (error: any) {
       if (error instanceof HttpException) throw error;
-      this.logger.error(`Ollama error: ${error?.message || 'Unknown'}`);
+      this.logger.error(`AI provider error: ${error?.message || 'Unknown'}`);
       throw new HttpException('AI service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
     }
   }
 
-  async processQuery(dto: AiQueryDto): Promise<{ result: string; taskType: AiTaskType }> {
+  async processQuery(dto: AiQueryDto, tenantId: string): Promise<{ result: string; taskType: AiTaskType }> {
     switch (dto.taskType) {
       case AiTaskType.SUMMARIZE_WO:
         if (!dto.workOrderId) {
           throw new HttpException('workOrderId required', HttpStatus.BAD_REQUEST);
         }
         return {
-          result: await this.summarizeWorkOrder({ workOrderId: dto.workOrderId }),
+          result: await this.summarizeWorkOrder({ workOrderId: dto.workOrderId }, tenantId),
           taskType: dto.taskType,
         };
 
@@ -89,7 +69,7 @@ export class AiService {
           throw new HttpException('assetId required', HttpStatus.BAD_REQUEST);
         }
         return {
-          result: await this.predictFailure({ assetId: dto.assetId }),
+          result: await this.predictFailure({ assetId: dto.assetId }, tenantId),
           taskType: dto.taskType,
         };
 
@@ -98,7 +78,7 @@ export class AiService {
           throw new HttpException('assetId required', HttpStatus.BAD_REQUEST);
         }
         return {
-          result: await this.getMaintenanceRecommendation({ assetId: dto.assetId, symptoms: dto.query }),
+          result: await this.getMaintenanceRecommendation({ assetId: dto.assetId, symptoms: dto.query }, tenantId),
           taskType: dto.taskType,
         };
 
@@ -107,7 +87,7 @@ export class AiService {
           throw new HttpException('query required', HttpStatus.BAD_REQUEST);
         }
         return {
-          result: await this.troubleshoot({ assetId: dto.assetId, problemDescription: dto.query }),
+          result: await this.troubleshoot({ assetId: dto.assetId, problemDescription: dto.query }, tenantId),
           taskType: dto.taskType,
         };
 
@@ -122,9 +102,10 @@ export class AiService {
     }
   }
 
-  async chat(dto: AiChatDto): Promise<{ response: string; conversationId: string }> {
-    const conversationId = dto.conversationId || `conv_${Date.now()}`;
-    let context = this.conversationCache.get(conversationId);
+  async chat(dto: AiChatDto, tenantId: string): Promise<{ response: string; conversationId: string }> {
+    const conversationId = dto.conversationId || `conv_${tenantId}_${Date.now()}`;
+    const cacheKey = `${tenantId}:${conversationId}`;
+    let context = this.conversationCache.get(cacheKey);
 
     if (!context) {
       context = {
@@ -139,27 +120,14 @@ export class AiService {
     context.messages.push({ role: 'user', content: dto.message });
 
     try {
-      const response = await fetch(`${this.ollamaBaseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: this.defaultModel,
-          messages: context.messages,
-          stream: false,
-          options: { temperature: dto.temperature ?? 0.7 },
-        }),
-      });
-
-      if (!response.ok) {
-        throw new HttpException('AI service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
-      }
-
-      const data = await response.json() as any;
-      const assistantMessage = data.message?.content || '';
+      const assistantMessage = await this.provider.chat(
+        context.messages,
+        { temperature: dto.temperature ?? 0.7 },
+      );
 
       context.messages.push({ role: 'assistant', content: assistantMessage });
       context.lastUsed = new Date();
-      this.conversationCache.set(conversationId, context);
+      this.conversationCache.set(cacheKey, context);
 
       return { response: assistantMessage, conversationId };
     } catch (error: any) {
@@ -168,9 +136,9 @@ export class AiService {
     }
   }
 
-  async summarizeWorkOrder(dto: AiSummarizeWoDto): Promise<string> {
+  async summarizeWorkOrder(dto: AiSummarizeWoDto, tenantId: string): Promise<string> {
     const wo = await this.workOrderRepo.findOne({
-      where: { id: dto.workOrderId },
+      where: { id: dto.workOrderId, tenantId },
       relations: ['asset'],
     });
 
@@ -189,12 +157,12 @@ Description: ${wo.description || 'No description'}
 
 Provide a brief 2-3 sentence summary.`;
 
-    return this.callOllama(prompt, 'You are a maintenance management assistant.', 0.3);
+    return this.callAi(prompt, 'You are a maintenance management assistant.', 0.3);
   }
 
-  async predictFailure(dto: AiFailurePredictionDto): Promise<string> {
+  async predictFailure(dto: AiFailurePredictionDto, tenantId: string): Promise<string> {
     const asset = await this.assetRepo.findOne({
-      where: { id: dto.assetId },
+      where: { id: dto.assetId, tenantId },
       relations: ['category'],
     });
 
@@ -203,7 +171,7 @@ Provide a brief 2-3 sentence summary.`;
     }
 
     const recentWOs = await this.workOrderRepo.find({
-      where: { assetId: dto.assetId },
+      where: { assetId: dto.assetId, tenantId },
       order: { createdAt: 'DESC' },
       take: 10,
     });
@@ -218,12 +186,12 @@ ${recentWOs.map(wo => `- ${wo.type}: ${wo.title}`).join('\n')}
 
 Predict likely failures and recommend preventive actions.`;
 
-    return this.callOllama(prompt, 'You are a predictive maintenance analyst.', 0.5);
+    return this.callAi(prompt, 'You are a predictive maintenance analyst.', 0.5);
   }
 
-  async getMaintenanceRecommendation(dto: AiMaintenanceRecommendationDto): Promise<string> {
+  async getMaintenanceRecommendation(dto: AiMaintenanceRecommendationDto, tenantId: string): Promise<string> {
     const asset = await this.assetRepo.findOne({
-      where: { id: dto.assetId },
+      where: { id: dto.assetId, tenantId },
       relations: ['category'],
     });
 
@@ -240,18 +208,18 @@ ${dto.symptoms ? `Symptoms: ${dto.symptoms}` : ''}
 
 Recommend inspection items, maintenance tasks, and safety precautions.`;
 
-    return this.callOllama(prompt, 'You are a maintenance expert.', 0.4);
+    return this.callAi(prompt, 'You are a maintenance expert.', 0.4);
   }
 
-  async troubleshoot(dto: AiTroubleshootDto): Promise<string> {
+  async troubleshoot(dto: AiTroubleshootDto, tenantId: string): Promise<string> {
     let assetContext = '';
-    
+
     if (dto.assetId) {
       const asset = await this.assetRepo.findOne({
-        where: { id: dto.assetId },
+        where: { id: dto.assetId, tenantId },
         relations: ['category'],
       });
-      
+
       if (asset) {
         assetContext = `Asset: ${asset.name} (${asset.assetNumber})\nCategory: ${asset.category?.name || 'Unknown'}`;
       }
@@ -264,37 +232,19 @@ ${assetContext}
 
 Provide step-by-step troubleshooting guide with safety precautions.`;
 
-    return this.callOllama(prompt, 'You are a maintenance troubleshooting assistant.', 0.4);
+    return this.callAi(prompt, 'You are a maintenance troubleshooting assistant.', 0.4);
   }
 
   async processNaturalLanguageQuery(query: string): Promise<string> {
-    return this.callOllama(
+    return this.callAi(
       query,
       'You are a CMMS assistant. Answer maintenance-related questions concisely.',
-      0.6
+      0.6,
     );
   }
 
-  async checkHealth(): Promise<{ status: string; model: string }> {
-    try {
-      const response = await fetch(`${this.ollamaBaseUrl}/api/tags`);
-      return { status: response.ok ? 'healthy' : 'unhealthy', model: this.defaultModel };
-    } catch {
-      return { status: 'unavailable', model: this.defaultModel };
-    }
-  }
-
-  async listModels(): Promise<string[]> {
-    try {
-      const response = await fetch(`${this.ollamaBaseUrl}/api/tags`);
-      if (response.ok) {
-        const data = await response.json() as any;
-        return data.models?.map((m: any) => m.name) || [];
-      }
-      return [];
-    } catch {
-      return [];
-    }
+  async checkHealth(): Promise<{ status: string; provider: string; model: string }> {
+    return this.provider.checkHealth();
   }
 
   clearConversation(conversationId: string): boolean {

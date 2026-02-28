@@ -4,7 +4,7 @@ version: '3.9'
 # This file uses pre-built images from a private registry
 #
 # Usage:
-#   1. Set environment variables (see .env.example)
+#   1. Set environment variables (see .env.production.example)
 #   2. Update image paths below to match your registry
 #   3. Run: docker compose -f docker-compose.prod.yml up -d
 
@@ -39,18 +39,25 @@ services:
       DB_SYNCHRONIZE: "false"
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: cmms-files
-      KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_REALM: cmms
-      KEYCLOAK_CLIENT_ID: cmms-api
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      AUTH0_CLIENT_ID: ${AUTH0_CLIENT_ID}
+      AUTH0_CLIENT_SECRET: ${AUTH0_CLIENT_SECRET}
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
       OLLAMA_URL: http://ollama:11434
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       JWT_SECRET: ${JWT_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      CORS_ORIGINS: ${PUBLIC_URL}
       PORT: 4000
     depends_on:
       postgres:
@@ -74,11 +81,14 @@ services:
       DB_DATABASE: ${POSTGRES_DB}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
       OLLAMA_URL: http://ollama:11434
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
     depends_on:
@@ -93,10 +103,10 @@ services:
     image: cb37/cmms:web-0.1.2
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api
-      NEXT_PUBLIC_KEYCLOAK_URL: ${PUBLIC_URL}/auth
-      NEXT_PUBLIC_KEYCLOAK_REALM: cmms
-      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: cmms-web
+      NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api/v1
+      NEXT_PUBLIC_AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      NEXT_PUBLIC_AUTH0_CLIENT_ID: ${AUTH0_CLIENT_ID}
+      NEXT_PUBLIC_AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
     networks:
       - cmms-network
 
@@ -132,33 +142,6 @@ services:
     networks:
       - cmms-network
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    restart: unless-stopped
-    command: start --import-realm
-    environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      KC_DB_USERNAME: ${POSTGRES_USER}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HOSTNAME_URL: ${PUBLIC_URL}/auth
-      KC_HTTP_RELATIVE_PATH: /auth
-      KC_PROXY: edge
-    volumes:
-      - ./infrastructure/keycloak:/opt/keycloak/data/import:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/auth/health/ready || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-    networks:
-      - cmms-network
-
   minio:
     image: minio/minio:latest
     restart: unless-stopped
@@ -176,23 +159,6 @@ services:
     networks:
       - cmms-network
 
-  # Optional: Mail server for production email
-  # Uncomment and configure for production use
-  # mailpit:
-  #   image: axllent/mailpit:latest
-  #   restart: unless-stopped
-  #   volumes:
-  #     - mailpit_data:/data
-  #   environment:
-  #     MP_MAX_MESSAGES: 5000
-  #     MP_DATABASE: /data/mailpit.db
-  #     MP_SMTP_AUTH_ACCEPT_ANY: 1
-  #     MP_SMTP_AUTH_ALLOW_INSECURE: 1
-  #   networks:
-  #     - cmms-network
-
-  # Optional: AI features with Ollama
-  # Enable with: docker compose -f docker-compose.prod.yml --profile ai up -d
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
@@ -211,7 +177,6 @@ volumes:
   caddy_config:
   api_uploads:
   ollama_models:
-  # mailpit_data:
 
 networks:
   cmms-network:

@@ -7,11 +7,13 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { Location } from './location.entity';
 import { AssetCategory } from './asset-category.entity';
 import { AssetMeter } from './asset-meter.entity';
 import { AssetDocument } from './asset-document.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum AssetStatus {
   ACTIVE = 'active',
@@ -29,11 +31,12 @@ export enum MeterType {
 }
 
 @Entity('assets')
-export class Asset {
+@Unique(['tenantId', 'assetNumber'])
+export class Asset extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true, name: 'asset_number' })
+  @Column({ name: 'asset_number' })
   assetNumber: string;
 
   @Column()

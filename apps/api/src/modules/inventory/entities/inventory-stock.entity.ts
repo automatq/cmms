@@ -9,10 +9,11 @@ import {
 } from 'typeorm';
 import { Part } from './part.entity';
 import { Storeroom } from './storeroom.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('inventory_stock')
-@Unique(['partId', 'storeroomId'])
-export class InventoryStock {
+@Unique(['tenantId', 'partId', 'storeroomId'])
+export class InventoryStock extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

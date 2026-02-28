@@ -1,18 +1,24 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
-import { Plus, Search, Package, MapPin, Tag, Image as ImageIcon } from 'lucide-react'
+import { Plus, Search, Package, MapPin, Tag, Image as ImageIcon, GitBranch, LayoutGrid, ChevronRight, ChevronDown, Download, Upload } from 'lucide-react'
 import { useState } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { CsvImportDialog } from '@/components/csv-import-dialog'
+import { toast } from 'sonner'
 
 export default function AssetsPage() {
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [viewMode, setViewMode] = useState<'grid' | 'hierarchy'>('grid')
+  const [showImport, setShowImport] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['assets', search, page],
@@ -22,8 +28,30 @@ export default function AssetsPage() {
     },
   })
 
+  const { data: hierarchyData } = useQuery({
+    queryKey: ['asset-hierarchy'],
+    queryFn: async () => {
+      const res = await api.getAssetHierarchy()
+      return res.data
+    },
+    enabled: viewMode === 'hierarchy',
+  })
+
   const assets = data?.data || []
   const total = data?.total || 0
+
+  const handleExportCsv = async () => {
+    try {
+      const res = await api.exportAssetsCsv()
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'assets.csv'; a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Assets exported')
+    } catch {
+      toast.error('Failed to export assets')
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -35,12 +63,30 @@ export default function AssetsPage() {
             Manage your equipment, machinery, and facilities
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/assets/new">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Asset
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportCsv}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import
+          </Button>
+          <div className="flex border rounded-md">
+            <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('grid')} className="rounded-r-none">
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === 'hierarchy' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('hierarchy')} className="rounded-l-none">
+              <GitBranch className="h-4 w-4" />
+            </Button>
+          </div>
+          <Button asChild>
+            <Link href="/dashboard/assets/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Asset
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -56,14 +102,32 @@ export default function AssetsPage() {
         </div>
       </div>
 
+      {/* Hierarchy View */}
+      {viewMode === 'hierarchy' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Asset Hierarchy</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!hierarchyData ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : (
+              <AssetTree nodes={Array.isArray(hierarchyData) ? hierarchyData : []} />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Assets Grid */}
-      {isLoading ? (
+      {viewMode === 'grid' && isLoading ? (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {[...Array(8)].map((_, i) => (
             <Skeleton key={i} className="h-[280px] w-full rounded-xl" />
           ))}
         </div>
-      ) : assets.length === 0 ? (
+      ) : viewMode === 'grid' && assets.length === 0 ? (
         <Card className="border-dashed mb-8">
           <CardContent className="flex flex-col items-center justify-center py-16">
             <div className="h-16 w-16 bg-muted/50 rounded-full flex items-center justify-center mb-4">
@@ -81,7 +145,7 @@ export default function AssetsPage() {
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {assets.map((asset: any) => {
@@ -198,6 +262,72 @@ export default function AssetsPage() {
             </div>
           )}
         </>
+      ) : null}
+
+      <CsvImportDialog
+        open={showImport}
+        onOpenChange={setShowImport}
+        title="Import Assets"
+        onImport={(file) => api.importAssetsCsv(file)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['assets'] })}
+      />
+    </div>
+  )
+}
+
+function AssetTree({ nodes }: { nodes: any[] }) {
+  if (nodes.length === 0) {
+    return <p className="text-muted-foreground text-sm">No asset hierarchy data available. Assets with parent relationships will appear here.</p>
+  }
+  return (
+    <div className="space-y-1">
+      {nodes.map((node: any) => (
+        <AssetTreeNode key={node.id} node={node} depth={0} />
+      ))}
+    </div>
+  )
+}
+
+function AssetTreeNode({ node, depth }: { node: any; depth: number }) {
+  const [expanded, setExpanded] = useState(depth < 2)
+  const children = node.children || []
+  const hasChildren = children.length > 0
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 cursor-pointer group"
+        style={{ paddingLeft: `${depth * 20 + 8}px` }}
+      >
+        {hasChildren ? (
+          <button onClick={() => setExpanded(!expanded)} className="shrink-0">
+            {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          </button>
+        ) : (
+          <span className="w-4" />
+        )}
+        <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+        <Link href={`/dashboard/assets/${node.id}`} className="flex-1 flex items-center gap-2 min-w-0">
+          <span className="text-sm font-medium truncate group-hover:text-primary transition-colors">{node.name}</span>
+          {node.assetNumber && (
+            <span className="text-xs text-muted-foreground font-mono">{node.assetNumber}</span>
+          )}
+        </Link>
+        {node.status && (
+          <Badge variant={node.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
+            {node.status.replace('_', ' ')}
+          </Badge>
+        )}
+        {hasChildren && (
+          <span className="text-xs text-muted-foreground">{children.length}</span>
+        )}
+      </div>
+      {expanded && hasChildren && (
+        <div>
+          {children.map((child: any) => (
+            <AssetTreeNode key={child.id} node={child} depth={depth + 1} />
+          ))}
+        </div>
       )}
     </div>
   )

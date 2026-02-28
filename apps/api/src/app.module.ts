@@ -2,12 +2,16 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
 // Auth
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
+
+// Tenant
+import { TenantModule } from './common/tenant/tenant.module';
 
 // Feature Modules
 import { UsersModule } from './modules/users/users.module';
@@ -19,6 +23,11 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { FilesModule } from './modules/files/files.module';
 import { AiModule } from './modules/ai/ai.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { ActivityModule } from './modules/activity/activity.module';
+import { FeatureGateGuard } from './common/guards/feature-gate.guard';
+import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
 
 @Module({
   imports: [
@@ -40,9 +49,13 @@ import { ReportsModule } from './modules/reports/reports.module';
         password: config.get('DB_PASSWORD', 'cmms'),
         database: config.get('DB_DATABASE', 'cmms'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: config.get('DB_SYNCHRONIZE', 'false') === 'true',
+        migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
+        migrationsRun: true,
+        synchronize: false,
         logging: config.get('DB_LOGGING', 'false') === 'true',
-        ssl: config.get('DB_SSL', 'false') === 'true' ? { rejectUnauthorized: false } : false,
+        ssl: config.get('DB_SSL', 'false') === 'true'
+          ? { rejectUnauthorized: config.get('DB_SSL_REJECT_UNAUTHORIZED', 'true') === 'true' }
+          : false,
       }),
     }),
 
@@ -59,8 +72,17 @@ import { ReportsModule } from './modules/reports/reports.module';
       }),
     }),
 
+    // Rate Limiting
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 100,
+    }]),
+
     // Auth
     AuthModule,
+
+    // Tenant (must be before feature modules so middleware runs first)
+    TenantModule,
 
     // Feature Modules
     UsersModule,
@@ -72,6 +94,9 @@ import { ReportsModule } from './modules/reports/reports.module';
     FilesModule,
     AiModule,
     ReportsModule,
+    BillingModule,
+    RealtimeModule,
+    ActivityModule,
   ],
   providers: [
     // Global Guards
@@ -82,6 +107,14 @@ import { ReportsModule } from './modules/reports/reports.module';
     {
       provide: APP_GUARD,
       useClass: PermissionsGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: TenantThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: FeatureGateGuard,
     },
   ],
 })

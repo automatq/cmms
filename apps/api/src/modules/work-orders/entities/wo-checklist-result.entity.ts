@@ -8,9 +8,10 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { WorkOrder } from './work-order.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('wo_checklist_results')
-export class WoChecklistResult {
+export class WoChecklistResult extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

@@ -5,15 +5,18 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToMany,
+  Unique,
 } from 'typeorm';
 import { User } from './user.entity';
+import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 @Entity('roles')
-export class Role {
+@Unique(['tenantId', 'name'])
+export class Role extends TenantAwareEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column()
   name: string;
 
   @Column({ nullable: true })

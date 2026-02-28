@@ -18,22 +18,30 @@ import {
   Menu,
   X,
   Wrench,
+  Sparkles,
+  Inbox,
+  Shield,
+  QrCode,
 } from 'lucide-react'
 import { useState } from 'react'
+import { QrScannerDialog } from '@/components/dashboard/qr-scanner-dialog'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Assets', href: '/dashboard/assets', icon: Package },
   { name: 'Work Orders', href: '/dashboard/work-orders', icon: ClipboardList },
+  { name: 'Work Requests', href: '/dashboard/work-requests', icon: Inbox },
   { name: 'PM Plans', href: '/dashboard/pm', icon: Calendar },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Warehouse },
   { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
+  { name: 'AI Assistant', href: '/dashboard/ai', icon: Sparkles },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   return (
     <>
@@ -62,6 +70,18 @@ export function Sidebar() {
             <span className="text-xl font-bold">CMMS</span>
           </div>
 
+          {/* Quick Actions */}
+          <div className="px-4 pt-4">
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-2 border-dashed text-muted-foreground hover:text-primary hover:border-primary"
+              onClick={() => setScannerOpen(true)}
+            >
+              <QrCode className="h-4 w-4" />
+              Scan QR Code
+            </Button>
+          </div>
+
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
@@ -83,6 +103,23 @@ export function Sidebar() {
                 </Link>
               )
             })}
+
+            {/* Admin */}
+            <div className="border-t pt-2 mt-2">
+              <Link
+                href="/dashboard/admin/tenants"
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                  pathname.startsWith('/dashboard/admin')
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                )}
+              >
+                <Shield className="h-5 w-5" />
+                Admin
+              </Link>
+            </div>
           </nav>
 
           {/* User section */}
@@ -124,6 +161,8 @@ export function Sidebar() {
           onClick={() => setMobileOpen(false)}
         />
       )}
+
+      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} />
     </>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
@@ -8,14 +8,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { PageHeader } from '@/components/ui/page-header'
-import { Plus, Search, Package, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Package, AlertTriangle, Download, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
+import { CsvImportDialog } from '@/components/csv-import-dialog'
+import { toast } from 'sonner'
 
 export default function InventoryPage() {
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [lowStockOnly, setLowStockOnly] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['parts', search, page, lowStockOnly],
@@ -33,6 +37,19 @@ export default function InventoryPage() {
   const parts = data?.data || []
   const total = data?.total || 0
 
+  const handleExportCsv = async () => {
+    try {
+      const res = await api.exportPartsCsv()
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'parts.csv'; a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Parts exported')
+    } catch {
+      toast.error('Failed to export parts')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -40,6 +57,29 @@ export default function InventoryPage() {
         description="Manage spare parts and supplies"
         actions={
           <>
+            <Button variant="outline" size="sm" onClick={handleExportCsv}>
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/inventory/suppliers">
+                Suppliers
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/inventory/storerooms">
+                Storerooms
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/inventory/transactions">
+                Transactions
+              </Link>
+            </Button>
             <Button variant="outline" asChild>
               <Link href="/dashboard/inventory/purchase-orders">
                 Purchase Orders
@@ -177,6 +217,14 @@ export default function InventoryPage() {
           )}
         </>
       )}
+
+      <CsvImportDialog
+        open={showImport}
+        onOpenChange={setShowImport}
+        title="Import Parts"
+        onImport={(file) => api.importPartsCsv(file)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['parts'] })}
+      />
     </div>
   )
 }

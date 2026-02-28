@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { BarChart3, Calendar, TrendingUp, Package } from 'lucide-react'
+import { BarChart3, Calendar, TrendingUp, Package, DollarSign, Users } from 'lucide-react'
 
 export default function ReportsPage() {
   return (
@@ -94,6 +94,44 @@ export default function ReportsPage() {
             </p>
             <Button asChild>
               <Link href="/dashboard/reports/inventory">View Report</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:border-primary transition-colors">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-red-600" />
+              </div>
+              <CardTitle>Cost Analysis</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Labor costs, parts costs, and spending trends by category.
+            </p>
+            <Button asChild>
+              <Link href="/dashboard/reports/costs">View Report</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:border-primary transition-colors">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-teal-100 flex items-center justify-center">
+                <Users className="h-5 w-5 text-teal-600" />
+              </div>
+              <CardTitle>Technician Performance</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Completion rates, average times, and workload distribution by technician.
+            </p>
+            <Button asChild>
+              <Link href="/dashboard/reports/technician-performance">View Report</Link>
             </Button>
           </CardContent>
         </Card>

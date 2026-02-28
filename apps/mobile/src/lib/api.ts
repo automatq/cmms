@@ -103,6 +103,19 @@ class ApiClient {
     return this.client.post('/notifications/push-token', { token });
   }
 
+  // Activity
+  async quickStartWorkOrder(assetId: string) {
+    return this.client.post(`/activity/quick-start/${assetId}`);
+  }
+
+  async completeActivity(activityId: string, notes?: string) {
+    return this.client.patch(`/activity/${activityId}/complete`, { notes });
+  }
+
+  async getMyActiveActivity() {
+    return this.client.get('/activity/my-active');
+  }
+
   // AI
   async aiTroubleshoot(data: any) {
     return this.client.post('/ai/troubleshoot', data);

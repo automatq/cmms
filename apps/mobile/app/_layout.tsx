@@ -42,13 +42,23 @@ export default function RootLayout() {
             presentation: 'card'
           }} 
         />
-        <Stack.Screen 
-          name="scanner" 
-          options={{ 
+        <Stack.Screen
+          name="scanner"
+          options={{
             headerShown: true,
             title: 'Scan QR Code',
             presentation: 'modal'
-          }} 
+          }}
+        />
+        <Stack.Screen
+          name="active-work"
+          options={{
+            headerShown: true,
+            title: 'Active Work',
+            presentation: 'card',
+            headerBackVisible: false,
+            gestureEnabled: false,
+          }}
         />
       </Stack>
     </QueryClientProvider>

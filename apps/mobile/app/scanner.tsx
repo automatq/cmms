@@ -8,6 +8,7 @@ export default function ScannerScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -26,27 +27,74 @@ export default function ScannerScreen() {
     );
   }
 
-  const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
-    if (scanned) return;
-    setScanned(true);
+  const extractAssetId = (data: string): string | null => {
+    // Match URL pattern: /assets/{uuid}
+    const urlMatch = data.match(/\/assets\/([0-9a-f-]{36})/i);
+    if (urlMatch) return urlMatch[1];
 
-    try {
-      // Try to find asset by QR code
-      const response = await api.getAssetByQR(data);
-      if (response.data) {
-        router.replace(`/assets/${response.data.id}`);
-        return;
+    // Check if data is a raw UUID
+    const uuidMatch = data.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    if (uuidMatch) return uuidMatch[0];
+
+    return null;
+  };
+
+  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
+    if (scanned || processing) return;
+    setScanned(true);
+    setProcessing(true);
+
+    const assetId = extractAssetId(data);
+
+    if (!assetId) {
+      // Fallback: try the old QR code lookup
+      try {
+        const response = await api.getAssetByQR(data);
+        if (response.data) {
+          // Quick-start with the found asset
+          await startWork(response.data.id);
+          return;
+        }
+      } catch {
+        // Fall through to error
       }
-    } catch (error) {
-      // Asset not found, show alert
+
       Alert.alert(
-        'Asset Not Found',
-        `No asset found with QR code: ${data}`,
+        'Invalid QR Code',
+        'Could not identify an asset from this QR code.',
         [
-          { text: 'Scan Again', onPress: () => setScanned(false) },
+          { text: 'Scan Again', onPress: () => { setScanned(false); setProcessing(false); } },
           { text: 'Cancel', onPress: () => router.back() },
         ]
       );
+      return;
+    }
+
+    await startWork(assetId);
+  };
+
+  const startWork = async (assetId: string) => {
+    try {
+      const response = await api.quickStartWorkOrder(assetId);
+      const { activity, workOrder, asset, isNewWorkOrder } = response.data;
+
+      router.replace({
+        pathname: '/active-work',
+        params: {
+          activityId: activity.id,
+          workOrderId: workOrder.id,
+          woNumber: workOrder.woNumber,
+          assetName: asset.name,
+          assetNumber: asset.assetNumber || '',
+          isNew: isNewWorkOrder ? 'true' : 'false',
+        },
+      });
+    } catch (error: any) {
+      const message = error?.response?.data?.message || 'Failed to start work session.';
+      Alert.alert('Error', message, [
+        { text: 'Scan Again', onPress: () => { setScanned(false); setProcessing(false); } },
+        { text: 'Cancel', onPress: () => router.back() },
+      ]);
     }
   };
 
@@ -68,7 +116,7 @@ export default function ScannerScreen() {
             <View style={[styles.corner, styles.bottomRight]} />
           </View>
           <Text style={styles.instructions}>
-            Point your camera at an asset QR code
+            {processing ? 'Starting work session...' : 'Point your camera at an asset QR code'}
           </Text>
         </View>
       </CameraView>

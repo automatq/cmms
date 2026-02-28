@@ -11,7 +11,7 @@ import {
 } from 'class-validator';
 
 export class CreateUserDto {
-  @ApiProperty({ description: 'Keycloak user ID' })
+  @ApiProperty({ description: 'User ID (UUID)' })
   @IsUUID()
   id: string;
 

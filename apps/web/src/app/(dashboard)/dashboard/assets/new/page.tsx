@@ -23,6 +23,7 @@ export default function NewAssetPage() {
     status: 'active',
     categoryId: '',
     locationId: '',
+    parentAssetId: '',
     manufacturer: '',
     model: '',
     serialNumber: '',
@@ -50,6 +51,14 @@ export default function NewAssetPage() {
     queryFn: async () => {
       const res = await api.getLocations()
       return res.data
+    },
+  })
+
+  const { data: allAssets } = useQuery({
+    queryKey: ['assets-for-parent'],
+    queryFn: async () => {
+      const res = await api.getAssets({ limit: 200 })
+      return res.data?.data || res.data || []
     },
   })
 
@@ -103,6 +112,7 @@ export default function NewAssetPage() {
       status: formData.status,
       categoryId: formData.categoryId || undefined,
       locationId: formData.locationId || undefined,
+      parentAssetId: formData.parentAssetId || undefined,
       manufacturer: formData.manufacturer,
       model: formData.model,
       serialNumber: formData.serialNumber,
@@ -353,6 +363,21 @@ export default function NewAssetPage() {
                     {locations?.map((loc: any) => (
                       <option key={loc.id} value={loc.id}>
                         {loc.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="parentAsset">Parent Asset</Label>
+                  <Select
+                    id="parentAsset"
+                    value={formData.parentAssetId}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, parentAssetId: e.target.value })}
+                  >
+                    <option value="">None (Top Level)</option>
+                    {Array.isArray(allAssets) && allAssets.map((a: any) => (
+                      <option key={a.id} value={a.id}>
+                        {a.assetNumber} - {a.name}
                       </option>
                     ))}
                   </Select>

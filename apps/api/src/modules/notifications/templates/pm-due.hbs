@@ -1,0 +1,10 @@
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2 style="color: #1a1a1a;">Preventive Maintenance Due</h2>
+  <p>The following PM plan is due for execution:</p>
+  <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+    <tr><td style="padding: 8px 0; color: #666;">PM Plan</td><td style="padding: 8px 0;">{{planName}}</td></tr>
+    {{#if assetName}}<tr><td style="padding: 8px 0; color: #666;">Asset</td><td style="padding: 8px 0;">{{assetName}}</td></tr>{{/if}}
+  </table>
+  <p>A work order has been automatically created for this maintenance task.</p>
+  <a href="{{appUrl}}/dashboard/pm" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px;">View PM Plans</a>
+</div>
