@@ -32,6 +32,7 @@ export class EnableRLS1709000003000 implements MigrationInterface {
     'po_line_items',
     'notifications',
     'user_push_tokens',
+    'tech_activities',
   ];
 
   public async up(queryRunner: QueryRunner): Promise<void> {

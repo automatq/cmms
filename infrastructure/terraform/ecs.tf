@@ -236,6 +236,8 @@ locals {
     { name = "AUTH0_AUDIENCE", value = var.auth0_audience },
     { name = "SES_FROM_EMAIL", value = var.ses_from_email },
     { name = "DOMAIN_NAME", value = var.domain_name },
+    { name = "STORAGE_PROVIDER", value = "s3" },
+    { name = "CORS_ORIGINS", value = "https://${var.domain_name}" },
   ]
 
   # Secrets references (pulled from Secrets Manager at task start)

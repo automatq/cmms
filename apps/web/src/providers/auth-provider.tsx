@@ -55,13 +55,22 @@ function AuthProviderInner({ children }: { children: React.ReactNode }) {
           setToken(accessToken)
           api.setToken(accessToken)
 
+          // Load roles from backend profile
+          let roles: string[] = []
+          try {
+            const profile = await api.getMyProfile()
+            roles = profile.data?.roles?.map((r: any) => r.name) || []
+          } catch {
+            // Profile not available yet (first login), use empty roles
+          }
+
           setUser({
             id: auth0User.sub || '',
             email: auth0User.email || '',
             firstName: auth0User.given_name || '',
             lastName: auth0User.family_name || '',
             username: auth0User.nickname || auth0User.email || '',
-            roles: [],
+            roles,
           })
         } catch (error) {
           console.error('Error getting access token:', error)

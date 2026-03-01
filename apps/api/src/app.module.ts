@@ -28,6 +28,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { FeatureGateGuard } from './common/guards/feature-gate.guard';
 import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
     RealtimeModule,
     ActivityModule,
   ],
+  controllers: [HealthController],
   providers: [
     // Global Guards
     {

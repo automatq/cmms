@@ -31,6 +31,7 @@ export class AddTenantIdToAllEntities1709000002000 implements MigrationInterface
     'po_line_items',
     'notifications',
     'user_push_tokens',
+    'tech_activities',
   ];
 
   // Old unique constraints that must be dropped and recreated with tenant_id

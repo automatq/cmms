@@ -36,7 +36,7 @@ interface AuthState {
   logout: () => Promise<void>
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
   user: null,
@@ -49,7 +49,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (token && userStr) {
         const user = JSON.parse(userStr) as User
-        api.setToken(token)
+        await api.setToken(token)
         set({ isAuthenticated: true, user, token, isLoading: false })
       } else {
         set({ isAuthenticated: false, user: null, token: null, isLoading: false })
@@ -99,17 +99,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       const token = tokenResponse.accessToken
-      api.setToken(token)
+      await api.setToken(token)
       await SecureStore.setItemAsync('auth_token', token)
 
       // Fetch user info
       const userInfoResponse = await fetch(discovery.userInfoEndpoint, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const userInfo = await userInfoResponse.json()
+      const userInfo = (await userInfoResponse.json()) as Record<string, string>
 
       const user: User = {
-        id: userInfo.sub,
+        id: userInfo.sub || '',
         email: userInfo.email || '',
         firstName: userInfo.given_name || '',
         lastName: userInfo.family_name || '',
@@ -133,7 +133,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try {
-      api.setToken(null)
+      await api.setToken(null)
       await SecureStore.deleteItemAsync('auth_token')
       await SecureStore.deleteItemAsync('refresh_token')
       await SecureStore.deleteItemAsync('user_info')
