@@ -29,7 +29,7 @@ export class ScheduledReport extends TenantAwareEntity {
   @Column()
   name: string;
 
-  @Column({ type: 'enum', enum: ScheduledReportType })
+  @Column({ type: 'enum', enum: ScheduledReportType, name: 'report_type' })
   reportType: ScheduledReportType;
 
   @Column({ type: 'jsonb', nullable: true })
