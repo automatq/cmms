@@ -6,6 +6,7 @@ import { AuthProvider } from '@/providers/auth-provider'
 import { QueryProvider } from '@/providers/query-provider'
 import { SocketProvider } from '@/providers/socket-provider'
 import { ThemeProvider } from '@/components/theme-provider'
+import { ColorThemeProvider } from '@/components/color-theme-provider'
 import { Toaster } from 'sonner'
 import { ErrorBoundary } from '@/components/error-boundary'
 
@@ -31,13 +32,15 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <ErrorBoundary>
-              <QueryProvider>
-                <AuthProvider>
-                  <SocketProvider>{children}</SocketProvider>
-                </AuthProvider>
-              </QueryProvider>
-            </ErrorBoundary>
+            <ColorThemeProvider>
+              <ErrorBoundary>
+                <QueryProvider>
+                  <AuthProvider>
+                    <SocketProvider>{children}</SocketProvider>
+                  </AuthProvider>
+                </QueryProvider>
+              </ErrorBoundary>
+            </ColorThemeProvider>
             <Toaster richColors closeButton position="top-right" />
           </ThemeProvider>
         </ClerkProvider>
