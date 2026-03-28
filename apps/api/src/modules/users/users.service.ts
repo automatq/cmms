@@ -61,11 +61,21 @@ export class UsersService {
       email,
       firstName: firstName || '',
       lastName: lastParts.join(' ') || '',
-      roles: defaultRole ? [defaultRole] : [],
       lastLoginAt: new Date(),
     });
 
-    return this.userRepository.save(user);
+    user = await this.userRepository.save(user);
+
+    // Assign default role via raw query since user_roles has tenant_id
+    if (defaultRole) {
+      await this.userRepository.query(
+        `INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [user.id, defaultRole.id, tenantId],
+      );
+      user.roles = [defaultRole];
+    }
+
+    return user;
   }
 
   async create(dto: CreateUserDto, tenantId: string): Promise<User> {
