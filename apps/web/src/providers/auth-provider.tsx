@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth as useClerkAuth, useUser, useOrganization } from '@clerk/nextjs'
 import { api } from '@/lib/api'
 
@@ -41,10 +41,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { organization } = useOrganization()
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const syncedRef = useRef(false)
 
   useEffect(() => {
-    const syncToken = async () => {
-      if (isSignedIn && clerkUser) {
+    if (!isLoaded) return
+
+    if (isSignedIn && clerkUser && !syncedRef.current) {
+      syncedRef.current = true
+      const syncToken = async () => {
         try {
           const accessToken = await getToken()
           if (accessToken) {
@@ -71,48 +75,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (error) {
           console.error('Error getting access token:', error)
+          syncedRef.current = false
         }
-      } else if (isLoaded && !isSignedIn) {
-        setUser(null)
-        setToken(null)
-        api.setToken(null)
       }
+      syncToken()
+    } else if (isLoaded && !isSignedIn) {
+      syncedRef.current = false
+      setUser(null)
+      setToken(null)
+      api.setToken(null)
     }
+  }, [isLoaded, isSignedIn, clerkUser?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    syncToken()
+  // Refresh token periodically (Clerk tokens expire after 60s by default)
+  useEffect(() => {
+    if (!isSignedIn) return
 
-    // Refresh token periodically (Clerk tokens expire after 60s by default)
     const interval = setInterval(async () => {
-      if (isSignedIn) {
-        try {
-          const newToken = await getToken()
-          if (newToken) {
-            setToken(newToken)
-            api.setToken(newToken)
-          }
-        } catch {
-          // Token refresh failed, user may need to re-auth
+      try {
+        const newToken = await getToken()
+        if (newToken) {
+          setToken(newToken)
+          api.setToken(newToken)
         }
+      } catch {
+        // Token refresh failed
       }
-    }, 50000) // Refresh every 50 seconds
+    }, 50000)
 
     return () => clearInterval(interval)
-  }, [isSignedIn, clerkUser, isLoaded, getToken])
+  }, [isSignedIn]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const login = () => {
-    // Clerk handles login via its components (<SignIn />)
-    // Redirect to sign-in page
+  const login = useCallback(() => {
     if (typeof window !== 'undefined') {
       window.location.href = '/sign-in'
     }
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     api.setToken(null)
     setToken(null)
     setUser(null)
+    syncedRef.current = false
     signOut()
-  }
+  }, [signOut])
 
   return (
     <AuthContext.Provider
