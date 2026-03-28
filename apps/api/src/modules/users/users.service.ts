@@ -329,6 +329,66 @@ export class UsersService {
     return tenant?.id || null;
   }
 
+  // ==================== AUTO-PROVISIONING ====================
+
+  async autoProvisionTenant(
+    companyName: string,
+    slug: string,
+    clerkOrgId: string,
+  ): Promise<string | undefined> {
+    try {
+      // Check slug uniqueness
+      let finalSlug = slug;
+      const existing = await this.tenantRepository.findOne({ where: { slug: finalSlug } });
+      if (existing) {
+        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
+      }
+
+      const tenant = this.tenantRepository.create({
+        name: companyName,
+        slug: finalSlug,
+        clerkOrgId,
+        timezone: 'UTC',
+        currency: 'USD',
+      });
+      await this.tenantRepository.save(tenant);
+      await this.seedDefaultRoles(tenant.id);
+      return tenant.id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async autoProvisionPersonalTenant(
+    email: string,
+    slug: string,
+  ): Promise<string | undefined> {
+    try {
+      // Check if slug already exists — user may already have a tenant
+      let finalSlug = slug;
+      const existing = await this.tenantRepository.findOne({ where: { slug: finalSlug } });
+      if (existing) {
+        const existingUser = await this.userRepository.findOne({
+          where: { email, tenantId: existing.id },
+        });
+        if (existingUser) return existing.id;
+        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
+      }
+
+      const tenant = this.tenantRepository.create({
+        name: `${email.split('@')[0]}'s Organization`,
+        slug: finalSlug,
+        timezone: 'UTC',
+        currency: 'USD',
+      });
+      await this.tenantRepository.save(tenant);
+      await this.seedDefaultRoles(tenant.id);
+      return tenant.id;
+    } catch {
+      return undefined;
+    }
+  }
+
   // ==================== SEED DEFAULT ROLES ====================
 
   async seedDefaultRoles(tenantId: string): Promise<void> {

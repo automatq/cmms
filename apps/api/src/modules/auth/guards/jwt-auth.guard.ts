@@ -10,7 +10,6 @@ import { ConfigService } from '@nestjs/config';
 import { createClerkClient } from '@clerk/backend';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { UsersService } from '../../users/users.service';
-import { TenantService } from '../../../common/tenant/tenant.service';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 
 @Injectable()
@@ -22,7 +21,6 @@ export class JwtAuthGuard implements CanActivate {
     private reflector: Reflector,
     private configService: ConfigService,
     private usersService: UsersService,
-    private tenantService: TenantService,
   ) {
     this.clerk = createClerkClient({
       secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
@@ -64,8 +62,7 @@ export class JwtAuthGuard implements CanActivate {
       }
 
       if (!tenantId) {
-        // No org in the JWT — user may not have selected an org in Clerk
-        // Try to auto-provision a personal tenant
+        // No org in the JWT — auto-provision a personal tenant
         tenantId = await this.autoProvisionPersonalTenant(payload);
       }
 
@@ -110,52 +107,28 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 
-  /**
-   * Auto-provision a tenant when a Clerk org_id is present but no matching tenant exists.
-   */
   private async autoProvisionTenant(payload: any): Promise<string | undefined> {
     try {
       const org = await this.clerk.organizations.getOrganization({ organizationId: payload.org_id });
-      const slug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
+      const orgName = org.name || 'My Organization';
+      const slug = org.slug || orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
 
-      // Check slug uniqueness, append random suffix if taken
-      let finalSlug = slug;
-      const existing = await this.tenantService.findBySlug(finalSlug);
-      if (existing) {
-        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
+      const tenantId = await this.usersService.autoProvisionTenant(
+        orgName,
+        slug,
+        payload.org_id,
+      );
+
+      if (tenantId) {
+        this.logger.log(`Auto-provisioned tenant ${tenantId} for Clerk org ${payload.org_id}`);
       }
-
-      const { tenant } = await this.tenantService.provisionTenant({
-        companyName: org.name || 'My Organization',
-        slug: finalSlug,
-        adminEmail: '',
-        adminFirstName: 'Admin',
-        adminLastName: 'User',
-        timezone: 'UTC',
-        currency: 'USD',
-      });
-
-      // Link the Clerk org
-      tenant.clerkOrgId = payload.org_id;
-      await this.tenantService.findById(tenant.id); // verify it exists
-      // Update clerkOrgId directly
-      const tenantRepo = this.tenantService['tenantRepository'];
-      await tenantRepo.update(tenant.id, { clerkOrgId: payload.org_id });
-
-      // Seed default roles
-      await this.usersService.seedDefaultRoles(tenant.id);
-
-      this.logger.log(`Auto-provisioned tenant ${tenant.id} for Clerk org ${payload.org_id}`);
-      return tenant.id;
+      return tenantId;
     } catch (error) {
       this.logger.error(`Failed to auto-provision tenant for org ${payload.org_id}:`, error);
       return undefined;
     }
   }
 
-  /**
-   * Auto-provision a personal tenant when user has no Clerk org.
-   */
   private async autoProvisionPersonalTenant(payload: any): Promise<string | undefined> {
     try {
       const email = payload.email || (payload.sub ? await this.resolveEmailFromClerk(payload.sub) : '');
@@ -163,31 +136,12 @@ export class JwtAuthGuard implements CanActivate {
 
       const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
 
-      let finalSlug = slug;
-      const existing = await this.tenantService.findBySlug(finalSlug);
-      if (existing) {
-        // User might already have a personal tenant — check if they're in it
-        const existingUser = await this.usersService.findByEmail(email, existing.id);
-        if (existingUser) {
-          return existing.id;
-        }
-        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
+      const tenantId = await this.usersService.autoProvisionPersonalTenant(email, slug);
+
+      if (tenantId) {
+        this.logger.log(`Auto-provisioned personal tenant ${tenantId} for ${email}`);
       }
-
-      const { tenant } = await this.tenantService.provisionTenant({
-        companyName: `${email.split('@')[0]}'s Organization`,
-        slug: finalSlug,
-        adminEmail: email,
-        adminFirstName: email.split('@')[0] || 'User',
-        adminLastName: 'User',
-        timezone: 'UTC',
-        currency: 'USD',
-      });
-
-      await this.usersService.seedDefaultRoles(tenant.id);
-
-      this.logger.log(`Auto-provisioned personal tenant ${tenant.id} for ${email}`);
-      return tenant.id;
+      return tenantId;
     } catch (error) {
       this.logger.error('Failed to auto-provision personal tenant:', error);
       return undefined;
