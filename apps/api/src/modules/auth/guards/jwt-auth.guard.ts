@@ -84,15 +84,15 @@ export class JwtAuthGuard implements CanActivate {
       }
 
       // Sync user
-      const email =
-        payload.email ||
+      const email: string =
+        String(payload.email || '') ||
         (payload.sub
           ? await this.resolveEmailFromClerk(payload.sub)
           : '');
-      const name =
+      const name: string =
         payload.first_name && payload.last_name
           ? `${payload.first_name} ${payload.last_name}`
-          : payload.name || email.split('@')[0] || 'Unknown';
+          : String(payload.name || '') || email.split('@')[0] || 'Unknown';
 
       const user = await usersService.syncFromClerk(
         payload.sub,
