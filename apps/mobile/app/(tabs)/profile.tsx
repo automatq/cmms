@@ -1,9 +1,22 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { useAuthStore } from '@/lib/auth';
 import { Ionicons } from '@expo/vector-icons';
+import { useColorTheme, type ColorThemeName } from '@/lib/theme';
+
+const themeOptions: { value: ColorThemeName; label: string; color: string }[] = [
+  { value: 'default', label: 'Neutral', color: '#171717' },
+  { value: 'blue', label: 'Blue', color: '#2563eb' },
+  { value: 'green', label: 'Green', color: '#16a34a' },
+  { value: 'orange', label: 'Orange', color: '#ea580c' },
+  { value: 'rose', label: 'Rose', color: '#e11d48' },
+  { value: 'violet', label: 'Violet', color: '#7c3aed' },
+];
 
 export default function ProfileScreen() {
   const { user, logout } = useAuthStore();
+  const { colorTheme, setColorTheme, colors } = useColorTheme();
+  const [showThemePicker, setShowThemePicker] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -13,7 +26,7 @@ export default function ProfileScreen() {
     <ScrollView style={styles.container}>
       {/* Profile Header */}
       <View style={styles.header}>
-        <View style={styles.avatar}>
+        <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
           <Text style={styles.avatarText}>
             {user?.firstName?.[0] || user?.username?.[0] || 'U'}
           </Text>
@@ -42,6 +55,25 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => setShowThemePicker(true)}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#f3e8ff' }]}>
+            <Ionicons name="color-palette-outline" size={20} color="#7c3aed" />
+          </View>
+          <Text style={styles.menuText}>Color Theme</Text>
+          <View style={styles.menuRight}>
+            <View
+              style={[
+                styles.currentThemeDot,
+                { backgroundColor: themeOptions.find((t) => t.value === colorTheme)?.color },
+              ]}
+            />
+            <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+          </View>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem}>
           <View style={[styles.menuIcon, { backgroundColor: '#fef3c7' }]}>
             <Ionicons name="settings-outline" size={20} color="#d97706" />
@@ -67,6 +99,51 @@ export default function ProfileScreen() {
 
       {/* Version */}
       <Text style={styles.version}>CMMS Mobile v1.0.0</Text>
+
+      {/* Theme Picker Modal */}
+      <Modal
+        visible={showThemePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowThemePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Color Theme</Text>
+              <TouchableOpacity onPress={() => setShowThemePicker(false)}>
+                <Ionicons name="close" size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.themeGrid}>
+              {themeOptions.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.themeOption,
+                    colorTheme === opt.value && {
+                      borderColor: opt.color,
+                      backgroundColor: opt.color + '10',
+                    },
+                  ]}
+                  onPress={() => {
+                    setColorTheme(opt.value);
+                    setShowThemePicker(false);
+                  }}
+                >
+                  <View
+                    style={[styles.themeDot, { backgroundColor: opt.color }]}
+                  />
+                  <Text style={styles.themeLabel}>{opt.label}</Text>
+                  {colorTheme === opt.value && (
+                    <Ionicons name="checkmark-circle" size={20} color={opt.color} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -87,7 +164,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -133,6 +209,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1e293b',
   },
+  menuRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  currentThemeDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -154,5 +240,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94a3b8',
     marginBottom: 32,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  themeGrid: {
+    gap: 12,
+  },
+  themeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    gap: 12,
+  },
+  themeDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  themeLabel: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1e293b',
   },
 });

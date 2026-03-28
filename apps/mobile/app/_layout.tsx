@@ -8,6 +8,7 @@ import { createQueryClient } from '@/lib/query-client';
 import { NetworkProvider } from '@/lib/network-provider';
 import { offlineQueue } from '@/lib/offline-queue';
 import { OfflineBanner } from '@/components/offline-banner';
+import { MobileThemeProvider } from '@/lib/theme';
 
 const queryClient = createQueryClient();
 
@@ -93,6 +94,7 @@ export default function RootLayout() {
       <ClerkLoaded>
         <NetworkProvider>
           <QueryClientProvider client={queryClient}>
+            <MobileThemeProvider>
             <AuthSync>
               <OfflineInit>
                 <StatusBar style="auto" />
@@ -145,6 +147,7 @@ export default function RootLayout() {
                 </Stack>
               </OfflineInit>
             </AuthSync>
+            </MobileThemeProvider>
           </QueryClientProvider>
         </NetworkProvider>
       </ClerkLoaded>

@@ -17,8 +17,10 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
-import { Settings, Building2, User, Bell, Shield, Smartphone, Zap, Mail, Wrench, ClipboardCheck, Package, Users, Plus, Edit, UserCheck, UserX, MapPin, Tag, Trash2, CreditCard, ExternalLink, Loader2, Download, Upload } from 'lucide-react'
+import { Settings, Building2, User, Bell, Shield, Smartphone, Zap, Mail, Wrench, ClipboardCheck, Package, Users, Plus, Edit, UserCheck, UserX, MapPin, Tag, Trash2, CreditCard, ExternalLink, Loader2, Download, Upload, Palette, Check, Sun, Moon, Monitor } from 'lucide-react'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
+import { useColorTheme } from '@/components/color-theme-provider'
+import { useTheme } from 'next-themes'
 
 export default function SettingsPage() {
     const { user } = useAuth()
@@ -117,6 +119,10 @@ export default function SettingsPage() {
                     <TabsTrigger value="billing" className="gap-2">
                         <CreditCard className="h-4 w-4" />
                         Billing
+                    </TabsTrigger>
+                    <TabsTrigger value="appearance" className="gap-2">
+                        <Palette className="h-4 w-4" />
+                        Appearance
                     </TabsTrigger>
                 </TabsList>
 
@@ -275,6 +281,7 @@ export default function SettingsPage() {
                 <CategoriesTab />
                 <RolesTab />
                 <BillingTab />
+                <AppearanceTab />
             </Tabs>
         </div>
     )
@@ -1510,6 +1517,93 @@ function BillingTab() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+        </TabsContent>
+    )
+}
+
+const colorThemeOptions = [
+    { value: 'default' as const, label: 'Neutral', color: '#171717' },
+    { value: 'blue' as const, label: 'Blue', color: '#2563eb' },
+    { value: 'green' as const, label: 'Green', color: '#16a34a' },
+    { value: 'orange' as const, label: 'Orange', color: '#ea580c' },
+    { value: 'rose' as const, label: 'Rose', color: '#e11d48' },
+    { value: 'violet' as const, label: 'Violet', color: '#7c3aed' },
+]
+
+function AppearanceTab() {
+    const { colorTheme, setColorTheme } = useColorTheme()
+    const { setTheme, theme } = useTheme()
+
+    return (
+        <TabsContent value="appearance" className="space-y-6">
+            {/* Mode */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Mode</CardTitle>
+                    <CardDescription>
+                        Choose between light, dark, or system-matched mode.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-3 gap-4 max-w-md">
+                        {[
+                            { value: 'light', label: 'Light', icon: Sun },
+                            { value: 'dark', label: 'Dark', icon: Moon },
+                            { value: 'system', label: 'System', icon: Monitor },
+                        ].map((mode) => (
+                            <button
+                                key={mode.value}
+                                onClick={() => setTheme(mode.value)}
+                                className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-colors ${
+                                    theme === mode.value
+                                        ? 'border-primary bg-primary/5'
+                                        : 'border-border hover:border-primary/50'
+                                }`}
+                            >
+                                <mode.icon className="h-6 w-6" />
+                                <span className="text-sm font-medium">{mode.label}</span>
+                                {theme === mode.value && (
+                                    <Check className="h-4 w-4 text-primary" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Color Theme */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Color Theme</CardTitle>
+                    <CardDescription>
+                        Select a color palette for the entire application.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                        {colorThemeOptions.map((ct) => (
+                            <button
+                                key={ct.value}
+                                onClick={() => setColorTheme(ct.value)}
+                                className={`flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-colors ${
+                                    colorTheme === ct.value
+                                        ? 'border-primary bg-primary/5'
+                                        : 'border-border hover:border-primary/50'
+                                }`}
+                            >
+                                <div
+                                    className="h-10 w-10 rounded-full border shadow-sm"
+                                    style={{ backgroundColor: ct.color }}
+                                />
+                                <span className="text-sm font-medium">{ct.label}</span>
+                                {colorTheme === ct.value && (
+                                    <Check className="h-4 w-4 text-primary" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
         </TabsContent>
     )
 }
