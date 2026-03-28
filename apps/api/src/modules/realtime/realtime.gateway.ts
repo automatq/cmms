@@ -7,7 +7,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createClerkClient } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { UsersService } from '../users/users.service';
 
 interface AuthenticatedSocket extends Socket {
@@ -47,7 +47,9 @@ export class RealtimeGateway
       }
 
       // Verify token with Clerk
-      const payload = await this.clerk.verifyToken(token);
+      const payload = await verifyToken(token, {
+        secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
+      }) as any;
 
       if (!payload.org_id) {
         throw new UnauthorizedException('No organization in token');

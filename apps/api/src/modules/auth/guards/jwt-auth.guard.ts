@@ -55,7 +55,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await verifyToken(token, { secretKey: this.secretKey });
+      const payload = await verifyToken(token, { secretKey: this.secretKey }) as any;
       const usersService = await this.getUsersService();
 
       // Resolve tenant from Clerk org_id — auto-provision if needed
