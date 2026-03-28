@@ -8,13 +8,14 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
-import { createClerkClient } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private clerk;
+  private secretKey: string;
   private readonly logger = new Logger(JwtAuthGuard.name);
   private usersService: any;
 
@@ -23,9 +24,8 @@ export class JwtAuthGuard implements CanActivate {
     private configService: ConfigService,
     private moduleRef: ModuleRef,
   ) {
-    this.clerk = createClerkClient({
-      secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
-    });
+    this.secretKey = this.configService.get<string>('CLERK_SECRET_KEY', '');
+    this.clerk = createClerkClient({ secretKey: this.secretKey });
   }
 
   private async getUsersService() {
@@ -55,7 +55,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.clerk.verifyToken(token);
+      const payload = await verifyToken(token, { secretKey: this.secretKey });
       const usersService = await this.getUsersService();
 
       // Resolve tenant from Clerk org_id — auto-provision if needed
