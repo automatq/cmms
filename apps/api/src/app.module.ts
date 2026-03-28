@@ -108,11 +108,11 @@ import { HealthController } from './health.controller';
     // Global Guards
     {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard,
+      useExisting: JwtAuthGuard,
     },
     {
       provide: APP_GUARD,
-      useClass: PermissionsGuard,
+      useExisting: PermissionsGuard,
     },
     {
       provide: APP_GUARD,
