@@ -46,7 +46,7 @@ export default function TeamsPage() {
       <PageHeader
         title="Teams"
         description="Manage maintenance crews and teams"
-        action={
+        actions={
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" />New Team</Button>

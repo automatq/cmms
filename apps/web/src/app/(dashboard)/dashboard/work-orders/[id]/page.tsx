@@ -176,6 +176,8 @@ export default function WorkOrderDetailPage() {
         onError: () => toast.error('Failed to save signature'),
     })
 
+    const wo = woData
+
     const { data: signatureData } = useQuery({
         queryKey: ['work-order', id, 'signature'],
         queryFn: () => api.getSignature(id).then((r) => r.data),
@@ -191,8 +193,6 @@ export default function WorkOrderDetailPage() {
         },
         onError: () => toast.error('Failed to save checklist'),
     })
-
-    const wo = woData
 
     // Initialize checklist from WO data
     if (wo && !checklistInitialized && wo.checklistResults?.length > 0) {

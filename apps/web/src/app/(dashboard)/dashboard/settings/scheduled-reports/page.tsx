@@ -76,7 +76,7 @@ export default function ScheduledReportsPage() {
       <PageHeader
         title="Scheduled Reports"
         description="Automatically generate and email reports on a schedule"
-        action={
+        actions={
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" />New Schedule</Button>
