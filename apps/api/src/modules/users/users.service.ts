@@ -27,7 +27,7 @@ export class UsersService {
 
   /**
    * Sync a user from Clerk on login. Finds by email + tenantId, creates if not found.
-   * Clerk `sub` (e.g. "auth0|abc123") is not a valid UUID, so we use auto-generated UUIDs
+   * Clerk `sub` (e.g. "user_2abc123") is not a valid UUID, so we use auto-generated UUIDs
    * for the user primary key and match on email within the tenant instead.
    */
   async syncFromClerk(

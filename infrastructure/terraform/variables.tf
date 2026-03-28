@@ -255,23 +255,18 @@ variable "web_image_tag" {
 }
 
 # ------------------------------------------------------------------------------
-# Auth0
+# Clerk
 # ------------------------------------------------------------------------------
 
-variable "auth0_domain" {
-  description = "Auth0 domain (e.g., your-tenant.auth0.com)"
+variable "clerk_secret_key" {
+  description = "Clerk secret key"
   type        = string
+  sensitive   = true
   default     = ""
 }
 
-variable "auth0_audience" {
-  description = "Auth0 API audience"
-  type        = string
-  default     = ""
-}
-
-variable "auth0_client_id" {
-  description = "Auth0 client ID"
+variable "clerk_publishable_key" {
+  description = "Clerk publishable key"
   type        = string
   default     = ""
 }
@@ -287,12 +282,6 @@ variable "jwt_secret" {
   default     = ""
 }
 
-variable "auth0_client_secret" {
-  description = "Auth0 client secret"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
 
 variable "stripe_secret_key" {
   description = "Stripe secret API key"

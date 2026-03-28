@@ -80,7 +80,7 @@ async function bootstrap() {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter Auth0 JWT token',
+          description: 'Enter Clerk JWT token',
         },
         'JWT',
       )

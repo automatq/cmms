@@ -3,7 +3,7 @@
 # ==============================================================================
 # Copy this file to terraform.tfvars and fill in the values.
 # Sensitive values can also be passed via environment variables:
-#   TF_VAR_jwt_secret, TF_VAR_auth0_client_secret, etc.
+#   TF_VAR_jwt_secret, TF_VAR_clerk_secret_key, etc.
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -67,17 +67,15 @@ worker_image_tag = "latest"
 web_image_tag    = "latest"
 
 # ------------------------------------------------------------------------------
-# Auth0
+# Clerk
 # ------------------------------------------------------------------------------
-auth0_domain    = "your-tenant.auth0.com"
-auth0_audience  = "https://api.cmms.example.com"
-auth0_client_id = "your-auth0-client-id"
+clerk_publishable_key = "pk_live_..."
 
 # ------------------------------------------------------------------------------
 # Secrets (sensitive - use TF_VAR_* env vars in CI/CD)
 # ------------------------------------------------------------------------------
 # jwt_secret            = ""
-# auth0_client_secret   = ""
+# clerk_secret_key      = ""
 # stripe_secret_key     = ""
 # stripe_webhook_secret = ""
 
