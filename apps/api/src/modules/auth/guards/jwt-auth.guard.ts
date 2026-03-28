@@ -7,24 +7,34 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { createClerkClient } from '@clerk/backend';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { UsersService } from '../../users/users.service';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private clerk;
   private readonly logger = new Logger(JwtAuthGuard.name);
+  private usersService: any;
 
   constructor(
     private reflector: Reflector,
     private configService: ConfigService,
-    private usersService: UsersService,
+    private moduleRef: ModuleRef,
   ) {
     this.clerk = createClerkClient({
       secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
     });
+  }
+
+  private async getUsersService() {
+    if (!this.usersService) {
+      // Lazy-load UsersService to avoid circular dependency / DI scope issues
+      const { UsersService } = await import('../../users/users.service');
+      this.usersService = this.moduleRef.get(UsersService, { strict: false });
+    }
+    return this.usersService;
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -46,24 +56,25 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.clerk.verifyToken(token);
+      const usersService = await this.getUsersService();
 
       // Resolve tenant from Clerk org_id — auto-provision if needed
       let tenantId: string | undefined;
 
       if (payload.org_id) {
         tenantId =
-          (await this.usersService.getTenantIdByClerkOrgId(payload.org_id)) ||
+          (await usersService.getTenantIdByClerkOrgId(payload.org_id)) ||
           undefined;
 
         // Auto-provision tenant for new Clerk orgs
         if (!tenantId) {
-          tenantId = await this.autoProvisionTenant(payload);
+          tenantId = await this.autoProvisionTenant(usersService, payload);
         }
       }
 
       if (!tenantId) {
         // No org in the JWT — auto-provision a personal tenant
-        tenantId = await this.autoProvisionPersonalTenant(payload);
+        tenantId = await this.autoProvisionPersonalTenant(usersService, payload);
       }
 
       if (!tenantId) {
@@ -83,7 +94,7 @@ export class JwtAuthGuard implements CanActivate {
           ? `${payload.first_name} ${payload.last_name}`
           : payload.name || email.split('@')[0] || 'Unknown';
 
-      const user = await this.usersService.syncFromClerk(
+      const user = await usersService.syncFromClerk(
         payload.sub,
         email,
         name,
@@ -107,18 +118,13 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 
-  private async autoProvisionTenant(payload: any): Promise<string | undefined> {
+  private async autoProvisionTenant(usersService: any, payload: any): Promise<string | undefined> {
     try {
       const org = await this.clerk.organizations.getOrganization({ organizationId: payload.org_id });
       const orgName = org.name || 'My Organization';
       const slug = org.slug || orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
 
-      const tenantId = await this.usersService.autoProvisionTenant(
-        orgName,
-        slug,
-        payload.org_id,
-      );
-
+      const tenantId = await usersService.autoProvisionTenant(orgName, slug, payload.org_id);
       if (tenantId) {
         this.logger.log(`Auto-provisioned tenant ${tenantId} for Clerk org ${payload.org_id}`);
       }
@@ -129,15 +135,13 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 
-  private async autoProvisionPersonalTenant(payload: any): Promise<string | undefined> {
+  private async autoProvisionPersonalTenant(usersService: any, payload: any): Promise<string | undefined> {
     try {
       const email = payload.email || (payload.sub ? await this.resolveEmailFromClerk(payload.sub) : '');
       if (!email) return undefined;
 
       const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
-
-      const tenantId = await this.usersService.autoProvisionPersonalTenant(email, slug);
-
+      const tenantId = await usersService.autoProvisionPersonalTenant(email, slug);
       if (tenantId) {
         this.logger.log(`Auto-provisioned personal tenant ${tenantId} for ${email}`);
       }
