@@ -158,7 +158,7 @@ export class WebhooksService {
       subscriptionId,
       event,
       payload,
-      responseStatus,
+      responseStatus: responseStatus ?? undefined,
       responseBody: responseBody?.substring(0, 10000),
       success,
       attemptNumber,

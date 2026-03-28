@@ -299,7 +299,7 @@ export class WorkOrdersService {
             tenantId,
           );
         } catch (error) {
-          this.logger.error(`Failed to start downtime for asset ${workOrder.assetId}: ${error.message}`);
+          this.logger.error(`Failed to start downtime for asset ${workOrder.assetId}: ${(error as Error).message}`);
         }
       }
     }
@@ -343,7 +343,7 @@ export class WorkOrdersService {
       try {
         await this.downtimeService.endDowntime(workOrder.assetId, userId, tenantId);
       } catch (error) {
-        this.logger.error(`Failed to end downtime for asset ${workOrder.assetId}: ${error.message}`);
+        this.logger.error(`Failed to end downtime for asset ${workOrder.assetId}: ${(error as Error).message}`);
       }
     }
 

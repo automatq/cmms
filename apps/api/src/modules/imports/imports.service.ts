@@ -161,7 +161,7 @@ export class ImportsService {
               await this.insertRow(type, row, tenantId);
               processedRows++;
             } catch (error) {
-              errors.push({ row: rowNum, errors: [error.message] });
+              errors.push({ row: rowNum, errors: [(error as Error).message] });
               errorRows++;
             }
           }
@@ -181,7 +181,7 @@ export class ImportsService {
       await this.importJobRepo.save(job);
     } catch (error) {
       job.status = ImportStatus.FAILED;
-      job.errorDetails = [{ row: 0, errors: [error.message] }];
+      job.errorDetails = [{ row: 0, errors: [(error as Error).message] }];
       job.completedAt = new Date();
       await this.importJobRepo.save(job);
     }

@@ -86,7 +86,7 @@ export class BudgetCheckProcessor extends WorkerHost implements OnModuleInit {
         }
       } catch (error) {
         this.logger.error(
-          `Failed to check budgets for tenant ${tenantId}: ${error.message}`,
+          `Failed to check budgets for tenant ${tenantId}: ${(error as Error).message}`,
         );
       }
     }

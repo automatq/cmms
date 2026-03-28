@@ -143,7 +143,7 @@ export class BudgetService {
     }>
   > {
     const budgets = await this.findAll(tenantId);
-    const results = [];
+    const results: Array<{ budget: MaintenanceBudget; actualSpend: number; percentUsed: number }> = [];
 
     for (const budget of budgets) {
       const result = await this.workOrderRepository

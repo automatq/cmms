@@ -45,14 +45,14 @@ export class DowntimeService {
 
     const downtime = this.downtimeRepository.create({
       assetId,
-      workOrderId,
+      workOrderId: workOrderId ?? undefined,
       startedAt: new Date(),
-      reason,
+      reason: reason ?? undefined,
       reportedBy: userId,
       tenantId,
     });
 
-    const saved = await this.downtimeRepository.save(downtime);
+    const saved = await this.downtimeRepository.save(downtime) as AssetDowntime;
 
     // Update asset status
     asset.status = AssetStatus.UNDER_REPAIR;

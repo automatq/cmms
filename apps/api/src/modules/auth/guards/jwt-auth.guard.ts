@@ -105,7 +105,7 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
-      this.logger.error('Auth error:', error?.message || error);
+      this.logger.error('Auth error:', (error as any)?.message || error);
       throw new UnauthorizedException('Invalid or expired token');
     }
   }
@@ -129,6 +129,8 @@ export class JwtAuthGuard implements CanActivate {
         companyName: org.name || 'My Organization',
         slug: finalSlug,
         adminEmail: '',
+        adminFirstName: 'Admin',
+        adminLastName: 'User',
         timezone: 'UTC',
         currency: 'USD',
       });
@@ -176,6 +178,8 @@ export class JwtAuthGuard implements CanActivate {
         companyName: `${email.split('@')[0]}'s Organization`,
         slug: finalSlug,
         adminEmail: email,
+        adminFirstName: email.split('@')[0] || 'User',
+        adminLastName: 'User',
         timezone: 'UTC',
         currency: 'USD',
       });

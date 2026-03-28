@@ -126,7 +126,7 @@ export class ReportExportProcessor extends WorkerHost implements OnModuleInit {
 
       await this.exportService.markAsRun(reportId);
     } catch (error) {
-      this.logger.error(`Failed to run scheduled report ${data.reportId}: ${error.message}`);
+      this.logger.error(`Failed to run scheduled report ${data.reportId}: ${(error as Error).message}`);
       throw error;
     }
   }

@@ -92,7 +92,7 @@ export class WarrantyCheckProcessor extends WorkerHost implements OnModuleInit {
           );
           totalAlerts++;
         } catch (error) {
-          this.logger.error(`Failed to create warranty alert for asset ${asset.id}: ${error.message}`);
+          this.logger.error(`Failed to create warranty alert for asset ${asset.id}: ${(error as Error).message}`);
         }
       }
     }
@@ -133,7 +133,7 @@ export class WarrantyCheckProcessor extends WorkerHost implements OnModuleInit {
           );
           totalAlerts++;
         } catch (error) {
-          this.logger.error(`Failed to create contract expiry alert for ${contract.id}: ${error.message}`);
+          this.logger.error(`Failed to create contract expiry alert for ${contract.id}: ${(error as Error).message}`);
         }
       }
     }
