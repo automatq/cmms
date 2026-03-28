@@ -3,22 +3,26 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { createClerkClient } from '@clerk/backend';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { UsersService } from '../../users/users.service';
+import { TenantService } from '../../../common/tenant/tenant.service';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private clerk;
+  private readonly logger = new Logger(JwtAuthGuard.name);
 
   constructor(
     private reflector: Reflector,
     private configService: ConfigService,
     private usersService: UsersService,
+    private tenantService: TenantService,
   ) {
     this.clerk = createClerkClient({
       secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
@@ -45,17 +49,29 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const payload = await this.clerk.verifyToken(token);
 
-      // Resolve tenant from Clerk org_id
+      // Resolve tenant from Clerk org_id — auto-provision if needed
       let tenantId: string | undefined;
+
       if (payload.org_id) {
         tenantId =
           (await this.usersService.getTenantIdByClerkOrgId(payload.org_id)) ||
           undefined;
+
+        // Auto-provision tenant for new Clerk orgs
+        if (!tenantId) {
+          tenantId = await this.autoProvisionTenant(payload);
+        }
+      }
+
+      if (!tenantId) {
+        // No org in the JWT — user may not have selected an org in Clerk
+        // Try to auto-provision a personal tenant
+        tenantId = await this.autoProvisionPersonalTenant(payload);
       }
 
       if (!tenantId) {
         throw new UnauthorizedException(
-          'Unable to resolve tenant. Ensure the user belongs to a Clerk Organization.',
+          'Unable to resolve tenant. Please ensure you are part of an organization.',
         );
       }
 
@@ -89,7 +105,88 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
+      this.logger.error('Auth error:', error?.message || error);
       throw new UnauthorizedException('Invalid or expired token');
+    }
+  }
+
+  /**
+   * Auto-provision a tenant when a Clerk org_id is present but no matching tenant exists.
+   */
+  private async autoProvisionTenant(payload: any): Promise<string | undefined> {
+    try {
+      const org = await this.clerk.organizations.getOrganization({ organizationId: payload.org_id });
+      const slug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
+
+      // Check slug uniqueness, append random suffix if taken
+      let finalSlug = slug;
+      const existing = await this.tenantService.findBySlug(finalSlug);
+      if (existing) {
+        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
+      }
+
+      const { tenant } = await this.tenantService.provisionTenant({
+        companyName: org.name || 'My Organization',
+        slug: finalSlug,
+        adminEmail: '',
+        timezone: 'UTC',
+        currency: 'USD',
+      });
+
+      // Link the Clerk org
+      tenant.clerkOrgId = payload.org_id;
+      await this.tenantService.findById(tenant.id); // verify it exists
+      // Update clerkOrgId directly
+      const tenantRepo = this.tenantService['tenantRepository'];
+      await tenantRepo.update(tenant.id, { clerkOrgId: payload.org_id });
+
+      // Seed default roles
+      await this.usersService.seedDefaultRoles(tenant.id);
+
+      this.logger.log(`Auto-provisioned tenant ${tenant.id} for Clerk org ${payload.org_id}`);
+      return tenant.id;
+    } catch (error) {
+      this.logger.error(`Failed to auto-provision tenant for org ${payload.org_id}:`, error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Auto-provision a personal tenant when user has no Clerk org.
+   */
+  private async autoProvisionPersonalTenant(payload: any): Promise<string | undefined> {
+    try {
+      const email = payload.email || (payload.sub ? await this.resolveEmailFromClerk(payload.sub) : '');
+      if (!email) return undefined;
+
+      const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
+
+      let finalSlug = slug;
+      const existing = await this.tenantService.findBySlug(finalSlug);
+      if (existing) {
+        // User might already have a personal tenant — check if they're in it
+        const existingUser = await this.usersService.findByEmail(email, existing.id);
+        if (existingUser) {
+          return existing.id;
+        }
+        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
+      }
+
+      const { tenant } = await this.tenantService.provisionTenant({
+        companyName: `${email.split('@')[0]}'s Organization`,
+        slug: finalSlug,
+        adminEmail: email,
+        timezone: 'UTC',
+        currency: 'USD',
+      });
+
+      await this.usersService.seedDefaultRoles(tenant.id);
+
+      this.logger.log(`Auto-provisioned personal tenant ${tenant.id} for ${email}`);
+      return tenant.id;
+    } catch (error) {
+      this.logger.error('Failed to auto-provision personal tenant:', error);
+      return undefined;
     }
   }
 

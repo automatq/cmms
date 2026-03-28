@@ -41,13 +41,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { organization } = useOrganization()
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
   const syncedRef = useRef(false)
+  const syncAttemptRef = useRef(0)
 
   useEffect(() => {
     if (!isLoaded) return
 
-    if (isSignedIn && clerkUser && !syncedRef.current) {
-      syncedRef.current = true
+    if (isSignedIn && clerkUser && !syncedRef.current && !syncing) {
+      setSyncing(true)
       const syncToken = async () => {
         try {
           const accessToken = await getToken()
@@ -55,13 +57,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setToken(accessToken)
             api.setToken(accessToken)
 
-            // Load roles from backend profile
+            // Load roles from backend profile — may fail on first login while tenant is provisioning
             let roles: string[] = []
             try {
               const profile = await api.getMyProfile()
               roles = profile.data?.roles?.map((r: any) => r.name) || []
             } catch {
-              // Profile not available yet (first login), use empty roles
+              // Profile not available yet — that's OK, backend will auto-provision
             }
 
             setUser({
@@ -72,20 +74,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               username: clerkUser.username || clerkUser.emailAddresses?.[0]?.emailAddress || '',
               roles,
             })
+            syncedRef.current = true
           }
         } catch (error) {
-          console.error('Error getting access token:', error)
-          syncedRef.current = false
+          console.error('Error syncing auth:', error)
+          // Retry up to 3 times with delay for auto-provisioning
+          syncAttemptRef.current++
+          if (syncAttemptRef.current < 3) {
+            setTimeout(() => {
+              setSyncing(false)
+            }, 2000)
+            return
+          }
         }
+        setSyncing(false)
       }
       syncToken()
     } else if (isLoaded && !isSignedIn) {
       syncedRef.current = false
+      syncAttemptRef.current = 0
       setUser(null)
       setToken(null)
       api.setToken(null)
     }
-  }, [isLoaded, isSignedIn, clerkUser?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn, clerkUser?.id, syncing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh token periodically (Clerk tokens expire after 60s by default)
   useEffect(() => {
@@ -117,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null)
     setUser(null)
     syncedRef.current = false
+    syncAttemptRef.current = 0
     signOut()
   }, [signOut])
 
@@ -124,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         isAuthenticated: !!isSignedIn,
-        isLoading: !isLoaded,
+        isLoading: !isLoaded || syncing,
         user,
         token,
         login,
