@@ -374,14 +374,14 @@ export class UsersService {
     slug: string,
   ): Promise<string | undefined> {
     try {
-      // Check if slug already exists — user may already have a tenant
+      // Check if user already exists in any tenant
+      const existingUser = await this.userRepository.findOne({ where: { email } });
+      if (existingUser) return existingUser.tenantId;
+
+      // Check if slug already exists
       let finalSlug = slug;
       const existing = await this.tenantRepository.findOne({ where: { slug: finalSlug } });
       if (existing) {
-        const existingUser = await this.userRepository.findOne({
-          where: { email, tenantId: existing.id },
-        });
-        if (existingUser) return existing.id;
         finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
       }
 
