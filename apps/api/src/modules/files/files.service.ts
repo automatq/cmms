@@ -158,6 +158,24 @@ export class FilesService {
     }
   }
 
+  async getFileBuffer(key: string): Promise<Buffer> {
+    try {
+      const response = await this.s3.send(new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }));
+      const stream = response.Body as Readable;
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) {
+        chunks.push(Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks);
+    } catch (error) {
+      this.logger.error('Get file buffer error:', error);
+      throw new InternalServerErrorException('Failed to get file');
+    }
+  }
+
   async copyFile(sourceKey: string, destKey: string): Promise<string> {
     try {
       await this.s3.send(new CopyObjectCommand({

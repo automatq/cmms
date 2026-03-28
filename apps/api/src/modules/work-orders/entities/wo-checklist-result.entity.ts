@@ -43,6 +43,9 @@ export class WoChecklistResult extends TenantAwareEntity {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  @Column({ nullable: true, name: 'signature_key' })
+  signatureKey: string;
+
   @Column({ nullable: true, name: 'completed_by' })
   completedBy: string;
 

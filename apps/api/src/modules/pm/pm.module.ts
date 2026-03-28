@@ -7,6 +7,7 @@ import { PmController, ChecklistTemplatesController } from './pm.controller';
 import { PmSchedulerProcessor } from './pm-scheduler.processor';
 import { WorkOrdersModule } from '../work-orders/work-orders.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WebhooksModule } from '../webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     }),
     forwardRef(() => WorkOrdersModule),
     forwardRef(() => NotificationsModule),
+    forwardRef(() => WebhooksModule),
   ],
   providers: [PmService, PmSchedulerProcessor],
   controllers: [PmController, ChecklistTemplatesController],

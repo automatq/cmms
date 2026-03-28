@@ -3,6 +3,7 @@ import {
   NotFoundException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, LessThanOrEqual, Between } from 'typeorm';
@@ -21,10 +22,13 @@ import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { WorkOrderType, Priority } from '../work-orders/entities/work-order.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
 
 @Injectable()
 export class PmService {
+  private readonly logger = new Logger(PmService.name);
+
   constructor(
     @InjectRepository(PmPlan)
     private readonly pmPlanRepository: Repository<PmPlan>,
@@ -36,6 +40,8 @@ export class PmService {
     private readonly workOrdersService: WorkOrdersService,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
+    @Inject(forwardRef(() => WebhooksService))
+    private readonly webhooksService: WebhooksService,
     @InjectQueue('pm-scheduler')
     private readonly pmQueue: Queue,
     private readonly dataSource: DataSource,
@@ -202,6 +208,15 @@ export class PmService {
     // Notify assigned users
     await this.notificationsService.onPmDue(plan, plan.assignedTo, tenantId);
 
+    try {
+      await this.webhooksService.trigger('pm.triggered', {
+        pmPlanId: plan.id,
+        pmPlanName: plan.name,
+        workOrderId: workOrder.id,
+        assetId: plan.assetId,
+      }, tenantId);
+    } catch {}
+
     return { woId: workOrder.id };
   }
 
@@ -283,9 +298,18 @@ export class PmService {
           // Notify
           await this.notificationsService.onPmDue(plan, plan.assignedTo, tenantId);
 
+          try {
+            await this.webhooksService.trigger('pm.triggered', {
+              pmPlanId: plan.id,
+              pmPlanName: plan.name,
+              workOrderId: workOrder.id,
+              assetId: plan.assetId,
+            }, tenantId);
+          } catch {}
+
           triggered++;
         } catch (error) {
-          console.error(`Failed to trigger PM ${plan.id}:`, error);
+          this.logger.error(`Failed to trigger PM ${plan.id}:`, error);
           skipped++;
         }
       }

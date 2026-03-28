@@ -45,10 +45,8 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: cmms-files
-      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
-      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
-      AUTH0_CLIENT_ID: ${AUTH0_CLIENT_ID}
-      AUTH0_CLIENT_SECRET: ${AUTH0_CLIENT_SECRET}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
       OLLAMA_URL: http://ollama:11434
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
@@ -104,14 +102,12 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api/v1
-      NEXT_PUBLIC_AUTH0_DOMAIN: ${AUTH0_DOMAIN}
-      NEXT_PUBLIC_AUTH0_CLIENT_ID: ${AUTH0_CLIENT_ID}
-      NEXT_PUBLIC_AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
     networks:
       - cmms-network
 
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:2.17.2-pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -143,7 +139,7 @@ services:
       - cmms-network
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -160,7 +156,7 @@ services:
       - cmms-network
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.4.7
     restart: unless-stopped
     volumes:
       - ollama_models:/root/.ollama

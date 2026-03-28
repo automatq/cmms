@@ -26,12 +26,12 @@ export class UsersService {
   // ==================== USER METHODS ====================
 
   /**
-   * Sync a user from Auth0 on login. Finds by email + tenantId, creates if not found.
-   * Auth0 `sub` (e.g. "auth0|abc123") is not a valid UUID, so we use auto-generated UUIDs
+   * Sync a user from Clerk on login. Finds by email + tenantId, creates if not found.
+   * Clerk `sub` (e.g. "auth0|abc123") is not a valid UUID, so we use auto-generated UUIDs
    * for the user primary key and match on email within the tenant instead.
    */
-  async syncFromAuth0(
-    auth0Sub: string,
+  async syncFromClerk(
+    clerkUserId: string,
     email: string,
     name: string,
     tenantId: string,
@@ -317,13 +317,13 @@ export class UsersService {
     return this.tenantRepository.findOne({ where: { slug } });
   }
 
-  async findTenantByAuth0OrgId(auth0OrgId: string): Promise<Tenant | null> {
-    return this.tenantRepository.findOne({ where: { auth0OrgId } });
+  async findTenantByClerkOrgId(clerkOrgId: string): Promise<Tenant | null> {
+    return this.tenantRepository.findOne({ where: { clerkOrgId } });
   }
 
-  async getTenantIdByAuth0OrgId(auth0OrgId: string): Promise<string | null> {
+  async getTenantIdByClerkOrgId(clerkOrgId: string): Promise<string | null> {
     const tenant = await this.tenantRepository.findOne({
-      where: { auth0OrgId },
+      where: { clerkOrgId },
       select: ['id'],
     });
     return tenant?.id || null;

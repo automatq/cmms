@@ -13,6 +13,7 @@ import { Location } from './location.entity';
 import { AssetCategory } from './asset-category.entity';
 import { AssetMeter } from './asset-meter.entity';
 import { AssetDocument } from './asset-document.entity';
+import { AssetDowntime } from './asset-downtime.entity';
 import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum AssetStatus {
@@ -119,6 +120,12 @@ export class Asset extends TenantAwareEntity {
 
   @OneToMany(() => AssetDocument, (doc) => doc.asset)
   documents: AssetDocument[];
+
+  @OneToMany(() => AssetDowntime, (downtime) => downtime.asset)
+  downtimes: AssetDowntime[];
+
+  @Column({ type: 'simple-array', nullable: true, name: 'warranty_alert_days' })
+  warrantyAlertDays: number[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

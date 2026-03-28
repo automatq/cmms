@@ -250,6 +250,52 @@ export class WorkOrdersController {
     return { storageKey };
   }
 
+  // ==================== SIGNATURES ====================
+
+  @Post(':id/signature')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Upload completion signature' })
+  @ApiResponse({ status: 201, description: 'Signature uploaded' })
+  uploadSignature(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('signature') signature: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.uploadSignature(id, signature, user.userId, user.tenantId);
+  }
+
+  @Get(':id/signature')
+  @Permissions('work_orders:read')
+  @ApiOperation({ summary: 'Get completion signature URL' })
+  @ApiResponse({ status: 200, description: 'Signature URL' })
+  async getSignature(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const url = await this.workOrdersService.getSignatureUrl(id, user.tenantId);
+    return { signatureUrl: url };
+  }
+
+  @Post(':id/checklist/:stepIndex/signature')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Upload checklist step signature' })
+  @ApiResponse({ status: 201, description: 'Checklist signature uploaded' })
+  async uploadChecklistSignature(
+    @Param('id', ParseUUIDPipe) woId: string,
+    @Param('stepIndex') stepIndex: string,
+    @Body('signature') signature: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const url = await this.workOrdersService.uploadChecklistSignature(
+      woId,
+      parseInt(stepIndex, 10),
+      signature,
+      user.userId,
+      user.tenantId,
+    );
+    return { signatureUrl: url };
+  }
+
   // ==================== WORK REQUESTS (authenticated) ====================
 
   @Get('requests')

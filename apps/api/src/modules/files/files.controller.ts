@@ -9,6 +9,8 @@ import {
   UseGuards,
   Query,
   Res,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -39,7 +41,7 @@ export class FilesController {
   ) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload a file' })
   @ApiResponse({ status: 201, description: 'File uploaded successfully' })
@@ -62,8 +64,10 @@ export class FilesController {
   @Get(':key/url')
   @ApiOperation({ summary: 'Get signed download URL' })
   @ApiResponse({ status: 200, description: 'Signed URL' })
-  async getSignedUrl(@Param('key') key: string) {
-    const url = await this.filesService.getSignedUrl(decodeURIComponent(key));
+  async getSignedUrl(@Param('key') key: string, @CurrentUser() user: RequestUser) {
+    const decodedKey = decodeURIComponent(key);
+    this.validateFileAccess(decodedKey, user.tenantId);
+    const url = await this.filesService.getSignedUrl(decodedKey);
     return { url };
   }
 
@@ -72,17 +76,31 @@ export class FilesController {
   @ApiResponse({ status: 200, description: 'File stream' })
   async downloadFile(
     @Param('key') key: string,
+    @CurrentUser() user: RequestUser,
     @Res() res: Response,
   ) {
-    const stream = await this.filesService.getFileStream(decodeURIComponent(key));
+    const decodedKey = decodeURIComponent(key);
+    this.validateFileAccess(decodedKey, user.tenantId);
+    const stream = await this.filesService.getFileStream(decodedKey);
     stream.pipe(res);
   }
 
   @Delete(':key')
   @ApiOperation({ summary: 'Delete a file' })
   @ApiResponse({ status: 200, description: 'File deleted' })
-  async deleteFile(@Param('key') key: string) {
-    await this.filesService.deleteFile(decodeURIComponent(key));
+  async deleteFile(@Param('key') key: string, @CurrentUser() user: RequestUser) {
+    const decodedKey = decodeURIComponent(key);
+    this.validateFileAccess(decodedKey, user.tenantId);
+    await this.filesService.deleteFile(decodedKey);
     return { success: true };
+  }
+
+  private validateFileAccess(key: string, tenantId: string): void {
+    if (key.includes('..') || key.startsWith('/')) {
+      throw new BadRequestException('Invalid file key');
+    }
+    if (!key.startsWith(tenantId + '/')) {
+      throw new ForbiddenException('Access denied to this file');
+    }
   }
 }

@@ -757,4 +757,30 @@ export class ReportsService {
       })),
     };
   }
+
+  // ==================== WARRANTY REPORT ====================
+
+  async getWarrantyReport(withinDays: number, tenantId: string) {
+    const now = new Date();
+    const futureDate = new Date(now);
+    futureDate.setDate(futureDate.getDate() + withinDays);
+
+    const assets = await this.assetRepo
+      .createQueryBuilder('asset')
+      .leftJoinAndSelect('asset.category', 'category')
+      .leftJoinAndSelect('asset.location', 'location')
+      .where('asset.tenantId = :tenantId', { tenantId })
+      .andWhere('asset.warrantyExpiry IS NOT NULL')
+      .andWhere('asset.status != :retired', { retired: 'retired' })
+      .orderBy('asset.warrantyExpiry', 'ASC')
+      .getMany();
+
+    return {
+      expired: assets.filter((a) => new Date(a.warrantyExpiry) < now),
+      expiringSoon: assets.filter(
+        (a) => new Date(a.warrantyExpiry) >= now && new Date(a.warrantyExpiry) <= futureDate,
+      ),
+      active: assets.filter((a) => new Date(a.warrantyExpiry) > futureDate),
+    };
+  }
 }

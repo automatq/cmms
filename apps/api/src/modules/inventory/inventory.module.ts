@@ -7,7 +7,9 @@ import { InventoryStock } from './entities/inventory-stock.entity';
 import { InventoryTransaction } from './entities/inventory-transaction.entity';
 import { PurchaseOrder } from './entities/purchase-order.entity';
 import { PoLineItem } from './entities/po-line-item.entity';
+import { ServiceContract } from './entities/service-contract.entity';
 import { InventoryService } from './inventory.service';
+import { ServiceContractsService } from './service-contracts.service';
 import {
   SuppliersController,
   PartsController,
@@ -15,6 +17,7 @@ import {
   InventoryController,
   PurchaseOrdersController,
 } from './inventory.controller';
+import { ServiceContractsController } from './service-contracts.controller';
 import { PartCsvController } from './csv.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 
@@ -28,6 +31,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       InventoryTransaction,
       PurchaseOrder,
       PoLineItem,
+      ServiceContract,
     ]),
     NotificationsModule,
   ],
@@ -37,9 +41,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
     StoreroomsController,
     InventoryController,
     PurchaseOrdersController,
+    ServiceContractsController,
     PartCsvController,
   ],
-  providers: [InventoryService],
-  exports: [InventoryService],
+  providers: [InventoryService, ServiceContractsService],
+  exports: [InventoryService, ServiceContractsService],
 })
 export class InventoryModule {}

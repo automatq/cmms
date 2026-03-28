@@ -7,8 +7,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { passportJwtSecret } from 'jwks-rsa';
-import * as jwt from 'jsonwebtoken';
+import { createClerkClient } from '@clerk/backend';
 import { UsersService } from '../users/users.service';
 
 interface AuthenticatedSocket extends Socket {
@@ -17,10 +16,6 @@ interface AuthenticatedSocket extends Socket {
 }
 
 @WebSocketGateway({
-  cors: {
-    origin: '*',
-    credentials: true,
-  },
   transports: ['websocket', 'polling'],
 })
 export class RealtimeGateway
@@ -30,33 +25,15 @@ export class RealtimeGateway
   server: Server;
 
   private readonly logger = new Logger(RealtimeGateway.name);
-  private readonly auth0Domain: string;
-  private readonly auth0Audience: string;
-  private getSigningKey: (kid: string) => Promise<string>;
+  private readonly clerk;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly usersService: UsersService,
   ) {
-    this.auth0Domain = this.configService.get<string>('AUTH0_DOMAIN', '');
-    this.auth0Audience = this.configService.get<string>('AUTH0_AUDIENCE', '');
-
-    // Build a JWKS key getter (same as JwtStrategy)
-    const jwksClient = require('jwks-rsa')({
-      jwksUri: `https://${this.auth0Domain}/.well-known/jwks.json`,
-      cache: true,
-      rateLimit: true,
-      jwksRequestsPerMinute: 5,
+    this.clerk = createClerkClient({
+      secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
     });
-
-    this.getSigningKey = (kid: string): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        jwksClient.getSigningKey(kid, (err: any, key: any) => {
-          if (err) return reject(err);
-          resolve(key.getPublicKey());
-        });
-      });
-    };
   }
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -69,37 +46,40 @@ export class RealtimeGateway
         throw new UnauthorizedException('No token provided');
       }
 
-      // Decode header to get kid
-      const decoded = jwt.decode(token, { complete: true });
-      if (!decoded || !decoded.header?.kid) {
-        throw new UnauthorizedException('Invalid token format');
+      // Verify token with Clerk
+      const payload = await this.clerk.verifyToken(token);
+
+      if (!payload.org_id) {
+        throw new UnauthorizedException('No organization in token');
       }
 
-      // Get signing key and verify
-      const signingKey = await this.getSigningKey(decoded.header.kid);
-      const payload: any = jwt.verify(token, signingKey, {
-        algorithms: ['RS256'],
-        issuer: `https://${this.auth0Domain}/`,
-        audience: this.auth0Audience,
-      });
-
       // Resolve tenant
-      const tenantId = await this.usersService.getTenantIdByAuth0OrgId(
+      const tenantId = await this.usersService.getTenantIdByClerkOrgId(
         payload.org_id,
       );
       if (!tenantId) {
         throw new UnauthorizedException('Cannot resolve tenant');
       }
 
-      // Sync user
-      const email = payload.email || '';
-      const name =
-        payload.name ||
-        [payload.given_name, payload.family_name].filter(Boolean).join(' ') ||
-        payload.nickname ||
-        'Unknown';
+      // Resolve email from Clerk user
+      let email = '';
+      let name = 'Unknown';
+      try {
+        const clerkUser = await this.clerk.users.getUser(payload.sub);
+        email =
+          clerkUser.emailAddresses?.find(
+            (e) => e.id === clerkUser.primaryEmailAddressId,
+          )?.emailAddress || '';
+        name =
+          [clerkUser.firstName, clerkUser.lastName]
+            .filter(Boolean)
+            .join(' ') || email.split('@')[0] || 'Unknown';
+      } catch {
+        // Fall through with defaults
+      }
 
-      const user = await this.usersService.syncFromAuth0(
+      // Sync user
+      const user = await this.usersService.syncFromClerk(
         payload.sub,
         email,
         name,

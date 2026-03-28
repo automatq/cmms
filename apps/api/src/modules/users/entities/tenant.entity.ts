@@ -85,8 +85,8 @@ export class Tenant {
   @Column({ nullable: true, name: 'stripe_subscription_id' })
   stripeSubscriptionId: string;
 
-  @Column({ nullable: true, name: 'auth0_org_id' })
-  auth0OrgId: string;
+  @Column({ nullable: true, name: 'clerk_org_id' })
+  clerkOrgId: string;
 
   @Column({ type: 'int', default: 0, name: 'user_count' })
   userCount: number;

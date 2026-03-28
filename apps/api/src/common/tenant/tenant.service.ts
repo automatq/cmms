@@ -73,8 +73,8 @@ export class TenantService {
     return this.tenantRepository.findOne({ where: { slug } });
   }
 
-  async findByAuth0OrgId(auth0OrgId: string): Promise<Tenant | null> {
-    return this.tenantRepository.findOne({ where: { auth0OrgId } });
+  async findByClerkOrgId(clerkOrgId: string): Promise<Tenant | null> {
+    return this.tenantRepository.findOne({ where: { clerkOrgId } });
   }
 
   async isFeatureEnabled(tenantId: string, feature: string): Promise<boolean> {
@@ -120,7 +120,7 @@ export class TenantService {
 
   async provisionTenant(dto: CreateTenantDto): Promise<{
     tenant: Tenant;
-    auth0OrgId: string | null;
+    clerkOrgId: string | null;
   }> {
     // Check slug uniqueness
     const existing = await this.tenantRepository.findOne({ where: { slug: dto.slug } });
@@ -142,99 +142,53 @@ export class TenantService {
 
     await this.tenantRepository.save(tenant);
 
-    // Create Auth0 Organization
-    let auth0OrgId: string | null = null;
+    // Create Clerk Organization
+    let clerkOrgId: string | null = null;
     try {
-      auth0OrgId = await this.createAuth0Organization(tenant, dto.adminEmail);
-      tenant.auth0OrgId = auth0OrgId;
+      clerkOrgId = await this.createClerkOrganization(tenant, dto.adminEmail);
+      tenant.clerkOrgId = clerkOrgId;
       await this.tenantRepository.save(tenant);
     } catch (error) {
-      this.logger.error(`Failed to create Auth0 Organization for tenant ${tenant.id}:`, error);
-      // Tenant is still created - Auth0 org can be retried
+      this.logger.error(`Failed to create Clerk Organization for tenant ${tenant.id}:`, error);
+      // Tenant is still created - Clerk org can be retried
     }
 
-    return { tenant, auth0OrgId };
+    return { tenant, clerkOrgId };
   }
 
-  private async createAuth0Organization(
+  private async createClerkOrganization(
     tenant: Tenant,
     adminEmail: string,
   ): Promise<string> {
-    const domain = this.configService.get<string>('AUTH0_DOMAIN', '');
-    const clientId = this.configService.get<string>('AUTH0_CLIENT_ID', '');
-    const clientSecret = this.configService.get<string>('AUTH0_CLIENT_SECRET', '');
+    const secretKey = this.configService.get<string>('CLERK_SECRET_KEY', '');
 
-    if (!domain || !clientId || !clientSecret) {
-      this.logger.warn('Auth0 credentials not configured, skipping org creation');
+    if (!secretKey) {
+      this.logger.warn('Clerk credentials not configured, skipping org creation');
       return '';
     }
 
-    // Get Management API token
-    const tokenResponse = await fetch(`https://${domain}/oauth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: clientId,
-        client_secret: clientSecret,
-        audience: `https://${domain}/api/v2/`,
-        grant_type: 'client_credentials',
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error(`Failed to get Auth0 Management API token: ${tokenResponse.statusText}`);
-    }
-
-    const { access_token } = await tokenResponse.json();
+    const { createClerkClient } = await import('@clerk/backend');
+    const clerk = createClerkClient({ secretKey });
 
     // Create Organization
-    const orgResponse = await fetch(`https://${domain}/api/v2/organizations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${access_token}`,
+    const org = await clerk.organizations.createOrganization({
+      name: tenant.name,
+      slug: tenant.slug,
+      publicMetadata: {
+        tenantId: tenant.id,
+        plan: tenant.plan,
       },
-      body: JSON.stringify({
-        name: tenant.slug,
-        display_name: tenant.name,
-        metadata: {
-          tenantId: tenant.id,
-          plan: tenant.plan,
-        },
-      }),
     });
-
-    if (!orgResponse.ok) {
-      const errorBody = await orgResponse.text();
-      throw new Error(`Failed to create Auth0 Organization: ${orgResponse.statusText} - ${errorBody}`);
-    }
-
-    const org = await orgResponse.json();
 
     // Invite admin user to the organization
     try {
-      const inviteResponse = await fetch(
-        `https://${domain}/api/v2/organizations/${org.id}/invitations`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${access_token}`,
-          },
-          body: JSON.stringify({
-            inviter: { name: 'CMMS' },
-            invitee: { email: adminEmail },
-            client_id: clientId,
-            roles: [], // Admin role will be assigned after login
-          }),
-        },
-      );
-
-      if (!inviteResponse.ok) {
-        this.logger.warn(`Failed to send invitation to ${adminEmail}: ${inviteResponse.statusText}`);
-      }
+      await clerk.organizations.createOrganizationInvitation({
+        organizationId: org.id,
+        emailAddress: adminEmail,
+        role: 'org:admin',
+      });
     } catch (error) {
-      this.logger.warn(`Failed to send invitation email:`, error);
+      this.logger.warn(`Failed to send invitation to ${adminEmail}:`, error);
     }
 
     return org.id;

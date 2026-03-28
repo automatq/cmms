@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { BarChart3, Calendar, TrendingUp, Package, DollarSign, Users } from 'lucide-react'
+import { BarChart3, Calendar, TrendingUp, Package, DollarSign, Users, Clock, Shield, Wallet } from 'lucide-react'
 
 export default function ReportsPage() {
   return (
@@ -132,6 +132,62 @@ export default function ReportsPage() {
             </p>
             <Button asChild>
               <Link href="/dashboard/reports/technician-performance">View Report</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="hover:border-primary transition-colors">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-orange-600" />
+              </div>
+              <CardTitle>Downtime Tracking</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Asset downtime events, MTBF, and MTTR metrics.
+            </p>
+            <Button asChild>
+              <Link href="/dashboard/reports/downtime">View Report</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:border-primary transition-colors">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                <Shield className="h-5 w-5 text-indigo-600" />
+              </div>
+              <CardTitle>Warranty Status</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Asset warranty status, upcoming expirations, and alerts.
+            </p>
+            <Button asChild>
+              <Link href="/dashboard/reports/warranties">View Report</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:border-primary transition-colors">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                <Wallet className="h-5 w-5 text-emerald-600" />
+              </div>
+              <CardTitle>Budget Tracking</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Planned vs actual spending and budget variance analysis.
+            </p>
+            <Button asChild>
+              <Link href="/dashboard/reports/budgets">View Report</Link>
             </Button>
           </CardContent>
         </Card>

@@ -52,11 +52,17 @@ export class WorkRequest extends TenantAwareEntity {
   @Column({ nullable: true, name: 'submitted_by' })
   submittedBy: string;
 
+  @Column({ nullable: true, name: 'submitter_name' })
+  submitterName: string;
+
   @Column({ nullable: true, name: 'submitter_email' })
   submitterEmail: string;
 
   @Column({ nullable: true, name: 'submitter_phone' })
   submitterPhone: string;
+
+  @Column({ type: 'varchar', nullable: true, unique: true, name: 'tracking_token' })
+  trackingToken: string;
 
   @Column({ nullable: true, name: 'wo_id' })
   woId: string;

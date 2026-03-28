@@ -1,21 +1,28 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 import {
   Asset,
   AssetCategory,
   AssetDocument,
+  AssetDowntime,
   AssetMeter,
   Location,
 } from './entities';
+import { ServiceContract } from '../inventory/entities/service-contract.entity';
 import { AssetsService } from './assets.service';
+import { DowntimeService } from './downtime.service';
+import { WarrantyCheckProcessor } from './warranty-check.processor';
 import {
   AssetsController,
   LocationsController,
   CategoriesController,
 } from './assets.controller';
+import { DowntimeController } from './downtime.controller';
 import { AssetCsvController, LocationCsvController } from './csv.controller';
 import { FilesModule } from '../files/files.module';
 import { BillingModule } from '../billing/billing.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -23,14 +30,18 @@ import { BillingModule } from '../billing/billing.module';
       Asset,
       AssetCategory,
       AssetDocument,
+      AssetDowntime,
       AssetMeter,
       Location,
+      ServiceContract,
     ]),
+    BullModule.registerQueue({ name: 'warranty-checker' }),
     forwardRef(() => FilesModule),
     BillingModule,
+    NotificationsModule,
   ],
-  providers: [AssetsService],
-  controllers: [AssetsController, LocationsController, CategoriesController, AssetCsvController, LocationCsvController],
-  exports: [AssetsService],
+  providers: [AssetsService, DowntimeService, WarrantyCheckProcessor],
+  controllers: [AssetsController, DowntimeController, LocationsController, CategoriesController, AssetCsvController, LocationCsvController],
+  exports: [AssetsService, DowntimeService],
 })
 export class AssetsModule {}

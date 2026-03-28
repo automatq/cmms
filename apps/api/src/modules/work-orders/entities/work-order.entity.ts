@@ -128,6 +128,18 @@ export class WorkOrder extends TenantAwareEntity {
   @Column({ nullable: true, name: 'pm_plan_id' })
   pmPlanId: string;
 
+  @Column({ type: 'uuid', nullable: true, name: 'team_id' })
+  teamId: string;
+
+  @Column({ type: 'varchar', nullable: true, name: 'completion_signature' })
+  completionSignature: string;
+
+  @Column({ type: 'uuid', nullable: true, name: 'signed_off_by' })
+  signedOffBy: string;
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'signed_off_at' })
+  signedOffAt: Date;
+
   @Column({ type: 'jsonb', default: {} })
   metadata: Record<string, unknown>;
 
