@@ -48,8 +48,11 @@ export class UsersService {
     }
 
     // Auto-provision new user on first login
+    // First user in a tenant gets admin role, subsequent users get technician
+    const existingUserCount = await this.userRepository.count({ where: { tenantId } });
+    const roleName = existingUserCount === 0 ? 'admin' : 'technician';
     const defaultRole = await this.roleRepository.findOne({
-      where: { name: 'technician', tenantId },
+      where: { name: roleName, tenantId },
     });
 
     const [firstName, ...lastParts] = name.split(' ');

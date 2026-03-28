@@ -101,11 +101,17 @@ export class JwtAuthGuard implements CanActivate {
         tenantId,
       );
 
+      // Derive permissions from DB roles (not Clerk org_permissions)
+      const rolePermissions: string[] = [];
+      for (const role of user.roles || []) {
+        if (role.permissions) rolePermissions.push(...role.permissions);
+      }
+
       const requestUser: RequestUser = {
         userId: user.id,
         tenantId,
         email: email || user.email,
-        permissions: payload.org_permissions || [],
+        permissions: rolePermissions,
         roles: user.roles?.map((r) => r.name) || [],
       };
 
