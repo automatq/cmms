@@ -8,8 +8,24 @@ import { JsonLoggerService } from './common/logger/json-logger.service';
 import { RequestLoggingInterceptor } from './common/logger/request-logging.interceptor';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 
+function validateProductionEnv() {
+  const required = [
+    'DB_HOST', 'DB_PASSWORD', 'DB_USERNAME', 'DB_DATABASE',
+    'CLERK_SECRET_KEY',
+    'CORS_ORIGINS',
+  ];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+}
+
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction) {
+    validateProductionEnv();
+  }
 
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
@@ -64,7 +80,7 @@ async function bootstrap() {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter Auth0 JWT token',
+          description: 'Enter Clerk JWT token',
         },
         'JWT',
       )
@@ -86,11 +102,16 @@ async function bootstrap() {
   await redisIoAdapter.connectToRedis(configService);
   app.useWebSocketAdapter(redisIoAdapter);
 
+  // Graceful shutdown
+  app.enableShutdownHooks();
+
   const port = configService.get('PORT', 4000);
   await app.listen(port);
-  
+
   logger.log(`CMMS API running on port ${port}`);
-  logger.log(`Swagger docs: http://localhost:${port}/api/docs`);
+  if (nodeEnv !== 'production') {
+    logger.log(`Swagger docs: http://localhost:${port}/api/docs`);
+  }
 }
 
 bootstrap();

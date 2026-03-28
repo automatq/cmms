@@ -18,6 +18,9 @@ export enum NotificationType {
   LOW_STOCK = 'low_stock',
   WORK_REQUEST = 'work_request',
   SYSTEM = 'system',
+  WARRANTY_EXPIRING = 'warranty_expiring',
+  BUDGET_ALERT = 'budget_alert',
+  CONTRACT_EXPIRING = 'contract_expiring',
 }
 
 @Entity('notifications')

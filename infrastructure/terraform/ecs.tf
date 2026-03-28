@@ -232,8 +232,7 @@ locals {
     { name = "S3_BUCKET", value = aws_s3_bucket.files.id },
     { name = "S3_REGION", value = var.aws_region },
     { name = "AWS_REGION", value = var.aws_region },
-    { name = "AUTH0_DOMAIN", value = var.auth0_domain },
-    { name = "AUTH0_AUDIENCE", value = var.auth0_audience },
+    { name = "CLERK_PUBLISHABLE_KEY", value = var.clerk_publishable_key },
     { name = "SES_FROM_EMAIL", value = var.ses_from_email },
     { name = "DOMAIN_NAME", value = var.domain_name },
     { name = "STORAGE_PROVIDER", value = "s3" },
@@ -262,8 +261,8 @@ locals {
 
   api_secrets = concat(local.common_secrets, [
     {
-      name      = "AUTH0_CLIENT_SECRET"
-      valueFrom = "${aws_secretsmanager_secret.auth_secrets.arn}:client_secret::"
+      name      = "CLERK_SECRET_KEY"
+      valueFrom = "${aws_secretsmanager_secret.clerk_secrets.arn}:secret_key::"
     },
     {
       name      = "STRIPE_SECRET_KEY"
@@ -304,7 +303,7 @@ resource "aws_ecs_task_definition" "api" {
 
       environment = concat(local.common_env_vars, [
         { name = "PORT", value = tostring(local.api_port) },
-        { name = "AUTH0_CLIENT_ID", value = var.auth0_client_id },
+        { name = "CLERK_PUBLISHABLE_KEY", value = var.clerk_publishable_key },
       ])
 
       secrets = local.api_secrets
@@ -413,9 +412,7 @@ resource "aws_ecs_task_definition" "web" {
       environment = [
         { name = "NODE_ENV", value = "production" },
         { name = "NEXT_PUBLIC_API_URL", value = "https://${var.domain_name}/api/v1" },
-        { name = "NEXT_PUBLIC_AUTH0_DOMAIN", value = var.auth0_domain },
-        { name = "NEXT_PUBLIC_AUTH0_CLIENT_ID", value = var.auth0_client_id },
-        { name = "NEXT_PUBLIC_AUTH0_AUDIENCE", value = var.auth0_audience },
+        { name = "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", value = var.clerk_publishable_key },
         { name = "PORT", value = tostring(local.web_port) },
       ]
 

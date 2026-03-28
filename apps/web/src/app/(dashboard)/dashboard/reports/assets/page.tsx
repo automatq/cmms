@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ArrowLeft, Monitor, Wrench, History, Activity } from 'lucide-react'
+import { ExportButton } from '@/components/reports/export-button'
 import Link from 'next/link'
 import { format, subDays } from 'date-fns'
 import { ChartCard } from '../components/chart-card'
@@ -77,6 +78,7 @@ export default function AssetReportPage() {
                         <Label className="text-xs">To</Label>
                         <Input type="date" value={dateRange.endDate} onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })} className="h-9" />
                     </div>
+                    <ExportButton reportType="assets" filters={dateRange} />
                 </div>
             </div>
 

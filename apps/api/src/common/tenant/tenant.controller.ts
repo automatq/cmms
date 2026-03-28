@@ -37,7 +37,7 @@ export class TenantController {
   @ApiResponse({ status: 201, description: 'Tenant created successfully' })
   @ApiResponse({ status: 409, description: 'Slug already taken' })
   async signup(@Body() dto: CreateTenantDto) {
-    const { tenant, auth0OrgId } = await this.tenantService.provisionTenant(dto);
+    const { tenant, clerkOrgId } = await this.tenantService.provisionTenant(dto);
 
     return {
       id: tenant.id,
@@ -45,7 +45,7 @@ export class TenantController {
       slug: tenant.slug,
       plan: tenant.plan,
       status: tenant.status,
-      auth0OrgId,
+      clerkOrgId,
     };
   }
 

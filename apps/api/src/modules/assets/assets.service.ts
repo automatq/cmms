@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
@@ -35,6 +36,7 @@ import { TenantService } from '../../common/tenant/tenant.service';
 
 @Injectable()
 export class AssetsService {
+  private readonly logger = new Logger(AssetsService.name);
   private assetNumberCounter = 0;
 
   constructor(
@@ -344,7 +346,7 @@ export class AssetsService {
       try {
         await this.filesService.deleteFile(asset.customFields.imageUrl as string);
       } catch (error) {
-        console.error('Failed to delete old asset image:', error);
+        this.logger.error('Failed to delete old asset image:', error);
       }
     }
 

@@ -112,6 +112,27 @@ export class NotificationsService {
     return saved;
   }
 
+  async broadcastToTenant(
+    type: NotificationType | string,
+    title: string,
+    message: string,
+    data: Record<string, unknown> = {},
+    tenantId: string,
+  ): Promise<void> {
+    const users = await this.userRepository.find({
+      where: { tenantId, status: 'active' as any },
+      select: ['id'],
+    });
+
+    for (const user of users) {
+      try {
+        await this.createNotification(user.id, type as NotificationType, title, message, data, tenantId);
+      } catch (error) {
+        this.logger.warn(`Failed to notify user ${user.id}: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+  }
+
   async findUserNotifications(userId: string, tenantId: string, limit = 50): Promise<Notification[]> {
     return this.notificationRepository.find({
       where: { userId, tenantId },

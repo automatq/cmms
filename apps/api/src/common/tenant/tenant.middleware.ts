@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware } from '@nestjs/common';
+import { Injectable, NestMiddleware, HttpException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { DataSource } from 'typeorm';
 
@@ -16,10 +16,23 @@ import { DataSource } from 'typeorm';
 export class TenantMiddleware implements NestMiddleware {
   constructor(private readonly dataSource: DataSource) {}
 
-  async use(req: Request, _res: Response, next: NextFunction) {
+  async use(req: Request, res: Response, next: NextFunction) {
     const user = (req as any).user;
 
     if (user?.tenantId) {
+      // Check tenant subscription status
+      const [tenant] = await this.dataSource.query(
+        `SELECT status FROM tenants WHERE id = $1`,
+        [user.tenantId],
+      );
+
+      if (tenant && (tenant.status === 'suspended' || tenant.status === 'cancelled')) {
+        throw new HttpException(
+          { message: 'Subscription inactive. Please update your billing to continue.', status: tenant.status },
+          402,
+        );
+      }
+
       // Set the PostgreSQL session variable for RLS
       // Using a parameterized query to prevent SQL injection
       await this.dataSource.query(

@@ -1,5 +1,7 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { offlineQueue } from './offline-queue';
+import { isOfflineSupportedMutation } from './query-client';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -25,6 +27,39 @@ class ApiClient {
       }
       return config;
     });
+
+    // Offline mutation interceptor: queue write requests that fail due to network errors
+    this.client.interceptors.response.use(
+      (response) => response,
+      async (error: AxiosError) => {
+        if (
+          error.message === 'Network Error' &&
+          error.config &&
+          error.config.method &&
+          ['post', 'patch', 'put', 'delete'].includes(error.config.method) &&
+          error.config.url &&
+          isOfflineSupportedMutation(error.config.url, error.config.method)
+        ) {
+          // Queue the mutation for later sync
+          await offlineQueue.enqueue({
+            endpoint: error.config.url,
+            method: error.config.method.toUpperCase() as any,
+            body: error.config.data ? JSON.parse(error.config.data) : undefined,
+          });
+
+          // Return a synthetic response so the UI can optimistically update
+          return {
+            data: { _offline: true, _queued: true },
+            status: 202,
+            statusText: 'Queued Offline',
+            headers: {},
+            config: error.config,
+          };
+        }
+
+        return Promise.reject(error);
+      },
+    );
   }
 
   async setToken(token: string | null) {
@@ -130,29 +165,41 @@ class ApiClient {
   async uploadFile(file: any, path: string = 'uploads') {
     const formData = new FormData();
     formData.append('file', file);
-    
-    const token = await this.getToken();
-    
-    return axios.post(`${API_URL}/files/upload?path=${path}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${token}`,
-      },
+
+    return this.client.post(`/files/upload?path=${path}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
   }
 
   async uploadWorkOrderAttachment(woId: string, file: any) {
     const formData = new FormData();
     formData.append('file', file);
-    
-    const token = await this.getToken();
-    
-    return axios.post(`${API_URL}/work-orders/${woId}/attachments`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${token}`,
-      },
+
+    return this.client.post(`/work-orders/${woId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
+  }
+
+  // Signatures
+  async uploadSignature(woId: string, signatureBase64: string) {
+    return this.client.post(`/work-orders/${woId}/signature`, { signature: signatureBase64 });
+  }
+
+  async getSignature(woId: string) {
+    return this.client.get(`/work-orders/${woId}/signature`);
+  }
+
+  // Downtime
+  async startDowntime(assetId: string, reason: string) {
+    return this.client.post(`/assets/${assetId}/downtime`, { reason });
+  }
+
+  async endDowntime(assetId: string) {
+    return this.client.patch(`/assets/${assetId}/downtime/end`);
+  }
+
+  async getDowntimeHistory(assetId: string) {
+    return this.client.get(`/assets/${assetId}/downtime`);
   }
 
   async uploadAssetDocument(assetId: string, file: any, meta: any) {
@@ -160,14 +207,9 @@ class ApiClient {
     formData.append('file', file);
     formData.append('name', meta.name);
     if (meta.type) formData.append('type', meta.type);
-    
-    const token = await this.getToken();
-    
-    return axios.post(`${API_URL}/assets/${assetId}/documents`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${token}`,
-      },
+
+    return this.client.post(`/assets/${assetId}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
   }
 }

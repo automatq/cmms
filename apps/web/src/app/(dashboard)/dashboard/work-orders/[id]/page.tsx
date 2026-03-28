@@ -28,6 +28,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
+import { SignaturePad } from '@/components/work-orders/signature-pad'
 
 export default function WorkOrderDetailPage() {
     const params = useParams()
@@ -48,6 +49,7 @@ export default function WorkOrderDetailPage() {
     const [activeTab, setActiveTab] = useState('labor')
     const [showLaborDialog, setShowLaborDialog] = useState(false)
     const [showPartDialog, setShowPartDialog] = useState(false)
+    const [showSignatureDialog, setShowSignatureDialog] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Labor form state
@@ -161,6 +163,23 @@ export default function WorkOrderDetailPage() {
             toast.success('Attachment removed')
         },
         onError: () => toast.error('Failed to remove attachment'),
+    })
+
+    // Signature mutations
+    const signatureMutation = useMutation({
+        mutationFn: (base64png: string) => api.uploadSignature(id, base64png),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['work-order', id] })
+            setShowSignatureDialog(false)
+            toast.success('Signature saved')
+        },
+        onError: () => toast.error('Failed to save signature'),
+    })
+
+    const { data: signatureData } = useQuery({
+        queryKey: ['work-order', id, 'signature'],
+        queryFn: () => api.getSignature(id).then((r) => r.data),
+        enabled: !!wo?.completionSignature,
     })
 
     // Checklist mutations
@@ -765,9 +784,20 @@ export default function WorkOrderDetailPage() {
                                 </Button>
                             )}
                             {wo.status !== 'completed' && (
-                                <Button variant="default" className="w-full justify-start bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => updateMutation.mutate('completed')}>
+                                <Button variant="default" className="w-full justify-start bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowSignatureDialog(true)}>
                                     <CheckCircle2 className="h-4 w-4 mr-2" /> Mark Completed
                                 </Button>
+                            )}
+                            {wo.status === 'completed' && wo.completionSignature && signatureData?.signatureUrl && (
+                                <div className="space-y-2">
+                                    <p className="text-sm font-medium text-muted-foreground">Completion Signature</p>
+                                    <img src={signatureData.signatureUrl} alt="Completion signature" className="border rounded-lg w-full" />
+                                    {wo.signedOffAt && (
+                                        <p className="text-xs text-muted-foreground">
+                                            Signed {new Date(wo.signedOffAt).toLocaleString()}
+                                        </p>
+                                    )}
+                                </div>
                             )}
                         </CardContent>
                     </Card>
@@ -867,6 +897,38 @@ export default function WorkOrderDetailPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Signature Dialog */}
+            <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Complete Work Order</DialogTitle>
+                        <DialogDescription>Add your signature to confirm work order completion.</DialogDescription>
+                    </DialogHeader>
+                    <SignaturePad
+                        onSave={(base64png) => {
+                            signatureMutation.mutate(base64png, {
+                                onSuccess: () => {
+                                    updateMutation.mutate('completed')
+                                },
+                            })
+                        }}
+                        onCancel={() => setShowSignatureDialog(false)}
+                        disabled={signatureMutation.isPending}
+                    />
+                    <div className="text-center">
+                        <button
+                            className="text-sm text-muted-foreground underline"
+                            onClick={() => {
+                                setShowSignatureDialog(false)
+                                updateMutation.mutate('completed')
+                            }}
+                        >
+                            Skip signature and complete
+                        </button>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

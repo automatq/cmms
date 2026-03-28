@@ -9,6 +9,7 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: API_URL,
+      timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -611,6 +612,210 @@ class ApiClient {
 
   async getMyActiveActivity() {
     return this.client.get('/activity/my-active')
+  }
+
+  // ==================== Downtime ====================
+  async startDowntime(assetId: string, data: { reason: string }) {
+    return this.client.post(`/assets/${assetId}/downtime`, data)
+  }
+
+  async endDowntime(assetId: string) {
+    return this.client.patch(`/assets/${assetId}/downtime/end`)
+  }
+
+  async getDowntimeHistory(assetId: string) {
+    return this.client.get(`/assets/${assetId}/downtime`)
+  }
+
+  async getActiveDowntime(assetId: string) {
+    return this.client.get(`/assets/${assetId}/downtime/active`)
+  }
+
+  async getDowntimeMtbf(assetId: string, params?: Record<string, any>) {
+    return this.client.get(`/assets/${assetId}/downtime/mtbf`, { params })
+  }
+
+  async getDowntimeMttr(assetId: string, params?: Record<string, any>) {
+    return this.client.get(`/assets/${assetId}/downtime/mttr`, { params })
+  }
+
+  // ==================== Teams ====================
+  async getTeams() {
+    return this.client.get('/teams')
+  }
+
+  async getTeam(id: string) {
+    return this.client.get(`/teams/${id}`)
+  }
+
+  async createTeam(data: any) {
+    return this.client.post('/teams', data)
+  }
+
+  async updateTeam(id: string, data: any) {
+    return this.client.patch(`/teams/${id}`, data)
+  }
+
+  async deleteTeam(id: string) {
+    return this.client.delete(`/teams/${id}`)
+  }
+
+  async addTeamMember(teamId: string, userId: string) {
+    return this.client.post(`/teams/${teamId}/members`, { userId })
+  }
+
+  async removeTeamMember(teamId: string, userId: string) {
+    return this.client.delete(`/teams/${teamId}/members/${userId}`)
+  }
+
+  // ==================== Budgets ====================
+  async getBudgets() {
+    return this.client.get('/budgets')
+  }
+
+  async getBudget(id: string) {
+    return this.client.get(`/budgets/${id}`)
+  }
+
+  async createBudget(data: any) {
+    return this.client.post('/budgets', data)
+  }
+
+  async updateBudget(id: string, data: any) {
+    return this.client.patch(`/budgets/${id}`, data)
+  }
+
+  async deleteBudget(id: string) {
+    return this.client.delete(`/budgets/${id}`)
+  }
+
+  async getBudgetVsActual(id: string) {
+    return this.client.get(`/budgets/${id}/vs-actual`)
+  }
+
+  async getBudgetSummary() {
+    return this.client.get('/budgets/summary')
+  }
+
+  // ==================== Webhooks ====================
+  async getWebhooks() {
+    return this.client.get('/webhooks')
+  }
+
+  async createWebhook(data: { url: string; events: string[] }) {
+    return this.client.post('/webhooks', data)
+  }
+
+  async updateWebhook(id: string, data: any) {
+    return this.client.patch(`/webhooks/${id}`, data)
+  }
+
+  async deleteWebhook(id: string) {
+    return this.client.delete(`/webhooks/${id}`)
+  }
+
+  async getWebhookLogs(id: string) {
+    return this.client.get(`/webhooks/${id}/logs`)
+  }
+
+  async testWebhook(id: string) {
+    return this.client.post(`/webhooks/${id}/test`)
+  }
+
+  // ==================== Service Contracts ====================
+  async getServiceContracts() {
+    return this.client.get('/service-contracts')
+  }
+
+  async getServiceContract(id: string) {
+    return this.client.get(`/service-contracts/${id}`)
+  }
+
+  async createServiceContract(data: any) {
+    return this.client.post('/service-contracts', data)
+  }
+
+  async updateServiceContract(id: string, data: any) {
+    return this.client.patch(`/service-contracts/${id}`, data)
+  }
+
+  async deleteServiceContract(id: string) {
+    return this.client.delete(`/service-contracts/${id}`)
+  }
+
+  async getExpiringContracts(days?: number) {
+    return this.client.get('/service-contracts/expiring', { params: { days } })
+  }
+
+  // ==================== Signatures ====================
+  async uploadSignature(woId: string, signature: string) {
+    return this.client.post(`/work-orders/${woId}/signature`, { signature })
+  }
+
+  async getSignature(woId: string) {
+    return this.client.get(`/work-orders/${woId}/signature`)
+  }
+
+  // ==================== Report Export ====================
+  async exportReport(type: string, format: string, filters?: Record<string, any>) {
+    return this.client.post(`/reports/${type}/export?format=${format}`, filters || {}, {
+      responseType: format === 'csv' ? 'blob' : 'blob',
+    })
+  }
+
+  async getScheduledReports() {
+    return this.client.get('/reports/scheduled')
+  }
+
+  async createScheduledReport(data: any) {
+    return this.client.post('/reports/scheduled', data)
+  }
+
+  async updateScheduledReport(id: string, data: any) {
+    return this.client.patch(`/reports/scheduled/${id}`, data)
+  }
+
+  async deleteScheduledReport(id: string) {
+    return this.client.delete(`/reports/scheduled/${id}`)
+  }
+
+  // ==================== Data Imports ====================
+  async getImports() {
+    return this.client.get('/imports')
+  }
+
+  async previewImport(type: string, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.client.post(`/imports/${type}/preview`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  }
+
+  async startImport(type: string, file: File, columnMapping: Record<string, string>) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('columnMapping', JSON.stringify(columnMapping))
+    return this.client.post(`/imports/${type}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  }
+
+  async getImportStatus(id: string) {
+    return this.client.get(`/imports/${id}`)
+  }
+
+  async getImportErrors(id: string) {
+    return this.client.get(`/imports/${id}/errors`)
+  }
+
+  // ==================== Downtime & Warranty Reports ====================
+  async getDowntimeReport(params?: Record<string, any>) {
+    return this.client.get('/reports/downtime', { params })
+  }
+
+  async getWarrantyReport(days?: number) {
+    return this.client.get('/reports/warranties', { params: { days } })
   }
 }
 

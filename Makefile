@@ -33,8 +33,14 @@ pull-models:
 	docker compose exec ollama ollama pull qwen2.5-coder:7b
 
 reset:
-	docker compose down -v
-	docker compose up -d
+	@echo "WARNING: This will delete ALL data volumes (database, redis, minio)."
+	@read -p "Are you sure? Type 'yes' to confirm: " confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		docker compose down -v; \
+		docker compose up -d; \
+	else \
+		echo "Aborted."; \
+	fi
 
 # Production commands (uses docker-compose.prod.yml)
 prod-up:

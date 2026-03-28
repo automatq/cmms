@@ -22,6 +22,13 @@ import {
   Inbox,
   Shield,
   QrCode,
+  Users,
+  Webhook,
+  DollarSign,
+  FileText,
+  Clock,
+  FileUp,
+  CalendarClock,
 } from 'lucide-react'
 import { useState } from 'react'
 import { QrScannerDialog } from '@/components/dashboard/qr-scanner-dialog'
@@ -34,7 +41,21 @@ const navigation = [
   { name: 'PM Plans', href: '/dashboard/pm', icon: Calendar },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Warehouse },
   { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
+  { name: 'Data Import', href: '/dashboard/imports', icon: FileUp },
   { name: 'AI Assistant', href: '/dashboard/ai', icon: Sparkles },
+]
+
+const settingsSubNav = [
+  { name: 'Teams', href: '/dashboard/settings/teams', icon: Users },
+  { name: 'Webhooks', href: '/dashboard/settings/webhooks', icon: Webhook },
+  { name: 'Scheduled Reports', href: '/dashboard/settings/scheduled-reports', icon: CalendarClock },
+]
+
+const reportSubNav = [
+  { name: 'Downtime', href: '/dashboard/reports/downtime', icon: Clock },
+  { name: 'Warranties', href: '/dashboard/reports/warranties', icon: Shield },
+  { name: 'Budgets', href: '/dashboard/reports/budgets', icon: DollarSign },
+  { name: 'Contracts', href: '/dashboard/inventory/contracts', icon: FileText },
 ]
 
 export function Sidebar() {
@@ -103,6 +124,57 @@ export function Sidebar() {
                 </Link>
               )
             })}
+
+            {/* Reports Sub-nav */}
+            {pathname.startsWith('/dashboard/reports') && (
+              <div className="pl-4 space-y-1">
+                {reportSubNav.map((item) => {
+                  const isActive = pathname === item.href
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                        isActive
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )}
+                    >
+                      <item.icon className="h-3.5 w-3.5" />
+                      {item.name}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Settings Sub-nav */}
+            {pathname.startsWith('/dashboard/settings') && (
+              <div className="border-t pt-2 mt-2">
+                <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Settings</p>
+                {settingsSubNav.map((item) => {
+                  const isActive = pathname === item.href
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                        isActive
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )}
+                    >
+                      <item.icon className="h-3.5 w-3.5" />
+                      {item.name}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
 
             {/* Admin */}
             <div className="border-t pt-2 mt-2">

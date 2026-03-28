@@ -10,11 +10,15 @@ import {
 } from './entities';
 import { WorkOrdersService } from './work-orders.service';
 import { WorkOrdersController, WorkRequestsController } from './work-orders.controller';
+import { PublicRequestsController } from './public-requests.controller';
+import { Tenant } from '../users/entities/tenant.entity';
 import { FilesModule } from '../files/files.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { AssetsModule } from '../assets/assets.module';
 import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 import { TenantModule } from '../../common/tenant/tenant.module';
+import { WebhooksModule } from '../webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -26,14 +30,17 @@ import { TenantModule } from '../../common/tenant/tenant.module';
       WoChecklistResult,
       WorkRequest,
       ChecklistTemplate,
+      Tenant,
     ]),
     forwardRef(() => FilesModule),
     forwardRef(() => NotificationsModule),
     forwardRef(() => InventoryModule),
+    forwardRef(() => AssetsModule),
+    forwardRef(() => WebhooksModule),
     TenantModule,
   ],
   providers: [WorkOrdersService],
-  controllers: [WorkOrdersController, WorkRequestsController],
+  controllers: [WorkOrdersController, WorkRequestsController, PublicRequestsController],
   exports: [WorkOrdersService],
 })
 export class WorkOrdersModule {}

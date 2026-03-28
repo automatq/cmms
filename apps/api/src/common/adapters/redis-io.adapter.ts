@@ -7,9 +7,11 @@ import { ConfigService } from '@nestjs/config';
 
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter>;
+  private configService: ConfigService;
 
   constructor(app: INestApplication) {
     super(app);
+    this.configService = app.get(ConfigService);
   }
 
   async connectToRedis(configService: ConfigService): Promise<void> {
@@ -29,10 +31,18 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   createIOServer(port: number, options?: Partial<ServerOptions>): any {
+    const corsOrigins = this.configService?.get('CORS_ORIGINS', '');
+    const nodeEnv = this.configService?.get('NODE_ENV', 'development');
+    const origin = corsOrigins
+      ? corsOrigins.split(',').map((o: string) => o.trim())
+      : nodeEnv === 'production'
+        ? false
+        : true;
+
     const server = super.createIOServer(port, {
       ...options,
       cors: {
-        origin: '*',
+        origin,
         credentials: true,
       },
       transports: ['websocket', 'polling'],

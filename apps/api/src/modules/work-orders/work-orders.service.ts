@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
@@ -32,6 +33,8 @@ import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { FilesService } from '../files/files.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { DowntimeService } from '../assets/downtime.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 
 // Valid status transitions
@@ -46,6 +49,8 @@ const STATUS_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
 
 @Injectable()
 export class WorkOrdersService {
+  private readonly logger = new Logger(WorkOrdersService.name);
+
   constructor(
     @InjectRepository(WorkOrder)
     private readonly workOrderRepository: Repository<WorkOrder>,
@@ -65,6 +70,10 @@ export class WorkOrdersService {
     private readonly notificationsService: NotificationsService,
     @Inject(forwardRef(() => InventoryService))
     private readonly inventoryService: InventoryService,
+    @Inject(forwardRef(() => DowntimeService))
+    private readonly downtimeService: DowntimeService,
+    @Inject(forwardRef(() => WebhooksService))
+    private readonly webhooksService: WebhooksService,
     @InjectRepository(ChecklistTemplate)
     private readonly checklistTemplateRepository: Repository<ChecklistTemplate>,
     private readonly dataSource: DataSource,
@@ -94,6 +103,20 @@ export class WorkOrdersService {
     if (dto.assignedTo?.length) {
       await this.notificationsService.onWoAssigned(savedWo, dto.assignedTo, tenantId);
     }
+
+    // Trigger webhooks
+    try {
+      await this.webhooksService.trigger('wo.created', {
+        id: savedWo.id,
+        woNumber: savedWo.woNumber,
+        title: savedWo.title,
+        type: savedWo.type,
+        priority: savedWo.priority,
+        status: savedWo.status,
+        assetId: savedWo.assetId,
+        assignedTo: savedWo.assignedTo,
+      }, tenantId);
+    } catch {}
 
     return this.findOne(savedWo.id, tenantId);
   }
@@ -209,6 +232,14 @@ export class WorkOrdersService {
       const newlyAssigned = dto.assignedTo.filter((u) => !oldAssignedTo.includes(u));
       if (newlyAssigned.length) {
         await this.notificationsService.onWoAssigned(savedWo, newlyAssigned, tenantId);
+        try {
+          await this.webhooksService.trigger('wo.assigned', {
+            id: savedWo.id,
+            woNumber: savedWo.woNumber,
+            title: savedWo.title,
+            assignedTo: newlyAssigned,
+          }, tenantId);
+        } catch {}
       }
     }
 
@@ -229,7 +260,7 @@ export class WorkOrdersService {
         );
       } catch (error) {
         // Log but don't block deletion if release fails
-        console.error(`Failed to release reservation for part ${part.partId}:`, error);
+        this.logger.error(`Failed to release reservation for part ${part.partId}:`, error);
       }
     }
 
@@ -256,6 +287,21 @@ export class WorkOrdersService {
     // Set timestamps based on transition
     if (status === WorkOrderStatus.IN_PROGRESS && !workOrder.actualStart) {
       workOrder.actualStart = new Date();
+
+      // Auto-start downtime tracking if WO has an asset
+      if (workOrder.assetId) {
+        try {
+          await this.downtimeService.startDowntime(
+            workOrder.assetId,
+            workOrder.title,
+            workOrder.id,
+            userId,
+            tenantId,
+          );
+        } catch (error) {
+          this.logger.error(`Failed to start downtime for asset ${workOrder.assetId}: ${error.message}`);
+        }
+      }
     }
 
     if (status === WorkOrderStatus.COMPLETED) {
@@ -286,9 +332,18 @@ export class WorkOrdersService {
             part.reserved = false;
             await this.partRepository.save(part);
           } catch (error) {
-            console.error(`Failed to issue stock for part ${part.partId}:`, error);
+            this.logger.error(`Failed to issue stock for part ${part.partId}:`, error);
           }
         }
+      }
+    }
+
+    if (status === WorkOrderStatus.COMPLETED && workOrder.assetId) {
+      // Auto-end downtime tracking
+      try {
+        await this.downtimeService.endDowntime(workOrder.assetId, userId, tenantId);
+      } catch (error) {
+        this.logger.error(`Failed to end downtime for asset ${workOrder.assetId}: ${error.message}`);
       }
     }
 
@@ -300,6 +355,19 @@ export class WorkOrdersService {
 
     // Send notifications
     await this.notificationsService.onWoStatusChanged(savedWo, oldStatus, tenantId);
+
+    // Trigger webhooks
+    try {
+      const event = status === WorkOrderStatus.COMPLETED ? 'wo.completed' : 'wo.status_changed';
+      await this.webhooksService.trigger(event, {
+        id: savedWo.id,
+        woNumber: savedWo.woNumber,
+        title: savedWo.title,
+        oldStatus,
+        newStatus: status,
+        assetId: savedWo.assetId,
+      }, tenantId);
+    } catch {}
 
     return this.findOne(id, tenantId);
   }
@@ -528,7 +596,7 @@ export class WorkOrdersService {
         try {
           await this.filesService.deleteFile(existing.photoKey);
         } catch (error) {
-          console.error('Failed to delete old checklist photo:', error);
+          this.logger.error('Failed to delete old checklist photo:', error);
         }
       }
       existing.photoKey = storageKey;
@@ -567,6 +635,15 @@ export class WorkOrdersService {
     const savedRequest = await this.workRequestRepository.save(request);
 
     await this.notificationsService.onWorkRequestSubmitted(savedRequest, tenantId);
+
+    try {
+      await this.webhooksService.trigger('request.submitted', {
+        id: savedRequest.id,
+        title: savedRequest.title,
+        priority: savedRequest.priority,
+        status: savedRequest.status,
+      }, tenantId);
+    } catch {}
 
     return savedRequest;
   }
@@ -642,6 +719,73 @@ export class WorkOrdersService {
     request.approvedAt = new Date();
 
     return this.workRequestRepository.save(request);
+  }
+
+  // ==================== SIGNATURES ====================
+
+  async uploadSignature(
+    woId: string,
+    base64png: string,
+    userId: string,
+    tenantId: string,
+  ): Promise<{ signatureUrl: string }> {
+    const workOrder = await this.findOne(woId, tenantId);
+
+    // Decode base64 PNG
+    const base64Data = base64png.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const storageKey = await this.filesService.uploadBuffer(
+      buffer,
+      `work-orders/${woId}/signature.png`,
+      'image/png',
+      tenantId,
+    );
+
+    workOrder.completionSignature = storageKey;
+    workOrder.signedOffBy = userId;
+    workOrder.signedOffAt = new Date();
+    await this.workOrderRepository.save(workOrder);
+
+    const signatureUrl = await this.filesService.getSignedUrl(storageKey);
+    return { signatureUrl };
+  }
+
+  async getSignatureUrl(woId: string, tenantId: string): Promise<string | null> {
+    const workOrder = await this.findOne(woId, tenantId);
+    if (!workOrder.completionSignature) return null;
+    return this.filesService.getSignedUrl(workOrder.completionSignature);
+  }
+
+  async uploadChecklistSignature(
+    woId: string,
+    stepIndex: number,
+    base64png: string,
+    userId: string,
+    tenantId: string,
+  ): Promise<string> {
+    await this.findOne(woId, tenantId);
+
+    const base64Data = base64png.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const storageKey = await this.filesService.uploadBuffer(
+      buffer,
+      `work-orders/${woId}/checklist/${stepIndex}/signature.png`,
+      'image/png',
+      tenantId,
+    );
+
+    const existing = await this.checklistRepository.findOne({
+      where: { woId, stepIndex, tenantId },
+    });
+
+    if (existing) {
+      existing.signatureKey = storageKey;
+      await this.checklistRepository.save(existing);
+    }
+
+    return this.filesService.getSignedUrl(storageKey);
   }
 
   // ==================== STATISTICS ====================

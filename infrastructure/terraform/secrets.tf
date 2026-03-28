@@ -76,28 +76,26 @@ resource "random_password" "jwt_secret_generated" {
 }
 
 # ------------------------------------------------------------------------------
-# Auth0 Secrets
+# Clerk Secrets
 # ------------------------------------------------------------------------------
 
-resource "aws_secretsmanager_secret" "auth_secrets" {
-  name        = "${local.name_prefix}/auth-secrets"
-  description = "Auth0 secrets for ${local.name_prefix}"
+resource "aws_secretsmanager_secret" "clerk_secrets" {
+  name        = "${local.name_prefix}/clerk-secrets"
+  description = "Clerk secrets for ${local.name_prefix}"
 
   recovery_window_in_days = var.environment == "production" ? 30 : 0
 
   tags = {
-    Name = "${local.name_prefix}-auth-secrets"
+    Name = "${local.name_prefix}-clerk-secrets"
   }
 }
 
-resource "aws_secretsmanager_secret_version" "auth_secrets" {
-  secret_id = aws_secretsmanager_secret.auth_secrets.id
+resource "aws_secretsmanager_secret_version" "clerk_secrets" {
+  secret_id = aws_secretsmanager_secret.clerk_secrets.id
 
   secret_string = jsonencode({
-    client_secret = var.auth0_client_secret
-    domain        = var.auth0_domain
-    client_id     = var.auth0_client_id
-    audience      = var.auth0_audience
+    secret_key      = var.clerk_secret_key
+    publishable_key = var.clerk_publishable_key
   })
 }
 

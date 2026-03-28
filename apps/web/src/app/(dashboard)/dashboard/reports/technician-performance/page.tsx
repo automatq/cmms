@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ArrowLeft, Users, Clock, CheckCircle2, Star } from 'lucide-react'
+import { ExportButton } from '@/components/reports/export-button'
 import Link from 'next/link'
 import { format, subDays } from 'date-fns'
 import { ChartCard } from '../components/chart-card'
@@ -77,6 +78,7 @@ export default function TechnicianPerformancePage() {
               className="h-9"
             />
           </div>
+          <ExportButton reportType="technician-performance" filters={dateRange} />
         </div>
       </div>
 
