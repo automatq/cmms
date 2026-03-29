@@ -51,24 +51,12 @@ export class RealtimeGateway
         secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
       }) as any;
 
-      if (!payload.org_id) {
-        throw new UnauthorizedException('No organization in token');
-      }
-
-      // Resolve tenant
-      const tenantId = await this.usersService.getTenantIdByClerkOrgId(
-        payload.org_id,
-      );
-      if (!tenantId) {
-        throw new UnauthorizedException('Cannot resolve tenant');
-      }
-
       // Resolve email from Clerk user
-      let email = '';
+      let email = String(payload.email || '');
       let name = 'Unknown';
       try {
         const clerkUser = await this.clerk.users.getUser(payload.sub);
-        email =
+        email = email ||
           clerkUser.emailAddresses?.find(
             (e) => e.id === clerkUser.primaryEmailAddressId,
           )?.emailAddress || '';
@@ -78,6 +66,28 @@ export class RealtimeGateway
             .join(' ') || email.split('@')[0] || 'Unknown';
       } catch {
         // Fall through with defaults
+      }
+
+      // Resolve tenant from org_id or personal tenant
+      let tenantId: string | undefined;
+      if (payload.org_id) {
+        tenantId = await this.usersService.getTenantIdByClerkOrgId(payload.org_id) || undefined;
+        if (!tenantId) {
+          // Auto-provision for new Clerk org
+          try {
+            const org = await this.clerk.organizations.getOrganization({ organizationId: payload.org_id });
+            const slug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
+            tenantId = await this.usersService.autoProvisionTenant(org.name || 'My Organization', slug, payload.org_id);
+          } catch { /* fall through */ }
+        }
+      }
+      if (!tenantId && email) {
+        // Personal tenant fallback
+        const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
+        tenantId = await this.usersService.autoProvisionPersonalTenant(email, slug);
+      }
+      if (!tenantId) {
+        throw new UnauthorizedException('Cannot resolve tenant');
       }
 
       // Sync user
