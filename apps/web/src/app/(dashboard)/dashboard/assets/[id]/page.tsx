@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -508,39 +508,7 @@ export default function AssetDetailPage() {
           </Card>
 
           {/* QR Code */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <QrCode className="h-5 w-5 text-primary" />
-                QR Code
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={async () => {
-                  try {
-                    const res = await api.getAssetQrCode(id)
-                    const qrData = res.data?.qrCode || res.data
-                    if (typeof qrData === 'string' && qrData.startsWith('data:')) {
-                      const link = document.createElement('a')
-                      link.href = qrData
-                      link.download = `${asset.assetNumber || asset.name}-qr.png`
-                      link.click()
-                    } else {
-                      toast.info('QR code generated')
-                    }
-                  } catch {
-                    toast.error('Failed to generate QR code')
-                  }
-                }}
-              >
-                <QrCode className="h-4 w-4 mr-2" />
-                Download QR Code
-              </Button>
-            </CardContent>
-          </Card>
+          <AssetQrCode assetId={id} assetName={asset.name} assetNumber={asset.assetNumber} />
         </div>
       </div>
 
@@ -629,5 +597,73 @@ export default function AssetDetailPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function AssetQrCode({ assetId, assetName, assetNumber }: { assetId: string; assetName: string; assetNumber: string }) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    import('qrcode').then((QRCode) => {
+      const url = `${window.location.origin}/dashboard/assets/${assetId}`
+      QRCode.toDataURL(url, { width: 250, margin: 2 }).then((dataUrl: string) => {
+        if (!cancelled) setQrDataUrl(dataUrl)
+      })
+    })
+    return () => { cancelled = true }
+  }, [assetId])
+
+  const handleDownload = () => {
+    if (!qrDataUrl) return
+    const link = document.createElement('a')
+    link.href = qrDataUrl
+    link.download = `${assetNumber || assetName}-qr.png`
+    link.click()
+  }
+
+  const handlePrint = () => {
+    if (!qrDataUrl) return
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(`
+      <html><head><title>QR Code - ${assetName}</title>
+      <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;margin:0}
+      img{width:250px;height:250px}h2{margin:0 0 4px;font-size:18px}p{margin:0;color:#666;font-size:14px}</style></head>
+      <body><img src="${qrDataUrl}" /><h2>${assetName}</h2><p>${assetNumber}</p></body></html>
+    `)
+    win.document.close()
+    win.onload = () => { win.print() }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <QrCode className="h-5 w-5 text-primary" />
+          QR Code
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col items-center gap-3">
+        {qrDataUrl ? (
+          <>
+            <img src={qrDataUrl} alt="Asset QR Code" className="w-40 h-40 rounded-lg border" />
+            <p className="text-xs text-muted-foreground text-center">Scan to open this asset</p>
+            <div className="flex gap-2 w-full">
+              <Button variant="outline" size="sm" className="flex-1" onClick={handleDownload}>
+                <Download className="h-4 w-4 mr-1" />
+                Save
+              </Button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={handlePrint}>
+                <QrCode className="h-4 w-4 mr-1" />
+                Print
+              </Button>
+            </div>
+          </>
+        ) : (
+          <Skeleton className="w-40 h-40 rounded-lg" />
+        )}
+      </CardContent>
+    </Card>
   )
 }

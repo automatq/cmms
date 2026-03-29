@@ -1,23 +1,19 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/auth-provider'
 import { Button } from '@/components/ui/button'
-import { Bell, Search, CheckCircle2, AlertTriangle, Info, Clock } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { Bell, CheckCircle2, AlertTriangle, Info, Clock } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn, formatTimeAgo } from '@/lib/utils'
+import { SearchAutocomplete } from '@/components/search-autocomplete'
 
 export function Header() {
   const { user } = useAuth()
-  const router = useRouter()
   const queryClient = useQueryClient()
-  const [searchQuery, setSearchQuery] = useState('')
 
   // Fetch notifications
   const { data: notificationsData } = useQuery({
@@ -60,23 +56,7 @@ export function Header() {
       <div className="flex items-center justify-between h-16 px-6">
         {/* Search */}
         <div className="flex-1 max-w-md hidden md:block">
-          <form onSubmit={(e) => {
-            e.preventDefault()
-            const q = searchQuery.trim()
-            if (q) {
-              router.push(`/dashboard/search?q=${encodeURIComponent(q)}`)
-            }
-          }}>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search assets, work orders..."
-                className="pl-10 bg-muted/50 border-none focus-visible:ring-1"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </form>
+          <SearchAutocomplete />
         </div>
 
         {/* Spacer for mobile */}
