@@ -14,9 +14,15 @@ export class AddISO55000Phase1Fields1711900001000 implements MigrationInterface 
       ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS hold_reason hold_reason_enum;
     `);
 
-    // 2. Add lockout_required to checklist_templates
+    // 2. Add lockout_required, is_library, category to checklist_templates
     await queryRunner.query(`
       ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS lockout_required BOOLEAN DEFAULT false NOT NULL;
+    `);
+    await queryRunner.query(`
+      ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS is_library BOOLEAN DEFAULT false NOT NULL;
+    `);
+    await queryRunner.query(`
+      ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS category VARCHAR;
     `);
 
     // 3. Add abc_class enum and column to parts
