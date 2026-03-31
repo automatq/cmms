@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,12 +15,14 @@ import { User } from '../users/entities/user.entity';
 import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { AssetsService } from '../assets/assets.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { Asset, AssetStatus } from '../assets/entities';
 
 export interface QuickStartResult {
   activity: TechActivity;
   workOrder: WorkOrder;
-  asset: any;
+  asset: Asset;
   isNewWorkOrder: boolean;
+  scanSource: 'asset_id' | 'qr_token';
 }
 
 @Injectable()
@@ -36,52 +39,125 @@ export class ActivityService {
     private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
-  /**
-   * Quick-start: tech scans QR -> find or create WO -> mark IN_PROGRESS -> track activity
-   */
-  async quickStart(
-    assetId: string,
-    userId: string,
-    tenantId: string,
-  ): Promise<QuickStartResult> {
-    // 1. Verify asset exists
-    const asset = await this.assetsService.findOne(assetId, tenantId);
-
-    // 2. Check if tech already has an ACTIVE activity on this asset (idempotent re-scan)
-    const existingActivity = await this.activityRepository.findOne({
-      where: { userId, assetId, tenantId, status: ActivityStatus.ACTIVE },
-      relations: ['workOrder', 'asset'],
+  private async getUserDisplayName(userId: string, tenantId: string): Promise<string> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId, tenantId },
     });
 
-    if (existingActivity) {
-      const wo = await this.workOrdersService.findOne(
-        existingActivity.workOrderId,
-        tenantId,
-      );
-      return {
-        activity: existingActivity,
-        workOrder: wo,
-        asset,
-        isNewWorkOrder: false,
-      };
+    if (!user) {
+      return 'Unknown';
     }
 
-    // 3. Find existing OPEN or IN_PROGRESS WO assigned to this tech for this asset
+    return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username;
+  }
+
+  private async getActiveSession(userId: string, tenantId: string): Promise<TechActivity | null> {
+    return this.activityRepository.findOne({
+      where: { userId, tenantId, status: ActivityStatus.ACTIVE },
+      relations: ['asset', 'workOrder'],
+      order: { startedAt: 'DESC' },
+    });
+  }
+
+  private ensureAssetIsWorkable(asset: Asset) {
+    if (asset.status === AssetStatus.RETIRED) {
+      throw new ConflictException({
+        code: 'ASSET_RETIRED',
+        message: 'This asset is retired or out of service',
+        asset: {
+          id: asset.id,
+          name: asset.name,
+          assetNumber: asset.assetNumber,
+          status: asset.status,
+          location: asset.location?.name || null,
+        },
+      });
+    }
+  }
+
+  private async buildActiveSessionConflict(
+    activity: TechActivity,
+    tenantId: string,
+  ): Promise<Record<string, unknown>> {
+    const workOrder =
+      activity.workOrder || (await this.workOrdersService.findOne(activity.workOrderId, tenantId));
+
+    return {
+      code: 'ACTIVE_SESSION_EXISTS',
+      message: 'You already have an active timed work session on another asset',
+      activeActivity: activity,
+      activeWorkOrder: workOrder,
+      activeAsset: activity.asset,
+    };
+  }
+
+  private async emitStartedEvent(
+    tenantId: string,
+    userId: string,
+    activity: TechActivity,
+    asset: Asset,
+    workOrder: WorkOrder,
+  ): Promise<void> {
+    const userName = await this.getUserDisplayName(userId, tenantId);
+    this.realtimeGateway.emitToTenant(tenantId, 'activity:started', {
+      activityId: activity.id,
+      userId,
+      userName,
+      assetId: asset.id,
+      assetName: asset.name,
+      assetNumber: asset.assetNumber,
+      workOrderId: workOrder.id,
+      woNumber: workOrder.woNumber,
+      startedAt: activity.startedAt.toISOString(),
+    });
+  }
+
+  private async quickStartForAsset(
+    asset: Asset,
+    userId: string,
+    tenantId: string,
+    scanSource: 'asset_id' | 'qr_token',
+  ): Promise<QuickStartResult> {
+    this.ensureAssetIsWorkable(asset);
+
+    const existingActiveSession = await this.getActiveSession(userId, tenantId);
+    if (existingActiveSession) {
+      if (existingActiveSession.assetId === asset.id) {
+        return {
+          activity: existingActiveSession,
+          workOrder: await this.workOrdersService.findOne(
+            existingActiveSession.workOrderId,
+            tenantId,
+          ),
+          asset,
+          isNewWorkOrder: false,
+          scanSource,
+        };
+      }
+
+      throw new ConflictException(
+        await this.buildActiveSessionConflict(existingActiveSession, tenantId),
+      );
+    }
+
     let workOrder = await this.workOrderRepository
       .createQueryBuilder('wo')
-      .where('wo.assetId = :assetId', { assetId })
+      .where('wo.assetId = :assetId', { assetId: asset.id })
       .andWhere('wo.tenantId = :tenantId', { tenantId })
       .andWhere('wo.status IN (:...statuses)', {
-        statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS],
+        statuses: [WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.OPEN],
       })
       .andWhere(':userId = ANY(wo.assignedTo)', { userId })
-      .orderBy('wo.createdAt', 'DESC')
+      .orderBy(
+        `CASE WHEN wo.status = '${WorkOrderStatus.IN_PROGRESS}' THEN 0 ELSE 1 END`,
+        'ASC',
+      )
+      .addOrderBy('wo.createdAt', 'DESC')
       .getOne();
 
     let isNewWorkOrder = false;
 
     if (!workOrder) {
-      // 4. No existing WO — create a new corrective WO
       workOrder = await this.workOrdersService.create(
         {
           title: `QR Scan: ${asset.name}`,
@@ -97,7 +173,6 @@ export class ActivityService {
       isNewWorkOrder = true;
     }
 
-    // 5. Transition WO to IN_PROGRESS (DRAFT -> OPEN -> IN_PROGRESS)
     if (workOrder.status === WorkOrderStatus.DRAFT) {
       workOrder = await this.workOrdersService.updateStatus(
         workOrder.id,
@@ -106,6 +181,7 @@ export class ActivityService {
         tenantId,
       );
     }
+
     if (workOrder.status === WorkOrderStatus.OPEN) {
       workOrder = await this.workOrdersService.updateStatus(
         workOrder.id,
@@ -115,13 +191,11 @@ export class ActivityService {
       );
     }
 
-    // 6. If WO is in progress but tech is not assigned, add them
     if (!workOrder.assignedTo?.includes(userId)) {
       workOrder.assignedTo = [...(workOrder.assignedTo || []), userId];
       await this.workOrderRepository.save(workOrder);
     }
 
-    // 7. Create activity tracking record
     const activity = this.activityRepository.create({
       userId,
       assetId: asset.id,
@@ -131,42 +205,38 @@ export class ActivityService {
       startedAt: new Date(),
     });
     const savedActivity = await this.activityRepository.save(activity);
+    const fullWorkOrder = await this.workOrdersService.findOne(workOrder.id, tenantId);
 
-    // 8. Fetch full WO with relations
-    const fullWo = await this.workOrdersService.findOne(workOrder.id, tenantId);
-
-    // 9. Fetch user name for the event
-    const user = await this.userRepository.findOne({
-      where: { id: userId, tenantId },
-    });
-    const userName = user
-      ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username
-      : 'Unknown';
-
-    // 10. Emit real-time event
-    this.realtimeGateway.emitToTenant(tenantId, 'activity:started', {
-      activityId: savedActivity.id,
-      userId,
-      userName,
-      assetId: asset.id,
-      assetName: asset.name,
-      assetNumber: asset.assetNumber,
-      workOrderId: fullWo.id,
-      woNumber: fullWo.woNumber,
-      startedAt: savedActivity.startedAt.toISOString(),
-    });
+    await this.emitStartedEvent(tenantId, userId, savedActivity, asset, fullWorkOrder);
 
     return {
       activity: savedActivity,
-      workOrder: fullWo,
+      workOrder: fullWorkOrder,
       asset,
       isNewWorkOrder,
+      scanSource,
     };
   }
 
-  /**
-   * Complete: tech finishes work on an asset
-   */
+  async quickStart(
+    assetId: string,
+    userId: string,
+    tenantId: string,
+  ): Promise<QuickStartResult> {
+    const asset = await this.assetsService.findOne(assetId, tenantId);
+    return this.quickStartForAsset(asset, userId, tenantId, 'asset_id');
+  }
+
+  async quickStartByQr(
+    token: string,
+    userId: string,
+    tenantId: string,
+  ): Promise<QuickStartResult> {
+    const resolved = await this.assetsService.resolveAssetTagToken(token, tenantId);
+    const asset = await this.assetsService.findOne(resolved.id, tenantId);
+    return this.quickStartForAsset(asset, userId, tenantId, 'qr_token');
+  }
+
   async completeActivity(
     activityId: string,
     userId: string,
@@ -188,19 +258,13 @@ export class ActivityService {
     activity.durationMinutes = Math.round(
       (now.getTime() - activity.startedAt.getTime()) / (1000 * 60),
     );
-    if (notes) activity.notes = notes;
+    if (notes) {
+      activity.notes = notes;
+    }
 
     const saved = await this.activityRepository.save(activity);
+    const userName = await this.getUserDisplayName(userId, tenantId);
 
-    // Fetch user name
-    const user = await this.userRepository.findOne({
-      where: { id: userId, tenantId },
-    });
-    const userName = user
-      ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username
-      : 'Unknown';
-
-    // Emit completion event
     this.realtimeGateway.emitToTenant(tenantId, 'activity:completed', {
       activityId: saved.id,
       userId,
@@ -217,9 +281,51 @@ export class ActivityService {
     return saved;
   }
 
-  /**
-   * Get all active activities for a tenant (manager dashboard)
-   */
+  async abandonActivity(
+    activityId: string,
+    userId: string,
+    tenantId: string,
+    reason?: string,
+  ): Promise<TechActivity> {
+    const activity = await this.activityRepository.findOne({
+      where: { id: activityId, userId, tenantId, status: ActivityStatus.ACTIVE },
+      relations: ['asset', 'workOrder'],
+    });
+
+    if (!activity) {
+      throw new NotFoundException('Active activity session not found');
+    }
+
+    const now = new Date();
+    activity.status = ActivityStatus.ABANDONED;
+    activity.abandonedAt = now;
+    activity.durationMinutes = Math.round(
+      (now.getTime() - activity.startedAt.getTime()) / (1000 * 60),
+    );
+    if (reason) {
+      activity.abandonReason = reason;
+    }
+
+    const saved = await this.activityRepository.save(activity);
+    const userName = await this.getUserDisplayName(userId, tenantId);
+
+    this.realtimeGateway.emitToTenant(tenantId, 'activity:abandoned', {
+      activityId: saved.id,
+      userId,
+      userName,
+      assetId: activity.assetId,
+      assetName: activity.asset?.name,
+      workOrderId: activity.workOrderId,
+      woNumber: activity.workOrder?.woNumber,
+      startedAt: activity.startedAt.toISOString(),
+      abandonedAt: now.toISOString(),
+      durationMinutes: saved.durationMinutes,
+      abandonReason: saved.abandonReason || null,
+    });
+
+    return saved;
+  }
+
   async getActiveActivities(tenantId: string): Promise<TechActivity[]> {
     return this.activityRepository.find({
       where: { tenantId, status: ActivityStatus.ACTIVE },
@@ -228,9 +334,6 @@ export class ActivityService {
     });
   }
 
-  /**
-   * Get current activity for a specific user
-   */
   async getMyActiveActivity(
     userId: string,
     tenantId: string,
@@ -238,6 +341,7 @@ export class ActivityService {
     return this.activityRepository.findOne({
       where: { userId, tenantId, status: ActivityStatus.ACTIVE },
       relations: ['asset', 'workOrder'],
+      order: { startedAt: 'DESC' },
     });
   }
 }

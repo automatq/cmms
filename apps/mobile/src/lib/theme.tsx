@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-const STORAGE_KEY = 'cmms-color-theme';
+const STORAGE_KEY = 'nexly-color-theme';
 
 export type ColorThemeName = 'default' | 'blue' | 'green' | 'orange' | 'rose' | 'violet';
 

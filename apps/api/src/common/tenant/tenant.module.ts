@@ -1,7 +1,6 @@
-import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Tenant } from '../../modules/users/entities/tenant.entity';
-import { TenantMiddleware } from './tenant.middleware';
 import { TenantService } from './tenant.service';
 import { TenantController } from './tenant.controller';
 
@@ -11,9 +10,4 @@ import { TenantController } from './tenant.controller';
   providers: [TenantService],
   exports: [TenantService],
 })
-export class TenantModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    // Apply tenant middleware to all routes
-    consumer.apply(TenantMiddleware).forRoutes('*');
-  }
-}
+export class TenantModule {}

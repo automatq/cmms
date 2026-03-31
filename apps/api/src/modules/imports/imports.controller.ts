@@ -27,13 +27,13 @@ export class ImportsController {
   ) {}
 
   @Get()
-  @Permissions('settings:manage')
+  @Permissions('settings:write')
   findAll(@CurrentUser() user: RequestUser) {
     return this.importsService.findAll(user.tenantId);
   }
 
   @Post(':type/preview')
-  @Permissions('settings:manage')
+  @Permissions('settings:write')
   @UseInterceptors(FileInterceptor('file'))
   async previewImport(
     @Param('type') type: ImportType,
@@ -45,7 +45,7 @@ export class ImportsController {
   }
 
   @Post(':type')
-  @Permissions('settings:manage')
+  @Permissions('settings:write')
   @UseInterceptors(FileInterceptor('file'))
   async startImport(
     @Param('type') type: ImportType,
@@ -76,13 +76,13 @@ export class ImportsController {
   }
 
   @Get(':id')
-  @Permissions('settings:manage')
+  @Permissions('settings:write')
   getStatus(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.importsService.getImportStatus(id, user.tenantId);
   }
 
   @Get(':id/errors')
-  @Permissions('settings:manage')
+  @Permissions('settings:write')
   getErrors(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.importsService.getImportErrors(id, user.tenantId);
   }

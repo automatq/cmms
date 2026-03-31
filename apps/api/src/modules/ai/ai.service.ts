@@ -3,6 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkOrder } from '../work-orders/entities/work-order.entity';
 import { Asset } from '../assets/entities/asset.entity';
+import { AssetMeter } from '../assets/entities/asset-meter.entity';
+import { AssetDowntime } from '../assets/entities/asset-downtime.entity';
+import { AssetConditionLog } from '../assets/entities/asset-condition-log.entity';
 import {
   AiTaskType,
   AiQueryDto,
@@ -31,6 +34,12 @@ export class AiService {
     private workOrderRepo: Repository<WorkOrder>,
     @InjectRepository(Asset)
     private assetRepo: Repository<Asset>,
+    @InjectRepository(AssetMeter)
+    private meterRepo: Repository<AssetMeter>,
+    @InjectRepository(AssetDowntime)
+    private downtimeRepo: Repository<AssetDowntime>,
+    @InjectRepository(AssetConditionLog)
+    private conditionLogRepo: Repository<AssetConditionLog>,
   ) {}
 
   private async callAi(
@@ -111,7 +120,7 @@ export class AiService {
       context = {
         messages: [{
           role: 'system',
-          content: 'You are a CMMS AI assistant helping with maintenance management.',
+          content: 'You are a Nexly AI assistant helping with maintenance management.',
         }],
         lastUsed: new Date(),
       };
@@ -170,23 +179,80 @@ Provide a brief 2-3 sentence summary.`;
       throw new HttpException('Asset not found', HttpStatus.NOT_FOUND);
     }
 
-    const recentWOs = await this.workOrderRepo.find({
-      where: { assetId: dto.assetId, tenantId },
-      order: { createdAt: 'DESC' },
-      take: 10,
-    });
+    // Gather comprehensive data for prediction
+    const [recentWOs, meterReadings, downtimeHistory, conditionHistory] = await Promise.all([
+      this.workOrderRepo.find({
+        where: { assetId: dto.assetId, tenantId },
+        order: { createdAt: 'DESC' },
+        take: 20,
+      }),
+      this.meterRepo.find({
+        where: { assetId: dto.assetId },
+        order: { recordedAt: 'DESC' },
+        take: 20,
+      }),
+      this.downtimeRepo.find({
+        where: { assetId: dto.assetId, tenantId },
+        order: { startedAt: 'DESC' },
+        take: 10,
+      }),
+      this.conditionLogRepo.find({
+        where: { assetId: dto.assetId, tenantId },
+        order: { assessedAt: 'DESC' },
+        take: 10,
+      }),
+    ]);
 
-    const prompt = `Analyze maintenance history and predict failures:
+    // Build meter trend context
+    const meterContext = meterReadings.length > 0
+      ? `\nMeter Readings (${asset.meterType || 'unknown'}, most recent first):\n${meterReadings.map(m => `  ${new Date(m.recordedAt).toISOString().split('T')[0]}: ${m.reading}`).join('\n')}`
+      : '\nNo meter readings available.';
+
+    // Build downtime context
+    const downtimeContext = downtimeHistory.length > 0
+      ? `\nDowntime Events (last ${downtimeHistory.length}):\n${downtimeHistory.map(d => `  ${new Date(d.startedAt).toISOString().split('T')[0]}: ${d.reason || 'No reason'} (${d.durationMinutes ? d.durationMinutes + ' min' : 'ongoing'})`).join('\n')}`
+      : '\nNo downtime events recorded.';
+
+    // Build condition trend context
+    const conditionContext = conditionHistory.length > 0
+      ? `\nCondition Assessments (1=poor, 5=excellent):\n${conditionHistory.map(c => `  ${new Date(c.assessedAt).toISOString().split('T')[0]}: ${c.condition}/5${c.notes ? ' - ' + c.notes : ''}`).join('\n')}`
+      : '';
+
+    // Asset age and warranty
+    const ageYears = asset.purchaseDate
+      ? ((Date.now() - new Date(asset.purchaseDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000)).toFixed(1)
+      : 'unknown';
+    const warrantyStatus = asset.warrantyExpiry
+      ? (new Date(asset.warrantyExpiry) > new Date() ? 'under warranty' : 'warranty expired')
+      : 'no warranty info';
+
+    const correctiveCount = recentWOs.filter(wo => wo.type === 'corrective').length;
+    const preventiveCount = recentWOs.filter(wo => wo.type === 'preventive').length;
+
+    const prompt = `Analyze this asset's comprehensive maintenance data and predict remaining useful life and likely failures:
+
 Asset: ${asset.name} (${asset.assetNumber})
 Category: ${asset.category?.name || 'Unknown'}
-Status: ${asset.status}
+Manufacturer: ${asset.manufacturer || 'Unknown'} | Model: ${asset.model || 'Unknown'}
+Status: ${asset.status} | Condition: ${asset.assetCondition || 'N/A'}/5
+Age: ${ageYears} years | Expected Life: ${asset.expectedLifeYears || 'N/A'} years | ${warrantyStatus}
+Current Meter: ${asset.currentMeterValue} ${asset.meterType || ''}
+${meterContext}
+${downtimeContext}
+${conditionContext}
 
-Recent Work Orders: ${recentWOs.length} in history
-${recentWOs.map(wo => `- ${wo.type}: ${wo.title}`).join('\n')}
+Work Order History (last ${recentWOs.length}):
+  Corrective: ${correctiveCount} | Preventive: ${preventiveCount}
+${recentWOs.slice(0, 10).map(wo => `  - [${wo.type}] ${wo.title} (${wo.failureCode || 'no code'}) ${new Date(wo.createdAt).toISOString().split('T')[0]}`).join('\n')}
 
-Predict likely failures and recommend preventive actions.`;
+Based on this data:
+1. Estimate remaining useful life (RUL) with confidence level
+2. Identify the top 3 most likely failure modes and their probability
+3. Recommend specific preventive actions with timing
+4. Flag any concerning trends in meter readings or condition degradation
+5. Suggest optimal PM interval adjustments if applicable`;
 
-    return this.callAi(prompt, 'You are a predictive maintenance analyst.', 0.5);
+    return this.callAi(prompt, 'You are an expert predictive maintenance analyst specializing in reliability-centered maintenance (RCM) and ISO 55000 asset management. Provide data-driven analysis with specific, actionable recommendations.', 0.4);
   }
 
   async getMaintenanceRecommendation(dto: AiMaintenanceRecommendationDto, tenantId: string): Promise<string> {
@@ -238,7 +304,7 @@ Provide step-by-step troubleshooting guide with safety precautions.`;
   async processNaturalLanguageQuery(query: string): Promise<string> {
     return this.callAi(
       query,
-      'You are a CMMS assistant. Answer maintenance-related questions concisely.',
+      'You are a Nexly assistant. Answer maintenance-related questions concisely.',
       0.6,
     );
   }

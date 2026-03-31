@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "CMMS Mobile",
-    "slug": "cmms-mobile",
+    "name": "Nexly",
+    "slug": "nexly",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cmms.mobile",
+      "bundleIdentifier": "com.nexly.app",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan QR codes and take photos of equipment."
       }
@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2563eb"
       },
-      "package": "com.cmms.mobile",
+      "package": "com.nexly.app",
       "permissions": [
         "android.permission.CAMERA"
       ]
@@ -40,7 +40,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow CMMS to access your camera for QR code scanning."
+          "cameraPermission": "Allow Nexly to access your camera for QR code scanning."
         }
       ],
       [
@@ -51,7 +51,7 @@
         }
       ]
     ],
-    "scheme": "cmms",
+    "scheme": "nexly",
     "extra": {
       "eas": {
         "projectId": "your-project-id"

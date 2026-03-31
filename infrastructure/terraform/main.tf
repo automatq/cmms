@@ -21,10 +21,10 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "cmms-terraform-state"
+    bucket         = "nexly-terraform-state"
     key            = "infrastructure/terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "cmms-terraform-locks"
+    dynamodb_table = "nexly-terraform-locks"
     encrypt        = true
   }
 }

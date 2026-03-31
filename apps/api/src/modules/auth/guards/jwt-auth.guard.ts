@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   UnauthorizedException,
   Logger,
+  HttpException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +12,7 @@ import { ModuleRef } from '@nestjs/core';
 import { createClerkClient, verifyToken } from '@clerk/backend';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
+import { TenantStatus } from '../../users/entities/tenant.entity';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -83,6 +85,21 @@ export class JwtAuthGuard implements CanActivate {
         );
       }
 
+      const tenant = await usersService.findTenantById(tenantId);
+      if (
+        tenant.status === TenantStatus.SUSPENDED ||
+        tenant.status === TenantStatus.CANCELLED
+      ) {
+        throw new HttpException(
+          {
+            message:
+              'Subscription inactive. Please update your billing to continue.',
+            status: tenant.status,
+          },
+          402,
+        );
+      }
+
       // Sync user
       const email: string =
         String(payload.email || '') ||
@@ -111,6 +128,7 @@ export class JwtAuthGuard implements CanActivate {
         userId: user.id,
         tenantId,
         email: email || user.email,
+        plan: tenant.plan,
         permissions: rolePermissions,
         roles: user.roles?.map((r) => r.name) || [],
       };

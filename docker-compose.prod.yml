@@ -1,6 +1,6 @@
 version: '3.9'
 
-# Production Docker Compose for CMMS
+# Production Docker Compose for Nexly
 # This file uses pre-built images from a private registry
 #
 # Usage:
@@ -21,13 +21,13 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - cmms-web
-      - cmms-api
+      - nexly-web
+      - nexly-api
     networks:
-      - cmms-network
+      - nexly-network
 
-  cmms-api:
-    image: cb37/cmms:api-0.1.1
+  nexly-api:
+    image: cb37/nexly:api-0.1.1
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -44,7 +44,7 @@ services:
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET: cmms-files
+      MINIO_BUCKET: nexly-files
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
@@ -65,10 +65,10 @@ services:
     volumes:
       - api_uploads:/app/uploads
     networks:
-      - cmms-network
+      - nexly-network
 
-  cmms-worker:
-    image: cb37/cmms:worker-0.1.1
+  nexly-worker:
+    image: cb37/nexly:worker-0.1.1
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -95,16 +95,16 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - cmms-network
+      - nexly-network
 
-  cmms-web:
-    image: cb37/cmms:web-0.1.2
+  nexly-web:
+    image: cb37/nexly:web-0.1.2
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api/v1
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
     networks:
-      - cmms-network
+      - nexly-network
 
   postgres:
     image: timescale/timescaledb:2.17.2-pg16
@@ -122,7 +122,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - cmms-network
+      - nexly-network
 
   redis:
     image: redis:7-alpine
@@ -136,7 +136,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - cmms-network
+      - nexly-network
 
   minio:
     image: minio/minio:RELEASE.2024-11-07T00-52-20Z
@@ -153,7 +153,7 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - cmms-network
+      - nexly-network
 
   ollama:
     image: ollama/ollama:0.4.7
@@ -163,7 +163,7 @@ services:
     profiles:
       - ai
     networks:
-      - cmms-network
+      - nexly-network
 
 volumes:
   postgres_data:
@@ -175,5 +175,5 @@ volumes:
   ollama_models:
 
 networks:
-  cmms-network:
+  nexly-network:
     driver: bridge

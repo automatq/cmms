@@ -67,14 +67,6 @@ export default function SettingsPage() {
         updateOrgMutation.mutate(data)
     }
 
-    const handleToggleModule = (moduleId: string, enabled: boolean) => {
-        const updatedModules = {
-            ...organization?.modules,
-            [moduleId]: enabled,
-        }
-        updateOrgMutation.mutate({ modules: updatedModules })
-    }
-
     return (
         <div className="space-y-6">
             <div>
@@ -195,41 +187,41 @@ export default function SettingsPage() {
                             <div className="flex items-center justify-between space-x-2">
                                 <div className="flex flex-col space-y-1">
                                     <Label>Preventive Maintenance</Label>
-                                    <p className="text-sm text-muted-foreground">Manage PM plans and automated generation.</p>
+                                    <p className="text-sm text-muted-foreground">Managed by your subscription plan.</p>
                                 </div>
                                 <Switch
                                     checked={organization?.modules?.preventiveMaintenance}
-                                    onCheckedChange={(checked) => handleToggleModule('preventiveMaintenance', checked)}
+                                    disabled
                                 />
                             </div>
                             <div className="flex items-center justify-between space-x-2">
                                 <div className="flex flex-col space-y-1">
                                     <Label>Inventory Management</Label>
-                                    <p className="text-sm text-muted-foreground">Track parts, stock levels, and purchase orders.</p>
+                                    <p className="text-sm text-muted-foreground">Managed by your subscription plan.</p>
                                 </div>
                                 <Switch
                                     checked={organization?.modules?.inventory}
-                                    onCheckedChange={(checked) => handleToggleModule('inventory', checked)}
+                                    disabled
                                 />
                             </div>
                             <div className="flex items-center justify-between space-x-2">
                                 <div className="flex flex-col space-y-1">
                                     <Label>AI Assistant</Label>
-                                    <p className="text-sm text-muted-foreground">Use AI for troubleshooting and insights.</p>
+                                    <p className="text-sm text-muted-foreground">Managed by your subscription plan.</p>
                                 </div>
                                 <Switch
                                     checked={organization?.modules?.aiAssistant}
-                                    onCheckedChange={(checked) => handleToggleModule('aiAssistant', checked)}
+                                    disabled
                                 />
                             </div>
                             <div className="flex items-center justify-between space-x-2">
                                 <div className="flex flex-col space-y-1">
                                     <Label>Work Requests Portal</Label>
-                                    <p className="text-sm text-muted-foreground">Allow external users to submit work requests.</p>
+                                    <p className="text-sm text-muted-foreground">Managed by your subscription plan.</p>
                                 </div>
                                 <Switch
                                     checked={organization?.modules?.workRequestsPortal}
-                                    onCheckedChange={(checked) => handleToggleModule('workRequestsPortal', checked)}
+                                    disabled
                                 />
                             </div>
                         </CardContent>

@@ -16,7 +16,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Wrench className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg">CMMS</span>
+            <span className="font-bold text-lg">Nexly</span>
           </Link>
           <nav className="flex items-center gap-4">
             <Link href="/pricing">

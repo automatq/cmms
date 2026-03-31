@@ -52,9 +52,11 @@ export class FilesController {
   ) {
     await this.usageService.enforceStorageLimit(user.tenantId, file.size);
     const key = await this.filesService.uploadFile(file, path || 'uploads', user.tenantId);
+    const url = await this.filesService.getSignedUrl(key);
     await this.tenantService.updateStorageUsage(user.tenantId, file.size);
     return {
       key,
+      url,
       name: file.originalname,
       mimeType: file.mimetype,
       size: file.size,

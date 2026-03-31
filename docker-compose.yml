@@ -13,12 +13,12 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - cmms-web
-      - cmms-api
+      - nexly-web
+      - nexly-api
     networks:
-      - cmms-network
+      - nexly-network
 
-  cmms-api:
+  nexly-api:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
@@ -33,12 +33,14 @@ services:
       DB_SYNCHRONIZE: "false"
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CORS_ORIGINS: ${PUBLIC_URL}
       STORAGE_PROVIDER: minio
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET: cmms-files
+      MINIO_BUCKET: nexly-files
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
       AI_PROVIDER: ollama
@@ -58,9 +60,9 @@ services:
     volumes:
       - api_uploads:/app/uploads
     networks:
-      - cmms-network
+      - nexly-network
 
-  cmms-worker:
+  nexly-worker:
     build:
       context: ./apps/api
       dockerfile: Dockerfile.worker
@@ -74,6 +76,7 @@ services:
       DB_DATABASE: ${POSTGRES_DB}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       STORAGE_PROVIDER: minio
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
@@ -90,9 +93,9 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - cmms-network
+      - nexly-network
 
-  cmms-web:
+  nexly-web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
@@ -104,7 +107,7 @@ services:
       NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api/v1
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
     networks:
-      - cmms-network
+      - nexly-network
 
   postgres:
     image: docker.io/timescale/timescaledb:latest-pg16
@@ -122,12 +125,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - cmms-network
+      - nexly-network
 
   redis:
     image: docker.io/library/redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     healthcheck:
@@ -136,7 +139,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - cmms-network
+      - nexly-network
 
   minio:
     image: docker.io/minio/minio:latest
@@ -153,7 +156,7 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - cmms-network
+      - nexly-network
 
   mailpit:
     image: docker.io/axllent/mailpit:latest
@@ -166,7 +169,7 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
     networks:
-      - cmms-network
+      - nexly-network
 
   ollama:
     image: docker.io/ollama/ollama:latest
@@ -176,7 +179,7 @@ services:
     profiles:
       - ai
     networks:
-      - cmms-network
+      - nexly-network
 
   pgadmin:
     image: docker.io/dpage/pgadmin4:latest
@@ -189,7 +192,7 @@ services:
     profiles:
       - debug
     networks:
-      - cmms-network
+      - nexly-network
 
 volumes:
   postgres_data:
@@ -203,5 +206,5 @@ volumes:
   pgadmin_data:
 
 networks:
-  cmms-network:
+  nexly-network:
     driver: bridge

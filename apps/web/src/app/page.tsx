@@ -41,7 +41,7 @@ export default function HomePage() {
             </div>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            CMMS
+            Nexly
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Computerized Maintenance Management System.

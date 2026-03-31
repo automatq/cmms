@@ -11,6 +11,7 @@ interface User {
   lastName: string
   username: string
   roles: string[]
+  permissions: string[]
 }
 
 interface AuthContextType {
@@ -59,9 +60,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             // Load roles from backend profile — may fail on first login while tenant is provisioning
             let roles: string[] = []
+            let permissions: string[] = []
             try {
               const profile = await api.getMyProfile()
-              roles = profile.data?.roles?.map((r: any) => r.name) || []
+              const profileRoles = profile.data?.roles || []
+              roles = profileRoles.map((r: any) => r.name) || []
+              permissions = Array.from(
+                new Set(
+                  profileRoles.flatMap((role: any) =>
+                    Array.isArray(role.permissions) ? role.permissions : []
+                  )
+                )
+              )
             } catch {
               // Profile not available yet — that's OK, backend will auto-provision
             }
@@ -73,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               lastName: clerkUser.lastName || '',
               username: clerkUser.username || clerkUser.emailAddresses?.[0]?.emailAddress || '',
               roles,
+              permissions,
             })
             syncedRef.current = true
           }

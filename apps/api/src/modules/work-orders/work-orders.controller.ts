@@ -125,7 +125,7 @@ export class WorkOrdersController {
     @Body() dto: UpdateStatusDto,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.updateStatus(id, dto.status, user.userId, user.tenantId);
+    return this.workOrdersService.updateStatus(id, dto.status, user.userId, user.tenantId, dto.holdReason);
   }
 
   // ==================== LABOR ====================

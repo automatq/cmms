@@ -11,7 +11,7 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import { AssetStatus, MeterType } from '../entities/asset.entity';
+import { AssetStatus, MeterType, CriticalityRating } from '../entities/asset.entity';
 
 export class UpdateAssetDto {
   @ApiPropertyOptional()
@@ -90,6 +90,11 @@ export class UpdateAssetDto {
   @IsOptional()
   @IsBoolean()
   isCritical?: boolean;
+
+  @ApiPropertyOptional({ enum: CriticalityRating })
+  @IsOptional()
+  @IsEnum(CriticalityRating)
+  criticalityRating?: CriticalityRating;
 
   @ApiPropertyOptional({ enum: MeterType })
   @IsOptional()

@@ -1,14 +1,164 @@
-import { View, Text, StyleSheet, Alert } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Alert, StyleSheet, Text, View } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera/next';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { api } from '@/lib/api';
+
+type ScanTarget =
+  | { kind: 'token'; value: string }
+  | { kind: 'assetId'; value: string };
+
+function extractScanTarget(data: string): ScanTarget | null {
+  const trimmed = data.trim();
+
+  const tokenUrlMatch = trimmed.match(/\/scan\/asset\/([A-Za-z0-9_-]{16,})/i);
+  if (tokenUrlMatch) {
+    return { kind: 'token', value: tokenUrlMatch[1] };
+  }
+
+  const legacyUrlMatch = trimmed.match(/\/assets\/([0-9a-f-]{36})/i);
+  if (legacyUrlMatch) {
+    return { kind: 'assetId', value: legacyUrlMatch[1] };
+  }
+
+  const uuidMatch = trimmed.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  if (uuidMatch) {
+    return { kind: 'assetId', value: uuidMatch[0] };
+  }
+
+  const rawTokenMatch = trimmed.match(/^[A-Za-z0-9_-]{16,}$/);
+  if (rawTokenMatch) {
+    return { kind: 'token', value: rawTokenMatch[0] };
+  }
+
+  return null;
+}
 
 export default function ScannerScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [processing, setProcessing] = useState(false);
+
+  const resetScanner = () => {
+    setScanned(false);
+    setProcessing(false);
+  };
+
+  const openActiveWork = (payload: {
+    activityId: string;
+    workOrderId: string;
+    woNumber: string;
+    assetName: string;
+    assetNumber?: string;
+    isNew?: boolean;
+  }) => {
+    router.replace({
+      pathname: '/active-work',
+      params: {
+        activityId: payload.activityId,
+        workOrderId: payload.workOrderId,
+        woNumber: payload.woNumber,
+        assetName: payload.assetName,
+        assetNumber: payload.assetNumber || '',
+        isNew: payload.isNew ? 'true' : 'false',
+      },
+    });
+  };
+
+  const handleConflict = (error: any) => {
+    const errorData = error?.response?.data;
+    if (error?.response?.status !== 409 || errorData?.code !== 'ACTIVE_SESSION_EXISTS') {
+      return false;
+    }
+
+    const activeActivity = errorData.activeActivity;
+    const activeWorkOrder = errorData.activeWorkOrder;
+    const activeAsset = errorData.activeAsset;
+
+    Alert.alert(
+      'Session Already Running',
+      `You already have an active timed session on ${activeAsset?.name || 'another asset'}. Resume it instead of starting a second timer.`,
+      [
+        {
+          text: 'Resume Current Session',
+          onPress: () =>
+            openActiveWork({
+              activityId: activeActivity.id,
+              workOrderId: activeWorkOrder.id,
+              woNumber: activeWorkOrder.woNumber,
+              assetName: activeAsset.name,
+              assetNumber: activeAsset.assetNumber,
+              isNew: false,
+            }),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: resetScanner,
+        },
+      ],
+    );
+
+    return true;
+  };
+
+  const startWork = async (target: ScanTarget) => {
+    try {
+      const response =
+        target.kind === 'token'
+          ? await api.quickStartWorkOrderByQr(target.value)
+          : await api.quickStartWorkOrder(target.value);
+
+      const { activity, workOrder, asset, isNewWorkOrder } = response.data;
+
+      openActiveWork({
+        activityId: activity.id,
+        workOrderId: workOrder.id,
+        woNumber: workOrder.woNumber,
+        assetName: asset.name,
+        assetNumber: asset.assetNumber || '',
+        isNew: isNewWorkOrder,
+      });
+    } catch (error: any) {
+      if (handleConflict(error)) {
+        return;
+      }
+
+      const message =
+        error?.response?.data?.message ||
+        'Failed to start work session.';
+      Alert.alert('Error', message, [
+        { text: 'Scan Again', onPress: resetScanner },
+        { text: 'Cancel', onPress: () => router.back() },
+      ]);
+    }
+  };
+
+  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
+    if (scanned || processing) {
+      return;
+    }
+
+    setScanned(true);
+    setProcessing(true);
+
+    const target = extractScanTarget(data);
+
+    if (!target) {
+      Alert.alert(
+        'Invalid QR Code',
+        'Could not identify an asset from this QR code.',
+        [
+          { text: 'Scan Again', onPress: resetScanner },
+          { text: 'Cancel', onPress: () => router.back() },
+        ],
+      );
+      return;
+    }
+
+    await startWork(target);
+  };
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -26,77 +176,6 @@ export default function ScannerScreen() {
       </View>
     );
   }
-
-  const extractAssetId = (data: string): string | null => {
-    // Match URL pattern: /assets/{uuid}
-    const urlMatch = data.match(/\/assets\/([0-9a-f-]{36})/i);
-    if (urlMatch) return urlMatch[1];
-
-    // Check if data is a raw UUID
-    const uuidMatch = data.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-    if (uuidMatch) return uuidMatch[0];
-
-    return null;
-  };
-
-  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
-    if (scanned || processing) return;
-    setScanned(true);
-    setProcessing(true);
-
-    const assetId = extractAssetId(data);
-
-    if (!assetId) {
-      // Fallback: try the old QR code lookup
-      try {
-        const response = await api.getAssetByQR(data);
-        if (response.data) {
-          // Quick-start with the found asset
-          await startWork(response.data.id);
-          return;
-        }
-      } catch {
-        // Fall through to error
-      }
-
-      Alert.alert(
-        'Invalid QR Code',
-        'Could not identify an asset from this QR code.',
-        [
-          { text: 'Scan Again', onPress: () => { setScanned(false); setProcessing(false); } },
-          { text: 'Cancel', onPress: () => router.back() },
-        ]
-      );
-      return;
-    }
-
-    await startWork(assetId);
-  };
-
-  const startWork = async (assetId: string) => {
-    try {
-      const response = await api.quickStartWorkOrder(assetId);
-      const { activity, workOrder, asset, isNewWorkOrder } = response.data;
-
-      router.replace({
-        pathname: '/active-work',
-        params: {
-          activityId: activity.id,
-          workOrderId: workOrder.id,
-          woNumber: workOrder.woNumber,
-          assetName: asset.name,
-          assetNumber: asset.assetNumber || '',
-          isNew: isNewWorkOrder ? 'true' : 'false',
-        },
-      });
-    } catch (error: any) {
-      const message = error?.response?.data?.message || 'Failed to start work session.';
-      Alert.alert('Error', message, [
-        { text: 'Scan Again', onPress: () => { setScanned(false); setProcessing(false); } },
-        { text: 'Cancel', onPress: () => router.back() },
-      ]);
-    }
-  };
 
   return (
     <View style={styles.container}>

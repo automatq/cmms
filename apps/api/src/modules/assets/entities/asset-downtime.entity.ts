@@ -37,6 +37,9 @@ export class AssetDowntime extends TenantAwareEntity {
   @Column({ type: 'varchar', nullable: true })
   reason: string;
 
+  @Column({ type: 'uuid', nullable: true, name: 'failure_code_id' })
+  failureCodeId: string;
+
   @Column({ type: 'uuid', name: 'reported_by' })
   reportedBy: string;
 

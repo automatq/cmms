@@ -13,11 +13,14 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, Save, Image as ImageIcon, Upload, Loader2, X } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { useAuth } from '@/providers/auth-provider'
+import { AssetQrCard } from '@/components/assets/asset-qr-card'
 
 export default function EditAssetPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const params = useParams()
+  const { user } = useAuth()
   const id = params?.id as string
 
   // State for form data
@@ -74,6 +77,8 @@ export default function EditAssetPage() {
     }
   }, [asset])
 
+  const canManageQr = !!user?.permissions?.includes('assets:write')
+
   // Fetch categories and locations
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -94,7 +99,7 @@ export default function EditAssetPage() {
   const { data: allAssets } = useQuery({
     queryKey: ['assets-for-parent'],
     queryFn: async () => {
-      const res = await api.getAssets({ limit: 200 })
+      const res = await api.getAssets({ limit: 100 })
       return res.data?.data || res.data || []
     },
   })
@@ -125,7 +130,7 @@ export default function EditAssetPage() {
     setIsUploading(true)
     try {
       const res = await api.uploadAssetImage(id, file) // Use the new uploadAssetImage method
-      const imageUrl = res.data.url
+      const imageUrl = res.data.url || res.data
       setFormData(prev => ({ ...prev, customFields: { ...prev.customFields, imageUrl } }))
       setImageError(false)
       toast.success('Image uploaded successfully')
@@ -437,6 +442,17 @@ export default function EditAssetPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {asset && (
+              <AssetQrCard
+                assetId={id}
+                assetName={asset.name}
+                assetNumber={asset.assetNumber}
+                canManage={canManageQr}
+                showBulkPrintShortcut={false}
+                note="Regenerating here invalidates every existing sticker tied to this asset."
+              />
+            )}
           </div>
 
         </div>

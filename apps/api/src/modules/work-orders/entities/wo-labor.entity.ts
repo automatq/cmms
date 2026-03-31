@@ -35,6 +35,12 @@ export class WoLabor extends TenantAwareEntity {
   @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true, name: 'hourly_rate' })
   hourlyRate: number;
 
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'travel_time' })
+  travelTime: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'wait_time' })
+  waitTime: number;
+
   @Column({ type: 'text', nullable: true })
   notes: string;
 

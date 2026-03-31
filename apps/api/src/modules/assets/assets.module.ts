@@ -7,6 +7,9 @@ import {
   AssetDocument,
   AssetDowntime,
   AssetMeter,
+  AssetPart,
+  AssetConditionLog,
+  FailureCode,
   Location,
 } from './entities';
 import { ServiceContract } from '../inventory/entities/service-contract.entity';
@@ -32,6 +35,9 @@ import { NotificationsModule } from '../notifications/notifications.module';
       AssetDocument,
       AssetDowntime,
       AssetMeter,
+      AssetPart,
+      AssetConditionLog,
+      FailureCode,
       Location,
       ServiceContract,
     ]),

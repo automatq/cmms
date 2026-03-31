@@ -91,6 +91,17 @@ export class ReportsService {
         }),
     ]);
 
+    // Planned vs Unplanned ratio
+    const [plannedWOs, totalPeriodWOs] = await Promise.all([
+      this.workOrderRepo.count({
+        where: { tenantId, type: In([WorkOrderType.PREVENTIVE, WorkOrderType.INSPECTION]), createdAt: Between(startDate, new Date()) },
+      }),
+      this.workOrderRepo.count({
+        where: { tenantId, createdAt: Between(startDate, new Date()) },
+      }),
+    ]);
+    const plannedRatio = totalPeriodWOs > 0 ? Math.round((plannedWOs / totalPeriodWOs) * 100) : 0;
+
     // Calculate MTTR (Mean Time To Repair)
     const mttrResult = await this.workOrderRepo
       .createQueryBuilder('wo')
@@ -149,6 +160,7 @@ export class ReportsService {
         { label: 'Overdue', value: overdueWOs, trend: 0, trendDirection: overdueWOs > 0 ? 'up' : 'neutral' },
         { label: 'MTTR', value: parseFloat(mttrResult?.mttr || '0'), unit: 'hours' },
         { label: 'PM Compliance', value: pmCompliance, unit: '%' },
+        { label: 'Planned %', value: plannedRatio, unit: '%', trend: 0, trendDirection: plannedRatio >= 80 ? 'up' : 'down' },
       ],
       workOrdersByStatus: woByStatus.map((s) => ({ label: s.status, value: parseInt(s.count, 10) })),
       workOrdersByPriority: woByPriority.map((p) => ({ label: p.priority, value: parseInt(p.count, 10) })),
@@ -422,6 +434,7 @@ export class ReportsService {
     trend: ChartDataPoint[];
     overdueCount: number;
     upcomingCount: number;
+    pmOptimization: any[];
   }> {
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
@@ -487,6 +500,25 @@ export class ReportsService {
       .andWhere('pm.nextDueAt BETWEEN :now AND :next', { now: new Date(), next: nextWeek })
       .getCount();
 
+    // PM Optimization: corrective WOs per asset that has PM plans (failures between PMs)
+    const pmOptimizationData = await this.workOrderRepo
+      .createQueryBuilder('wo')
+      .innerJoin('pm_plans', 'pm', 'pm.asset_id = wo.asset_id AND pm.tenant_id = wo.tenant_id AND pm.is_active = true')
+      .leftJoin('wo.asset', 'asset')
+      .select('asset.id', 'assetId')
+      .addSelect('asset.name', 'assetName')
+      .addSelect('COUNT(wo.id)', 'correctiveCount')
+      .addSelect('COUNT(DISTINCT pm.id)', 'activePmPlans')
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.type = :type', { type: WorkOrderType.CORRECTIVE })
+      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .andWhere('wo.assetId IS NOT NULL')
+      .groupBy('asset.id')
+      .addGroupBy('asset.name')
+      .orderBy('correctiveCount', 'DESC')
+      .limit(20)
+      .getRawMany();
+
     return {
       overallCompliance,
       byAsset: byAsset.map((a) => ({
@@ -509,6 +541,14 @@ export class ReportsService {
       })),
       overdueCount,
       upcomingCount,
+      pmOptimization: pmOptimizationData.map((r) => ({
+        assetId: r.assetId,
+        assetName: r.assetName,
+        correctiveWOs: parseInt(r.correctiveCount, 10),
+        activePmPlans: parseInt(r.activePmPlans, 10),
+        recommendation: parseInt(r.correctiveCount, 10) === 0 ? 'consider_extending_interval' :
+          parseInt(r.correctiveCount, 10) > 3 ? 'shorten_interval' : 'adequate',
+      })),
     };
   }
 
@@ -730,6 +770,7 @@ export class ReportsService {
 
   async getTechnicianPerformanceReport(query: WorkOrderReportQueryDto, tenantId: string): Promise<{
     technicians: any[];
+    wrenchTimeSummary: { totalDirectHours: number; totalTravelHours: number; totalWaitHours: number; wrenchTimePercent: number };
   }> {
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
@@ -747,6 +788,22 @@ export class ReportsService {
       .orderBy('completed', 'DESC')
       .getRawMany();
 
+    // Wrench time analysis from wo_labor entries
+    const wrenchTimeData = await this.workOrderRepo.manager
+      .createQueryBuilder()
+      .select('SUM(labor.hours)', 'totalDirect')
+      .addSelect('SUM(COALESCE(labor.travel_time, 0))', 'totalTravel')
+      .addSelect('SUM(COALESCE(labor.wait_time, 0))', 'totalWait')
+      .from('wo_labor', 'labor')
+      .where('labor.tenant_id = :tenantId', { tenantId })
+      .andWhere('labor.logged_at BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .getRawOne();
+
+    const totalDirect = parseFloat(wrenchTimeData?.totalDirect || '0');
+    const totalTravel = parseFloat(wrenchTimeData?.totalTravel || '0');
+    const totalWait = parseFloat(wrenchTimeData?.totalWait || '0');
+    const totalAll = totalDirect + totalTravel + totalWait;
+
     return {
       technicians: techStats.map((t) => ({
         technicianId: t.technicianId,
@@ -754,6 +811,132 @@ export class ReportsService {
         completed: parseInt(t.completed, 10),
         completionRate: Math.round((parseInt(t.completed, 10) / parseInt(t.totalAssigned, 10)) * 100),
         avgHoursPerWO: parseFloat(t.avgHours || '0').toFixed(1),
+      })),
+      wrenchTimeSummary: {
+        totalDirectHours: Math.round(totalDirect * 10) / 10,
+        totalTravelHours: Math.round(totalTravel * 10) / 10,
+        totalWaitHours: Math.round(totalWait * 10) / 10,
+        wrenchTimePercent: totalAll > 0 ? Math.round((totalDirect / totalAll) * 100) : 0,
+      },
+    };
+  }
+
+  // ==================== OEE (Overall Equipment Effectiveness) ====================
+
+  async getOeeReport(query: ReportQueryDto, tenantId: string): Promise<{
+    assets: any[];
+    averageAvailability: number;
+  }> {
+    const startDate = new Date(query.startDate);
+    const endDate = new Date(query.endDate);
+    const totalPeriodHours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+
+    // Get downtime hours per asset in the period
+    const downtimeData = await this.workOrderRepo.manager
+      .createQueryBuilder()
+      .select('dt.asset_id', 'assetId')
+      .addSelect('asset.name', 'assetName')
+      .addSelect('asset.asset_number', 'assetNumber')
+      .addSelect('SUM(COALESCE(dt.duration_minutes, 0))', 'totalDowntimeMinutes')
+      .addSelect('COUNT(dt.id)', 'downtimeEvents')
+      .from('asset_downtimes', 'dt')
+      .innerJoin('assets', 'asset', 'asset.id = dt.asset_id')
+      .where('dt.tenant_id = :tenantId', { tenantId })
+      .andWhere('dt.started_at BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .groupBy('dt.asset_id')
+      .addGroupBy('asset.name')
+      .addGroupBy('asset.asset_number')
+      .orderBy('totalDowntimeMinutes', 'DESC')
+      .getRawMany();
+
+    const assets = downtimeData.map((d) => {
+      const downtimeHours = parseFloat(d.totalDowntimeMinutes || '0') / 60;
+      const availability = totalPeriodHours > 0
+        ? Math.round(((totalPeriodHours - downtimeHours) / totalPeriodHours) * 1000) / 10
+        : 100;
+
+      return {
+        assetId: d.assetId,
+        assetName: d.assetName,
+        assetNumber: d.assetNumber,
+        totalDowntimeHours: Math.round(downtimeHours * 10) / 10,
+        downtimeEvents: parseInt(d.downtimeEvents, 10),
+        availability: Math.max(0, availability),
+        // Performance and Quality require production data — set to null until integrated
+        performance: null as number | null,
+        quality: null as number | null,
+        oee: null as number | null,
+      };
+    });
+
+    const avgAvailability = assets.length > 0
+      ? Math.round((assets.reduce((sum, a) => sum + a.availability, 0) / assets.length) * 10) / 10
+      : 100;
+
+    return {
+      assets,
+      averageAvailability: avgAvailability,
+    };
+  }
+
+  // ==================== BACKLOG AGING ====================
+
+  async getBacklogAgingReport(tenantId: string): Promise<{
+    buckets: ChartDataPoint[];
+    total: number;
+    oldestDays: number;
+    details: any[];
+  }> {
+    const now = new Date();
+
+    const openStatuses = [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD];
+
+    const result = await this.workOrderRepo
+      .createQueryBuilder('wo')
+      .select(`
+        CASE
+          WHEN EXTRACT(EPOCH FROM (NOW() - wo.createdAt)) / 86400 <= 7 THEN '0-7 days'
+          WHEN EXTRACT(EPOCH FROM (NOW() - wo.createdAt)) / 86400 <= 14 THEN '8-14 days'
+          WHEN EXTRACT(EPOCH FROM (NOW() - wo.createdAt)) / 86400 <= 30 THEN '15-30 days'
+          ELSE '30+ days'
+        END`, 'bucket')
+      .addSelect('COUNT(*)', 'count')
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.status IN (:...statuses)', { statuses: openStatuses })
+      .groupBy('bucket')
+      .getRawMany();
+
+    // Order buckets consistently
+    const bucketOrder = ['0-7 days', '8-14 days', '15-30 days', '30+ days'];
+    const bucketMap = new Map(result.map((r) => [r.bucket, parseInt(r.count, 10)]));
+    const buckets = bucketOrder.map((label) => ({ label, value: bucketMap.get(label) || 0 }));
+    const total = buckets.reduce((sum, b) => sum + b.value, 0);
+
+    // Oldest open WOs
+    const oldestWOs = await this.workOrderRepo.find({
+      where: { tenantId, status: In(openStatuses) },
+      order: { createdAt: 'ASC' },
+      take: 10,
+      relations: ['asset'],
+    });
+
+    const oldestDays = oldestWOs.length > 0
+      ? Math.floor((now.getTime() - new Date(oldestWOs[0].createdAt).getTime()) / 86400000)
+      : 0;
+
+    return {
+      buckets,
+      total,
+      oldestDays,
+      details: oldestWOs.map((wo) => ({
+        id: wo.id,
+        woNumber: wo.woNumber,
+        title: wo.title,
+        status: wo.status,
+        priority: wo.priority,
+        asset: wo.asset?.name,
+        createdAt: wo.createdAt,
+        ageDays: Math.floor((now.getTime() - new Date(wo.createdAt).getTime()) / 86400000),
       })),
     };
   }

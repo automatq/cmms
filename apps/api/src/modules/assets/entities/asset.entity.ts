@@ -8,12 +8,16 @@ import {
   OneToMany,
   JoinColumn,
   Unique,
+  BeforeInsert,
 } from 'typeorm';
+import { randomBytes } from 'crypto';
 import { Location } from './location.entity';
 import { AssetCategory } from './asset-category.entity';
 import { AssetMeter } from './asset-meter.entity';
 import { AssetDocument } from './asset-document.entity';
 import { AssetDowntime } from './asset-downtime.entity';
+import { AssetPart } from './asset-part.entity';
+import { AssetConditionLog } from './asset-condition-log.entity';
 import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum AssetStatus {
@@ -21,6 +25,14 @@ export enum AssetStatus {
   INACTIVE = 'inactive',
   UNDER_REPAIR = 'under_repair',
   RETIRED = 'retired',
+}
+
+export enum CriticalityRating {
+  CRITICAL = 'critical',
+  HIGH = 'high',
+  MEDIUM = 'medium',
+  LOW = 'low',
+  NEGLIGIBLE = 'negligible',
 }
 
 export enum MeterType {
@@ -100,8 +112,23 @@ export class Asset extends TenantAwareEntity {
   @Column({ default: false, name: 'is_critical' })
   isCritical: boolean;
 
+  @Column({ type: 'enum', enum: CriticalityRating, nullable: true, name: 'criticality_rating' })
+  criticalityRating: CriticalityRating;
+
   @Column({ nullable: true, name: 'qr_code' })
   qrCode: string;
+
+  @Column({ name: 'asset_tag_token', unique: true })
+  assetTagToken: string;
+
+  @Column({ type: 'int', name: 'asset_tag_version', default: 1 })
+  assetTagVersion: number;
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'asset_tag_regenerated_at' })
+  assetTagRegeneratedAt: Date;
+
+  @Column({ type: 'uuid', nullable: true, name: 'asset_tag_regenerated_by' })
+  assetTagRegeneratedBy: string;
 
   @Column({ type: 'enum', enum: MeterType, default: MeterType.NONE, name: 'meter_type' })
   meterType: MeterType;
@@ -124,6 +151,12 @@ export class Asset extends TenantAwareEntity {
   @OneToMany(() => AssetDowntime, (downtime) => downtime.asset)
   downtimes: AssetDowntime[];
 
+  @OneToMany(() => AssetPart, (ap) => ap.asset)
+  assetParts: AssetPart[];
+
+  @OneToMany(() => AssetConditionLog, (log) => log.asset)
+  conditionLogs: AssetConditionLog[];
+
   @Column({ type: 'simple-array', nullable: true, name: 'warranty_alert_days' })
   warrantyAlertDays: number[];
 
@@ -135,4 +168,18 @@ export class Asset extends TenantAwareEntity {
 
   @Column({ type: 'timestamptz', nullable: true, name: 'retired_at' })
   retiredAt: Date;
+
+  assetTagUrl?: string;
+
+  assetTagPreviewUrl?: string;
+
+  @BeforeInsert()
+  ensureAssetTagToken() {
+    if (!this.assetTagToken) {
+      this.assetTagToken = randomBytes(16).toString('base64url');
+    }
+    if (!this.assetTagVersion) {
+      this.assetTagVersion = 1;
+    }
+  }
 }

@@ -33,6 +33,7 @@ export class ImportsService {
     tenantId: string,
   ): Promise<{
     headers: string[];
+    availableFields: string[];
     suggestedMapping: Record<string, string>;
     previewRows: Record<string, string>[];
     totalRows: number;
@@ -55,6 +56,7 @@ export class ImportsService {
 
     return {
       headers,
+      availableFields: EXPECTED_COLUMNS[type],
       suggestedMapping,
       previewRows,
       totalRows: lines.length - 1,
@@ -113,7 +115,7 @@ export class ImportsService {
   }
 
   async processImport(jobId: string, type: ImportType, storageKey: string, columnMapping: Record<string, string>, tenantId: string): Promise<void> {
-    const job = await this.importJobRepo.findOne({ where: { id: jobId } });
+    const job = await this.importJobRepo.findOne({ where: { id: jobId, tenantId } });
     if (!job) return;
 
     job.status = ImportStatus.PROCESSING;

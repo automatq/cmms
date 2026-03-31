@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useRouter } from 'expo-router';
@@ -101,19 +101,19 @@ export default function WorkOrdersScreen() {
       </View>
 
       {/* List */}
-      <FlatList
-        data={workOrders}
-        renderItem={renderWorkOrder}
-        keyExtractor={(item) => item.id}
+      <ScrollView
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={
+      >
+        {workOrders.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="clipboard-outline" size={48} color="#cbd5e1" />
             <Text style={styles.emptyText}>No work orders found</Text>
           </View>
-        }
-      />
+        ) : (
+          workOrders.map((item: any) => <View key={item.id}>{renderWorkOrder({ item })}</View>)
+        )}
+      </ScrollView>
     </View>
   );
 }

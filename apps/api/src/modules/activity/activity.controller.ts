@@ -26,11 +26,17 @@ export class ActivityController {
     @Param('assetId', ParseUUIDPipe) assetId: string,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.activityService.quickStart(
-      assetId,
-      user.userId,
-      user.tenantId,
-    );
+    return this.activityService.quickStart(assetId, user.userId, user.tenantId);
+  }
+
+  @Post('quick-start-by-qr')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Quick-start work from a durable asset tag token' })
+  quickStartByQr(
+    @Body() body: { token: string },
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.activityService.quickStartByQr(body.token, user.userId, user.tenantId);
   }
 
   @Patch(':id/complete')
@@ -47,6 +53,17 @@ export class ActivityController {
       user.tenantId,
       body.notes,
     );
+  }
+
+  @Patch(':id/abandon')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Abandon an active work session without closing the work order' })
+  abandon(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { reason?: string },
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.activityService.abandonActivity(id, user.userId, user.tenantId, body.reason);
   }
 
   @Get('active')

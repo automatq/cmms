@@ -16,6 +16,18 @@ export class AddLaborDto {
   @IsNumber()
   hourlyRate?: number;
 
+  @ApiPropertyOptional({ description: 'Travel time in hours' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  travelTime?: number;
+
+  @ApiPropertyOptional({ description: 'Wait/idle time in hours' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  waitTime?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

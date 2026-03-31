@@ -11,8 +11,10 @@ import {
   ParseUUIDPipe,
   UploadedFile,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
 import { Express } from 'express';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -62,6 +64,29 @@ export class AssetsController {
   @ApiResponse({ status: 200, description: 'Asset tree structure' })
   getHierarchy(@CurrentUser() user: RequestUser) {
     return this.assetsService.getHierarchy(user.tenantId);
+  }
+
+  @Get('qr/resolve/:token')
+  @Permissions('assets:read')
+  @ApiOperation({ summary: 'Resolve an asset tag token' })
+  @ApiResponse({ status: 200, description: 'Resolved asset summary' })
+  resolveQrToken(@Param('token') token: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.resolveAssetTagToken(token, user.tenantId);
+  }
+
+  @Post('qr/bulk-print')
+  @Permissions('assets:write')
+  @ApiOperation({ summary: 'Generate a printable QR PDF for multiple assets' })
+  @ApiResponse({ status: 200, description: 'QR label PDF' })
+  async bulkPrintQrCodes(
+    @Body() body: { assetIds: string[] },
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.assetsService.bulkPrintQrs(body.assetIds || [], user.tenantId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=asset-qr-labels.pdf');
+    res.send(pdf);
   }
 
   @Get(':id')
@@ -192,6 +217,58 @@ export class AssetsController {
   }
 
   // ==================== QR CODE ====================
+
+  @Get(':id/qr')
+  @Permissions('assets:read')
+  @ApiOperation({ summary: 'Get QR metadata for asset tag printing and preview' })
+  @ApiResponse({ status: 200, description: 'Asset QR metadata' })
+  getAssetQr(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.assetsService.getAssetQr(id, user.tenantId);
+  }
+
+  @Get(':id/qr.png')
+  @Permissions('assets:read')
+  @ApiOperation({ summary: 'Download asset tag QR as PNG' })
+  @ApiResponse({ status: 200, description: 'QR PNG' })
+  async downloadAssetQrPng(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ) {
+    const png = await this.assetsService.getAssetQrPng(id, user.tenantId);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename="asset-${id}-qr.png"`);
+    res.send(png);
+  }
+
+  @Get(':id/qr.pdf')
+  @Permissions('assets:read')
+  @ApiOperation({ summary: 'Download a printable QR label PDF for an asset' })
+  @ApiResponse({ status: 200, description: 'QR label PDF' })
+  async downloadAssetQrPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.assetsService.getAssetQrPdf(id, user.tenantId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="asset-${id}-qr.pdf"`);
+    res.send(pdf);
+  }
+
+  @Post(':id/qr/regenerate')
+  @Permissions('assets:write')
+  @ApiOperation({ summary: 'Regenerate an asset tag token and invalidate old stickers' })
+  @ApiResponse({ status: 200, description: 'Updated asset QR metadata' })
+  regenerateAssetQr(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.assetsService.regenerateAssetQr(id, user.tenantId, user.userId);
+  }
 
   @Get(':id/qr-code')
   @Permissions('assets:read')

@@ -95,22 +95,22 @@ export class UsersService {
       throw new ConflictException('User with this email or username already exists');
     }
 
-    let roles: Role[] = [];
-    if (dto.roleIds?.length) {
-      roles = await this.roleRepository.find({
-        where: { id: In(dto.roleIds) },
-      });
-    }
+    const roles = dto.roleIds?.length
+      ? await this.findRolesByIds(dto.roleIds, tenantId)
+      : [];
 
+    const { roleIds, ...userData } = dto;
     const user = this.userRepository.create({
-      ...dto,
-      roles,
+      ...userData,
       tenantId,
     });
 
     const savedUser = await this.userRepository.save(user);
+    if (roles.length > 0) {
+      await this.setUserRoleIds(savedUser.id, roles.map((role) => role.id), tenantId);
+    }
     await this.tenantService.incrementUserCount(tenantId);
-    return savedUser;
+    return this.findOne(savedUser.id, tenantId);
   }
 
   async findAll(query: UserQueryDto, tenantId: string): Promise<PaginatedResult<User>> {
@@ -174,15 +174,18 @@ export class UsersService {
     const user = await this.findOne(id, tenantId);
 
     if (dto.roleIds !== undefined) {
-      user.roles = dto.roleIds.length
-        ? await this.roleRepository.find({ where: { id: In(dto.roleIds) } })
+      const roles = dto.roleIds.length
+        ? await this.findRolesByIds(dto.roleIds, tenantId)
         : [];
+      await this.setUserRoleIds(id, roles.map((role) => role.id), tenantId);
+      user.roles = roles;
     }
 
     const { roleIds, ...updateData } = dto;
     Object.assign(user, updateData);
 
-    return this.userRepository.save(user);
+    await this.userRepository.save(user);
+    return this.findOne(id, tenantId);
   }
 
   async deactivate(id: string, tenantId: string): Promise<User> {
@@ -206,17 +209,25 @@ export class UsersService {
     }
 
     if (!user.roles.find((r) => r.id === roleId)) {
-      user.roles.push(role);
-      await this.userRepository.save(user);
+      await this.userRepository.query(
+        `INSERT INTO user_roles (user_id, role_id, tenant_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [user.id, role.id, tenantId],
+      );
     }
 
-    return user;
+    return this.findOne(userId, tenantId);
   }
 
   async removeRole(userId: string, roleId: string, tenantId: string): Promise<User> {
-    const user = await this.findOne(userId, tenantId);
-    user.roles = user.roles.filter((r) => r.id !== roleId);
-    return this.userRepository.save(user);
+    await this.findOne(userId, tenantId);
+    await this.findRoleById(roleId, tenantId);
+    await this.userRepository.query(
+      `DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2 AND tenant_id = $3`,
+      [userId, roleId, tenantId],
+    );
+    return this.findOne(userId, tenantId);
   }
 
   // ==================== ROLE METHODS ====================
@@ -307,14 +318,20 @@ export class UsersService {
 
   async updateOrganization(data: Partial<Tenant>, tenantId: string): Promise<Tenant> {
     const org = await this.getOrganization(tenantId);
-    // Only allow updating safe fields
-    const { name, logoUrl, timezone, currency, modules, settings } = data as any;
+    // Only allow updating safe tenant profile fields here.
+    // Plan-controlled modules are managed by billing/admin flows.
+    const { name, logoUrl, timezone, currency, settings } = data as any;
     if (name !== undefined) org.name = name;
     if (logoUrl !== undefined) org.logoUrl = logoUrl;
     if (timezone !== undefined) org.timezone = timezone;
     if (currency !== undefined) org.currency = currency;
-    if (modules !== undefined) org.modules = modules;
     if (settings !== undefined) org.settings = settings;
+    return this.tenantRepository.save(org);
+  }
+
+  async completeOnboarding(tenantId: string): Promise<Tenant> {
+    const org = await this.getOrganization(tenantId);
+    org.onboardingCompleted = true;
     return this.tenantRepository.save(org);
   }
 
@@ -495,6 +512,34 @@ export class UsersService {
         });
         await this.roleRepository.save(role);
       }
+    }
+  }
+
+  private async findRolesByIds(roleIds: string[], tenantId: string): Promise<Role[]> {
+    const roles = await this.roleRepository.find({
+      where: { id: In(roleIds), tenantId },
+    });
+
+    if (roles.length !== roleIds.length) {
+      throw new NotFoundException('One or more roles were not found for this tenant');
+    }
+
+    return roles;
+  }
+
+  private async setUserRoleIds(userId: string, roleIds: string[], tenantId: string): Promise<void> {
+    await this.userRepository.query(
+      `DELETE FROM user_roles WHERE user_id = $1 AND tenant_id = $2`,
+      [userId, tenantId],
+    );
+
+    for (const roleId of roleIds) {
+      await this.userRepository.query(
+        `INSERT INTO user_roles (user_id, role_id, tenant_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [userId, roleId, tenantId],
+      );
     }
   }
 }

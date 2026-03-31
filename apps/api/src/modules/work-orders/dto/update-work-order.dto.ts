@@ -9,7 +9,7 @@ import {
   IsObject,
   IsArray,
 } from 'class-validator';
-import { WorkOrderType, Priority, WorkOrderStatus } from '../entities/work-order.entity';
+import { WorkOrderType, Priority, WorkOrderStatus, HoldReason } from '../entities/work-order.entity';
 
 export class UpdateWorkOrderDto {
   @ApiPropertyOptional()
@@ -87,6 +87,16 @@ export class UpdateWorkOrderDto {
   @IsOptional()
   @IsString()
   resolutionNotes?: string;
+
+  @ApiPropertyOptional({ enum: HoldReason })
+  @IsOptional()
+  @IsEnum(HoldReason)
+  holdReason?: HoldReason;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  failureCodeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

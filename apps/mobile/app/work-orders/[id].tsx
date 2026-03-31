@@ -5,12 +5,18 @@ import { api } from '@/lib/api'
 
 export default function WorkOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const workOrderId = Array.isArray(id) ? id[0] : id
   const router = useRouter()
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['work-order', id],
-    queryFn: () => api.getWorkOrder(id),
-    enabled: !!id,
+    queryKey: ['work-order', workOrderId],
+    queryFn: () => {
+      if (!workOrderId) {
+        throw new Error('Missing work order ID')
+      }
+      return api.getWorkOrder(workOrderId)
+    },
+    enabled: !!workOrderId,
   })
 
   if (isLoading) {

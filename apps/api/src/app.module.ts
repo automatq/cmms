@@ -3,12 +3,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 
 // Auth
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
+
+// Filters
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 // Tenant
 import { TenantModule } from './common/tenant/tenant.module';
@@ -59,6 +62,11 @@ import { HealthController } from './health.controller';
         ssl: config.get('DB_SSL', 'false') === 'true'
           ? { rejectUnauthorized: config.get('DB_SSL_REJECT_UNAUTHORIZED', 'true') === 'true' }
           : false,
+        extra: {
+          max: config.get<number>('DB_POOL_MAX', 20),
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 5000,
+        },
       }),
     }),
 
@@ -72,6 +80,12 @@ import { HealthController } from './health.controller';
           port: config.get<number>('REDIS_PORT', 6379),
           password: config.get('REDIS_PASSWORD'),
         },
+        defaultJobOptions: {
+          removeOnComplete: { count: 1000 },
+          removeOnFail: { count: 5000 },
+          attempts: 3,
+          backoff: { type: 'exponential' as const, delay: 1000 },
+        },
       }),
     }),
 
@@ -84,7 +98,7 @@ import { HealthController } from './health.controller';
     // Auth
     AuthModule,
 
-    // Tenant (must be before feature modules so middleware runs first)
+    // Tenant services/controllers
     TenantModule,
 
     // Feature Modules
@@ -121,6 +135,11 @@ import { HealthController } from './health.controller';
     {
       provide: APP_GUARD,
       useClass: FeatureGateGuard,
+    },
+    // Global Exception Filter
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
     },
   ],
 })

@@ -25,7 +25,12 @@ export class ChecklistTemplate extends TenantAwareEntity {
     requiresValue?: boolean;
     unit?: string;
     passFail?: boolean;
+    safetyNotes?: string;
+    requiredPPE?: string[];
   }>;
+
+  @Column({ name: 'lockout_required', default: false })
+  lockoutRequired: boolean;
 
   @Column({ name: 'is_library', default: false })
   isLibrary: boolean;

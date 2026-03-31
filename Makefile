@@ -13,19 +13,19 @@ logs:
 	docker compose logs -f
 
 shell-api:
-	docker compose exec cmms-api sh
+	docker compose exec nexly-api sh
 
 shell-db:
 	docker compose exec postgres psql -U $${POSTGRES_USER} -d $${POSTGRES_DB}
 
 migrate:
-	docker compose exec cmms-api npm run migration:run
+	docker compose exec nexly-api npm run migration:run
 
 migration-generate:
-	docker compose exec cmms-api npm run migration:generate -- src/database/migrations/$(name)
+	docker compose exec nexly-api npm run migration:generate -- src/database/migrations/$(name)
 
 seed:
-	docker compose exec cmms-api npm run seed
+	docker compose exec nexly-api npm run seed
 
 pull-models:
 	docker compose exec ollama ollama pull llama3.1:8b
@@ -57,11 +57,11 @@ prod-logs:
 
 # Docker image build and push commands
 docker-build:
-	@read -p "Enter registry URL (e.g., registry.example.com/cmms): " registry; \
+	@read -p "Enter registry URL (e.g., registry.example.com/nexly): " registry; \
 	read -p "Enter tag (default: latest): " tag; \
 	./scripts/docker-build.sh $$registry $${tag:-latest}
 
 docker-push:
-	@read -p "Enter registry URL (e.g., registry.example.com/cmms): " registry; \
+	@read -p "Enter registry URL (e.g., registry.example.com/nexly): " registry; \
 	read -p "Enter tag (default: latest): " tag; \
 	./scripts/docker-push.sh $$registry $${tag:-latest}

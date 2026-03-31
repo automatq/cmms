@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, LessThanOrEqual, Between } from 'typeorm';
+import { Repository, LessThanOrEqual, Between } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { addDays, addWeeks, addMonths, addYears, startOfDay, endOfDay } from 'date-fns';
@@ -44,7 +44,6 @@ export class PmService {
     private readonly webhooksService: WebhooksService,
     @InjectQueue('pm-scheduler')
     private readonly pmQueue: Queue,
-    private readonly dataSource: DataSource,
   ) {}
 
   // ==================== PM PLAN CRUD ====================
@@ -235,7 +234,7 @@ export class PmService {
       },
     });
 
-    // Group by tenantId for proper RLS context
+    // Group by tenantId so each tenant is processed independently.
     const plansByTenant = new Map<string, PmPlan[]>();
     for (const plan of duePlans) {
       const existing = plansByTenant.get(plan.tenantId) || [];
@@ -244,12 +243,6 @@ export class PmService {
     }
 
     for (const [tenantId, plans] of plansByTenant) {
-      // Set RLS context for this tenant
-      await this.dataSource.query(
-        `SELECT set_config('app.current_tenant_id', $1, false)`,
-        [tenantId],
-      );
-
       for (const plan of plans) {
         try {
           // Check if we already have an open WO for this PM
@@ -314,11 +307,6 @@ export class PmService {
         }
       }
     }
-
-    // Clear RLS context
-    await this.dataSource.query(
-      `SELECT set_config('app.current_tenant_id', '', false)`,
-    );
 
     return { triggered, skipped };
   }

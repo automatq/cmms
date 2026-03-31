@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, IsUUID, Min, MaxLength, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, IsUUID, Min, MaxLength, IsArray, IsEnum } from 'class-validator';
+import { AbcClass } from '../entities/part.entity';
 
 export class CreatePartDto {
   @IsString()
@@ -64,6 +65,10 @@ export class CreatePartDto {
   @IsOptional()
   @IsBoolean()
   isCritical?: boolean;
+
+  @IsOptional()
+  @IsEnum(AbcClass)
+  abcClass?: AbcClass;
 
   @IsOptional()
   @IsArray()

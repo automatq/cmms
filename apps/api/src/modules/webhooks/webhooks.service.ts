@@ -168,7 +168,7 @@ export class WebhooksService {
 
     // Update subscription
     const sub = await this.subscriptionRepository.findOne({
-      where: { id: subscriptionId },
+      where: { id: subscriptionId, tenantId },
     });
     if (sub) {
       sub.lastTriggeredAt = new Date();

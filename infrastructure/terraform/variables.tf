@@ -9,7 +9,7 @@
 variable "project_name" {
   description = "Name of the project, used as prefix for all resources"
   type        = string
-  default     = "cmms"
+  default     = "nexly"
 }
 
 variable "environment" {
@@ -56,7 +56,7 @@ variable "private_subnet_cidrs" {
 # ------------------------------------------------------------------------------
 
 variable "domain_name" {
-  description = "Root domain name (e.g. cmms.example.com)"
+  description = "Root domain name (e.g. nexly.example.com)"
   type        = string
 }
 
@@ -73,13 +73,13 @@ variable "create_dns_zone" {
 variable "db_name" {
   description = "Name of the PostgreSQL database"
   type        = string
-  default     = "cmms"
+  default     = "nexly"
 }
 
 variable "db_username" {
   description = "Master username for the database"
   type        = string
-  default     = "cmms_admin"
+  default     = "nexly_admin"
 }
 
 variable "db_instance_class" {

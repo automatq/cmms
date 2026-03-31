@@ -67,6 +67,18 @@ export class ReportsController {
     return this.reportsService.getTechnicianPerformanceReport(query, user.tenantId);
   }
 
+  @Get('oee')
+  @Permissions('reports:read')
+  getOeeReport(@Query() query: ReportQueryDto, @CurrentUser() user: RequestUser) {
+    return this.reportsService.getOeeReport(query, user.tenantId);
+  }
+
+  @Get('backlog-aging')
+  @Permissions('reports:read')
+  getBacklogAging(@CurrentUser() user: RequestUser) {
+    return this.reportsService.getBacklogAgingReport(user.tenantId);
+  }
+
   @Get('downtime')
   @Permissions('reports:read')
   getDowntimeReport(

@@ -11,6 +11,12 @@ import {
 import { Supplier } from './supplier.entity';
 import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
+export enum AbcClass {
+  A = 'A',
+  B = 'B',
+  C = 'C',
+}
+
 @Entity('parts')
 @Unique(['tenantId', 'sku'])
 export class Part extends TenantAwareEntity {
@@ -59,6 +65,9 @@ export class Part extends TenantAwareEntity {
 
   @Column({ default: false, name: 'is_critical' })
   isCritical: boolean;
+
+  @Column({ type: 'enum', enum: AbcClass, nullable: true, name: 'abc_class' })
+  abcClass: AbcClass;
 
   @Column({ nullable: true, name: 'image_key' })
   imageKey: string;

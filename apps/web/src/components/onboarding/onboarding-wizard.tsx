@@ -29,7 +29,7 @@ interface OnboardingWizardProps {
 const STEPS = [
   {
     id: 'welcome',
-    title: 'Welcome to your CMMS',
+    title: 'Welcome to Nexly',
     icon: Building2,
   },
   {
@@ -143,7 +143,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
                   <Building2 className="h-8 w-8 text-primary" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-2xl font-bold">Welcome to your CMMS</h2>
+                  <h2 className="text-2xl font-bold">Welcome to Nexly</h2>
                   <p className="text-muted-foreground max-w-sm mx-auto">
                     Let's get you started with a quick setup. We'll create your first location and asset in under a minute.
                   </p>

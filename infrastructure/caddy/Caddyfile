@@ -10,17 +10,17 @@
 	}
 
 	handle /api/* {
-		reverse_proxy cmms-api:4000
+		reverse_proxy nexly-api:4000
 	}
 
 	handle /socket.io/* {
-		reverse_proxy cmms-api:4000 {
+		reverse_proxy nexly-api:4000 {
 			header_up Connection "upgrade"
 			header_up Upgrade {http.request.header.Upgrade}
 		}
 	}
 
 	handle {
-		reverse_proxy cmms-web:3000
+		reverse_proxy nexly-web:3000
 	}
 }

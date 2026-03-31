@@ -39,7 +39,8 @@ import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 
 // Valid status transitions
 const STATUS_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
-  [WorkOrderStatus.DRAFT]: [WorkOrderStatus.OPEN],
+  [WorkOrderStatus.DRAFT]: [WorkOrderStatus.OPEN, WorkOrderStatus.PENDING_APPROVAL],
+  [WorkOrderStatus.PENDING_APPROVAL]: [WorkOrderStatus.OPEN, WorkOrderStatus.DRAFT],
   [WorkOrderStatus.OPEN]: [WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD],
   [WorkOrderStatus.IN_PROGRESS]: [WorkOrderStatus.ON_HOLD, WorkOrderStatus.COMPLETED],
   [WorkOrderStatus.ON_HOLD]: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS],
@@ -269,7 +270,7 @@ export class WorkOrdersService {
 
   // ==================== STATUS TRANSITIONS ====================
 
-  async updateStatus(id: string, status: WorkOrderStatus, userId: string, tenantId: string): Promise<WorkOrder> {
+  async updateStatus(id: string, status: WorkOrderStatus, userId: string, tenantId: string, holdReason?: string): Promise<WorkOrder> {
     const workOrder = await this.findOne(id, tenantId);
     const currentStatus = workOrder.status;
 
@@ -283,6 +284,19 @@ export class WorkOrdersService {
 
     const oldStatus = workOrder.status;
     workOrder.status = status;
+
+    // Track hold reason
+    if (status === WorkOrderStatus.ON_HOLD) {
+      workOrder.holdReason = (holdReason as any) || null;
+    } else if (oldStatus === WorkOrderStatus.ON_HOLD) {
+      workOrder.holdReason = null;
+    }
+
+    // Record approval when transitioning from PENDING_APPROVAL to OPEN
+    if (oldStatus === WorkOrderStatus.PENDING_APPROVAL && status === WorkOrderStatus.OPEN) {
+      workOrder.approvedBy = userId;
+      workOrder.approvedAt = new Date();
+    }
 
     // Set timestamps based on transition
     if (status === WorkOrderStatus.IN_PROGRESS && !workOrder.actualStart) {

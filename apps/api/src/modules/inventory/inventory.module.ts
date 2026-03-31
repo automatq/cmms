@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 import { Part } from './entities/part.entity';
 import { Supplier } from './entities/supplier.entity';
 import { Storeroom } from './entities/storeroom.entity';
@@ -19,6 +20,7 @@ import {
 } from './inventory.controller';
 import { ServiceContractsController } from './service-contracts.controller';
 import { PartCsvController } from './csv.controller';
+import { ReorderCheckProcessor } from './reorder-check.processor';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -33,6 +35,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       PoLineItem,
       ServiceContract,
     ]),
+    BullModule.registerQueue({ name: 'reorder-checker' }),
     NotificationsModule,
   ],
   controllers: [
@@ -44,7 +47,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ServiceContractsController,
     PartCsvController,
   ],
-  providers: [InventoryService, ServiceContractsService],
+  providers: [InventoryService, ServiceContractsService, ReorderCheckProcessor],
   exports: [InventoryService, ServiceContractsService],
 })
 export class InventoryModule {}

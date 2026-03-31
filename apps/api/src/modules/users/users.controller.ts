@@ -238,6 +238,6 @@ export class OrganizationController {
   @ApiOperation({ summary: 'Mark onboarding as completed' })
   @ApiResponse({ status: 200, description: 'Onboarding completed' })
   completeOnboarding(@CurrentUser() user: RequestUser) {
-    return this.usersService.updateOrganization({ onboardingCompleted: true } as any, user.tenantId);
+    return this.usersService.completeOnboarding(user.tenantId);
   }
 }

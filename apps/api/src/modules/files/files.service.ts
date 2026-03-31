@@ -22,6 +22,7 @@ export class FilesService {
   private readonly s3: S3Client;
   private readonly bucket: string;
   private readonly logger = new Logger(FilesService.name);
+  private readonly ready: Promise<void>;
 
   constructor(private readonly configService: ConfigService) {
     const provider = this.configService.get<string>('STORAGE_PROVIDER', 'minio');
@@ -37,22 +38,28 @@ export class FilesService {
       const port = this.configService.get<string>('MINIO_PORT', '9000');
       const useSSL = this.configService.get<string>('MINIO_USE_SSL') === 'true';
       const protocol = useSSL ? 'https' : 'http';
+      const accessKeyId =
+        this.configService.get<string>('MINIO_ACCESS_KEY') ||
+        this.configService.get<string>('MINIO_ROOT_USER', '');
+      const secretAccessKey =
+        this.configService.get<string>('MINIO_SECRET_KEY') ||
+        this.configService.get<string>('MINIO_ROOT_PASSWORD', '');
 
       this.s3 = new S3Client({
         region: 'us-east-1',
         endpoint: `${protocol}://${endpoint}:${port}`,
         forcePathStyle: true,
         credentials: {
-          accessKeyId: this.configService.get<string>('MINIO_ACCESS_KEY', ''),
-          secretAccessKey: this.configService.get<string>('MINIO_SECRET_KEY', ''),
+          accessKeyId,
+          secretAccessKey,
         },
       });
     }
 
     this.bucket = this.configService.get<string>('STORAGE_BUCKET',
-      this.configService.get<string>('MINIO_BUCKET', 'cmms-files'),
+      this.configService.get<string>('MINIO_BUCKET', 'nexly-files'),
     );
-    this.ensureBucket();
+    this.ready = this.ensureBucket();
   }
 
   private async ensureBucket(): Promise<void> {
@@ -77,6 +84,7 @@ export class FilesService {
     path: string,
     tenantId?: string,
   ): Promise<string> {
+    await this.ready;
     const extension = file.originalname.split('.').pop();
     const prefix = tenantId ? `${tenantId}/` : '';
     const key = `${prefix}${path}/${uuid()}.${extension}`;
@@ -103,6 +111,7 @@ export class FilesService {
     contentType: string,
     tenantId?: string,
   ): Promise<string> {
+    await this.ready;
     const actualKey = tenantId ? `${tenantId}/${key}` : key;
     try {
       await this.s3.send(new PutObjectCommand({
@@ -130,6 +139,34 @@ export class FilesService {
     } catch (error) {
       this.logger.error('Signed URL error:', error);
       throw new InternalServerErrorException('Failed to generate download URL');
+    }
+  }
+
+  resolveStorageKey(value: string): string {
+    if (!value || !/^https?:\/\//i.test(value)) {
+      return value;
+    }
+
+    try {
+      const parsed = new URL(value);
+      const fileRouteMatch = parsed.pathname.match(/\/files\/(.+)\/download$/);
+      if (fileRouteMatch?.[1]) {
+        return decodeURIComponent(fileRouteMatch[1]);
+      }
+
+      const path = parsed.pathname.replace(/^\/+/, '');
+      if (!path) {
+        return value;
+      }
+
+      const segments = path.split('/');
+      if (segments[0] === this.bucket) {
+        return decodeURIComponent(segments.slice(1).join('/'));
+      }
+
+      return decodeURIComponent(path);
+    } catch {
+      return value;
     }
   }
 

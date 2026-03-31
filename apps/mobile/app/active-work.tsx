@@ -6,7 +6,7 @@ import { api } from '@/lib/api'
 
 export default function ActiveWorkScreen() {
   const router = useRouter()
-  const params = useLocalSearchParams<{
+  const rawParams = useLocalSearchParams<{
     activityId: string
     workOrderId: string
     woNumber: string
@@ -14,6 +14,14 @@ export default function ActiveWorkScreen() {
     assetNumber: string
     isNew: string
   }>()
+  const params = {
+    activityId: Array.isArray(rawParams.activityId) ? rawParams.activityId[0] : rawParams.activityId,
+    workOrderId: Array.isArray(rawParams.workOrderId) ? rawParams.workOrderId[0] : rawParams.workOrderId,
+    woNumber: Array.isArray(rawParams.woNumber) ? rawParams.woNumber[0] : rawParams.woNumber,
+    assetName: Array.isArray(rawParams.assetName) ? rawParams.assetName[0] : rawParams.assetName,
+    assetNumber: Array.isArray(rawParams.assetNumber) ? rawParams.assetNumber[0] : rawParams.assetNumber,
+    isNew: Array.isArray(rawParams.isNew) ? rawParams.isNew[0] : rawParams.isNew,
+  }
 
   const [elapsed, setElapsed] = useState(0)
   const [notes, setNotes] = useState('')
@@ -27,7 +35,12 @@ export default function ActiveWorkScreen() {
   }, [])
 
   const completeMutation = useMutation({
-    mutationFn: () => api.completeActivity(params.activityId, notes || undefined),
+    mutationFn: () => {
+      if (!params.activityId) {
+        throw new Error('Missing activity ID')
+      }
+      return api.completeActivity(params.activityId, notes || undefined)
+    },
     onSuccess: () => {
       Alert.alert('Work Completed', 'Your work session has been recorded.', [
         { text: 'OK', onPress: () => router.replace('/') },
@@ -35,6 +48,23 @@ export default function ActiveWorkScreen() {
     },
     onError: () => {
       Alert.alert('Error', 'Failed to complete work session. Please try again.')
+    },
+  })
+
+  const abandonMutation = useMutation({
+    mutationFn: () => {
+      if (!params.activityId) {
+        throw new Error('Missing activity ID')
+      }
+      return api.abandonActivity(params.activityId, notes || undefined)
+    },
+    onSuccess: () => {
+      Alert.alert('Session Abandoned', 'The timed session has been stopped without closing the work order.', [
+        { text: 'OK', onPress: () => router.replace('/(tabs)/work-orders') },
+      ])
+    },
+    onError: () => {
+      Alert.alert('Error', 'Failed to abandon the work session. Please try again.')
     },
   })
 
@@ -50,6 +80,17 @@ export default function ActiveWorkScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Complete', onPress: () => completeMutation.mutate() },
     ])
+  }
+
+  const handleAbandon = () => {
+    Alert.alert(
+      'Abandon Session',
+      'This stops the timer but leaves the work order open. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Abandon', style: 'destructive', onPress: () => abandonMutation.mutate() },
+      ]
+    )
   }
 
   return (
@@ -105,7 +146,7 @@ export default function ActiveWorkScreen() {
       <Pressable
         style={[styles.completeButton, completeMutation.isPending && styles.buttonDisabled]}
         onPress={handleComplete}
-        disabled={completeMutation.isPending}
+        disabled={completeMutation.isPending || abandonMutation.isPending}
       >
         <Text style={styles.completeButtonText}>
           {completeMutation.isPending ? 'Completing...' : 'Complete Work'}
@@ -113,8 +154,18 @@ export default function ActiveWorkScreen() {
       </Pressable>
 
       <Pressable
+        style={[styles.abandonButton, abandonMutation.isPending && styles.buttonDisabled]}
+        onPress={handleAbandon}
+        disabled={completeMutation.isPending || abandonMutation.isPending}
+      >
+        <Text style={styles.abandonButtonText}>
+          {abandonMutation.isPending ? 'Abandoning...' : 'Abandon Session'}
+        </Text>
+      </Pressable>
+
+      <Pressable
         style={styles.viewWoButton}
-        onPress={() => router.push(`/work-orders/${params.workOrderId}`)}
+        onPress={() => params.workOrderId && router.push(`/work-orders/${params.workOrderId}`)}
       >
         <Text style={styles.viewWoButtonText}>View Work Order Details</Text>
       </Pressable>
@@ -261,6 +312,20 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderWidth: 1,
     borderColor: '#d1d5db',
+  },
+  abandonButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    backgroundColor: '#fff1f2',
+  },
+  abandonButtonText: {
+    color: '#be123c',
+    fontSize: 15,
+    fontWeight: '700',
   },
   viewWoButtonText: {
     color: '#374151',

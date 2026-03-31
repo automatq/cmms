@@ -57,7 +57,7 @@ export default function NewAssetPage() {
   const { data: allAssets } = useQuery({
     queryKey: ['assets-for-parent'],
     queryFn: async () => {
-      const res = await api.getAssets({ limit: 200 })
+      const res = await api.getAssets({ limit: 100 })
       return res.data?.data || res.data || []
     },
   })
@@ -86,10 +86,7 @@ export default function NewAssetPage() {
       // For new assets, we'll temporarily store the URL until the asset is created
       // Then we'll update the asset with the image after creation
       const res = await api.uploadFile(file, 'temp-assets')
-      const key = res.data.key
-      // Build the public download URL
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
-      const imageUrl = `${API_URL}/files/${encodeURIComponent(key)}/download`
+      const imageUrl = res.data.url || res.data.key
 
       setFormData({ ...formData, imageUrl })
       setImageError(false)

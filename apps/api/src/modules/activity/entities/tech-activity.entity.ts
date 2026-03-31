@@ -60,11 +60,17 @@ export class TechActivity extends TenantAwareEntity {
   @Column({ type: 'timestamptz', nullable: true, name: 'completed_at' })
   completedAt: Date;
 
+  @Column({ type: 'timestamptz', nullable: true, name: 'abandoned_at' })
+  abandonedAt: Date;
+
   @Column({ type: 'int', nullable: true, name: 'duration_minutes' })
   durationMinutes: number;
 
   @Column({ type: 'text', nullable: true })
   notes: string;
+
+  @Column({ type: 'text', nullable: true, name: 'abandon_reason' })
+  abandonReason: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

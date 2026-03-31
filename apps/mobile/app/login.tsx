@@ -1,15 +1,38 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { useAuthStore } from '@/lib/auth';
+import { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSignIn } from '@clerk/clerk-expo';
 
 export default function LoginScreen() {
-  const { login, isLoading } = useAuthStore();
+  const { isLoaded, signIn, setActive } = useSignIn();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
+    if (!isLoaded) return;
+
     try {
-      await login();
+      setIsLoading(true);
+      setError(null);
+
+      const attempt = await signIn.create({
+        identifier: email,
+        password,
+        strategy: 'password',
+      });
+
+      if (attempt.status === 'complete' && attempt.createdSessionId && setActive) {
+        await setActive({ session: attempt.createdSessionId });
+      } else {
+        setError('Additional sign-in steps are required.');
+      }
     } catch (error) {
       console.error('Login error:', error);
+      setError('Invalid email or password.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -19,7 +42,7 @@ export default function LoginScreen() {
         <View style={styles.iconContainer}>
           <Ionicons name="construct" size={48} color="#fff" />
         </View>
-        <Text style={styles.title}>CMMS</Text>
+        <Text style={styles.title}>Nexly</Text>
         <Text style={styles.subtitle}>Maintenance Management System</Text>
       </View>
 
@@ -28,10 +51,27 @@ export default function LoginScreen() {
           Manage work orders, track assets, and streamline your maintenance operations.
         </Text>
 
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
         <TouchableOpacity 
           style={styles.button} 
           onPress={handleLogin}
-          disabled={isLoading}
+          disabled={isLoading || !email || !password || !isLoaded}
         >
           <Ionicons name="log-in-outline" size={24} color="#fff" />
           <Text style={styles.buttonText}>
@@ -80,12 +120,27 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: 'center',
   },
+  input: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    marginBottom: 12,
+  },
   description: {
     fontSize: 16,
     color: '#64748b',
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 24,
+  },
+  errorText: {
+    color: '#dc2626',
+    textAlign: 'center',
+    marginBottom: 12,
   },
   button: {
     backgroundColor: '#2563eb',

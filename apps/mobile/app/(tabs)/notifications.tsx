@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,19 +72,19 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={notifications}
-        renderItem={renderNotification}
-        keyExtractor={(item) => item.id}
+      <ScrollView
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={
+      >
+        {notifications.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="notifications-off-outline" size={48} color="#cbd5e1" />
             <Text style={styles.emptyText}>No notifications</Text>
           </View>
-        }
-      />
+        ) : (
+          notifications.map((item: any) => <View key={item.id}>{renderNotification({ item })}</View>)
+        )}
+      </ScrollView>
     </View>
   );
 }

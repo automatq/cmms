@@ -5,12 +5,18 @@ import { api } from '@/lib/api'
 
 export default function AssetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const assetId = Array.isArray(id) ? id[0] : id
   const router = useRouter()
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['asset', id],
-    queryFn: () => api.getAsset(id),
-    enabled: !!id,
+    queryKey: ['asset', assetId],
+    queryFn: () => {
+      if (!assetId) {
+        throw new Error('Missing asset ID')
+      }
+      return api.getAsset(assetId)
+    },
+    enabled: !!assetId,
   })
 
   if (isLoading) {

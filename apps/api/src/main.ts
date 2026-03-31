@@ -3,6 +3,8 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import compression from 'compression';
+import { json } from 'express';
 import { AppModule } from './app.module';
 import { JsonLoggerService } from './common/logger/json-logger.service';
 import { RequestLoggingInterceptor } from './common/logger/request-logging.interceptor';
@@ -40,6 +42,15 @@ async function bootstrap() {
   // Security headers
   app.use(helmet());
 
+  // Trust proxy for correct client IP behind reverse proxies (Railway, Caddy, ALB)
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
+  // Compression
+  app.use(compression());
+
+  // Request body size limit
+  app.use(json({ limit: '10mb' }));
+
   // Global prefix
   app.setGlobalPrefix('api/v1');
 
@@ -72,8 +83,8 @@ async function bootstrap() {
   // Swagger Documentation (disabled in production)
   if (nodeEnv !== 'production') {
     const config = new DocumentBuilder()
-      .setTitle('CMMS API')
-      .setDescription('Computerized Maintenance Management System API')
+      .setTitle('Nexly API')
+      .setDescription('Nexly Maintenance Management API')
       .setVersion('1.0')
       .addBearerAuth(
         {
@@ -106,9 +117,9 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const port = configService.get('PORT', 4000);
-  await app.listen(port);
+  await app.listen(port, '::');
 
-  logger.log(`CMMS API running on port ${port}`);
+  logger.log(`Nexly API running on port ${port}`);
   if (nodeEnv !== 'production') {
     logger.log(`Swagger docs: http://localhost:${port}/api/docs`);
   }

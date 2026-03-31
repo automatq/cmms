@@ -93,7 +93,7 @@ class ApiClient {
   }
 
   async getAssetByQR(qrCode: string) {
-    return this.client.get('/assets/qr/' + qrCode);
+    return this.client.get(`/assets/qr/resolve/${encodeURIComponent(qrCode)}`);
   }
 
   // Work Orders
@@ -143,8 +143,16 @@ class ApiClient {
     return this.client.post(`/activity/quick-start/${assetId}`);
   }
 
+  async quickStartWorkOrderByQr(token: string) {
+    return this.client.post('/activity/quick-start-by-qr', { token });
+  }
+
   async completeActivity(activityId: string, notes?: string) {
     return this.client.patch(`/activity/${activityId}/complete`, { notes });
+  }
+
+  async abandonActivity(activityId: string, reason?: string) {
+    return this.client.patch(`/activity/${activityId}/abandon`, { reason });
   }
 
   async getMyActiveActivity() {

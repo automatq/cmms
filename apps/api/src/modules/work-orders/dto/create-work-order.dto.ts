@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsUUID,
   IsNumber,
+  IsBoolean,
   IsEnum,
   IsDateString,
   IsObject,
@@ -85,6 +86,11 @@ export class CreateWorkOrderDto {
   @IsOptional()
   @IsUUID()
   checklistTemplateId?: string;
+
+  @ApiPropertyOptional({ description: 'If true, WO must go through PENDING_APPROVAL before OPEN' })
+  @IsOptional()
+  @IsBoolean()
+  requiresApproval?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

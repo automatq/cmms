@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Docker Push Script for CMMS
+# Docker Push Script for Nexly
 # Usage: ./scripts/docker-push.sh [registry_url] [tag]
-# Example: ./scripts/docker-push.sh registry.example.com/cmms v1.0.0
+# Example: ./scripts/docker-push.sh registry.example.com/nexly v1.0.0
 
 set -e
 
@@ -12,12 +12,12 @@ TAG=${2:-"latest"}
 if [ -z "$REGISTRY" ]; then
   echo "Error: Registry URL is required"
   echo "Usage: $0 <registry_url> [tag]"
-  echo "Example: $0 registry.example.com/cmms v1.0.0"
+  echo "Example: $0 registry.example.com/nexly v1.0.0"
   exit 1
 fi
 
 echo "========================================="
-echo "Pushing CMMS Docker Images"
+echo "Pushing Nexly Docker Images"
 echo "Registry: $REGISTRY"
 echo "Tag: $TAG"
 echo "========================================="
@@ -34,20 +34,20 @@ fi
 # Push API image
 echo ""
 echo "Pushing API image..."
-docker push $REGISTRY/cmms-api:$TAG
-docker push $REGISTRY/cmms-api:latest
+docker push $REGISTRY/nexly-api:$TAG
+docker push $REGISTRY/nexly-api:latest
 
 # Push Worker image
 echo ""
 echo "Pushing Worker image..."
-docker push $REGISTRY/cmms-worker:$TAG
-docker push $REGISTRY/cmms-worker:latest
+docker push $REGISTRY/nexly-worker:$TAG
+docker push $REGISTRY/nexly-worker:latest
 
 # Push Web image
 echo ""
 echo "Pushing Web image..."
-docker push $REGISTRY/cmms-web:$TAG
-docker push $REGISTRY/cmms-web:latest
+docker push $REGISTRY/nexly-web:$TAG
+docker push $REGISTRY/nexly-web:latest
 
 echo ""
 echo "========================================="
@@ -55,6 +55,6 @@ echo "Push completed successfully!"
 echo "========================================="
 echo ""
 echo "Images pushed:"
-echo "  - $REGISTRY/cmms-api:$TAG"
-echo "  - $REGISTRY/cmms-worker:$TAG"
-echo "  - $REGISTRY/cmms-web:$TAG"
+echo "  - $REGISTRY/nexly-api:$TAG"
+echo "  - $REGISTRY/nexly-worker:$TAG"
+echo "  - $REGISTRY/nexly-web:$TAG"

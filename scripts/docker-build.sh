@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Docker Build and Push Script for CMMS
+# Docker Build and Push Script for Nexly
 # Usage: ./scripts/docker-build.sh [registry_url] [tag]
-# Example: ./scripts/docker-build.sh registry.example.com/cmms v1.0.0
+# Example: ./scripts/docker-build.sh registry.example.com/nexly v1.0.0
 
 set -e
 
@@ -12,12 +12,12 @@ TAG=${2:-"latest"}
 if [ -z "$REGISTRY" ]; then
   echo "Error: Registry URL is required"
   echo "Usage: $0 <registry_url> [tag]"
-  echo "Example: $0 registry.example.com/cmms v1.0.0"
+  echo "Example: $0 registry.example.com/nexly v1.0.0"
   exit 1
 fi
 
 echo "========================================="
-echo "Building CMMS Docker Images"
+echo "Building Nexly Docker Images"
 echo "Registry: $REGISTRY"
 echo "Tag: $TAG"
 echo "========================================="
@@ -25,20 +25,20 @@ echo "========================================="
 # Build API image
 echo ""
 echo "Building API image..."
-docker build -t $REGISTRY/cmms-api:$TAG -f apps/api/Dockerfile apps/api/
-docker tag $REGISTRY/cmms-api:$TAG $REGISTRY/cmms-api:latest
+docker build -t $REGISTRY/nexly-api:$TAG -f apps/api/Dockerfile apps/api/
+docker tag $REGISTRY/nexly-api:$TAG $REGISTRY/nexly-api:latest
 
 # Build Worker image
 echo ""
 echo "Building Worker image..."
-docker build -t $REGISTRY/cmms-worker:$TAG -f apps/api/Dockerfile.worker apps/api/
-docker tag $REGISTRY/cmms-worker:$TAG $REGISTRY/cmms-worker:latest
+docker build -t $REGISTRY/nexly-worker:$TAG -f apps/api/Dockerfile.worker apps/api/
+docker tag $REGISTRY/nexly-worker:$TAG $REGISTRY/nexly-worker:latest
 
 # Build Web image
 echo ""
 echo "Building Web image..."
-docker build -t $REGISTRY/cmms-web:$TAG -f apps/web/Dockerfile apps/web/
-docker tag $REGISTRY/cmms-web:$TAG $REGISTRY/cmms-web:latest
+docker build -t $REGISTRY/nexly-web:$TAG -f apps/web/Dockerfile apps/web/
+docker tag $REGISTRY/nexly-web:$TAG $REGISTRY/nexly-web:latest
 
 echo ""
 echo "========================================="
@@ -46,9 +46,9 @@ echo "Build completed successfully!"
 echo "========================================="
 echo ""
 echo "Images built:"
-echo "  - $REGISTRY/cmms-api:$TAG"
-echo "  - $REGISTRY/cmms-worker:$TAG"
-echo "  - $REGISTRY/cmms-web:$TAG"
+echo "  - $REGISTRY/nexly-api:$TAG"
+echo "  - $REGISTRY/nexly-worker:$TAG"
+echo "  - $REGISTRY/nexly-web:$TAG"
 echo ""
 echo "To push images to registry, run:"
 echo "  ./scripts/docker-push.sh $REGISTRY $TAG"

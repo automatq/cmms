@@ -8,17 +8,21 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { Plus, Search, Package, MapPin, Tag, Image as ImageIcon, GitBranch, LayoutGrid, ChevronRight, ChevronDown, Download, Upload } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { toast } from 'sonner'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useAuth } from '@/providers/auth-provider'
 
 export default function AssetsPage() {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [viewMode, setViewMode] = useState<'grid' | 'hierarchy'>('grid')
   const [showImport, setShowImport] = useState(false)
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
 
   const { data, isLoading } = useQuery({
     queryKey: ['assets', search, page],
@@ -39,6 +43,13 @@ export default function AssetsPage() {
 
   const assets = data?.data || []
   const total = data?.total || 0
+  const canManageQr = !!user?.permissions?.includes('assets:write')
+  const visibleAssetIds = useMemo(() => assets.map((asset: any) => asset.id), [assets])
+  const allVisibleSelected = visibleAssetIds.length > 0 && visibleAssetIds.every((id: string) => selectedAssetIds.includes(id))
+
+  useEffect(() => {
+    setSelectedAssetIds((current) => current.filter((id) => visibleAssetIds.includes(id)))
+  }, [visibleAssetIds])
 
   const handleExportCsv = async () => {
     try {
@@ -50,6 +61,41 @@ export default function AssetsPage() {
       toast.success('Assets exported')
     } catch {
       toast.error('Failed to export assets')
+    }
+  }
+
+  const toggleAssetSelection = (assetId: string, checked: boolean) => {
+    setSelectedAssetIds((current) => {
+      if (checked) {
+        return current.includes(assetId) ? current : [...current, assetId]
+      }
+      return current.filter((id) => id !== assetId)
+    })
+  }
+
+  const toggleSelectVisible = (checked: boolean) => {
+    setSelectedAssetIds(checked ? visibleAssetIds : [])
+  }
+
+  const handleBulkPrint = async () => {
+    if (!selectedAssetIds.length) {
+      toast.error('Select at least one asset to print')
+      return
+    }
+
+    try {
+      const response = await api.bulkPrintAssetQrs(selectedAssetIds)
+      const url = URL.createObjectURL(response.data)
+      const printWindow = window.open(url, '_blank')
+      if (printWindow) {
+        setTimeout(() => {
+          printWindow.focus()
+          printWindow.print()
+        }, 500)
+      }
+      toast.success('Printable QR labels opened')
+    } catch {
+      toast.error('Failed to generate printable QR labels')
     }
   }
 
@@ -102,6 +148,34 @@ export default function AssetsPage() {
         </div>
       </div>
 
+      {viewMode === 'grid' && canManageQr && (
+        <Card>
+          <CardContent className="flex flex-col gap-4 py-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                checked={allVisibleSelected}
+                onChange={(event) => toggleSelectVisible(event.target.checked)}
+                aria-label="Select visible assets"
+              />
+              <div>
+                <p className="text-sm font-medium">QR label print queue</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedAssetIds.length} asset{selectedAssetIds.length === 1 ? '' : 's'} selected on this page.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setSelectedAssetIds([])} disabled={!selectedAssetIds.length}>
+                Clear
+              </Button>
+              <Button size="sm" onClick={handleBulkPrint} disabled={!selectedAssetIds.length}>
+                Print QR Labels
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Hierarchy View */}
       {viewMode === 'hierarchy' && (
         <Card>
@@ -153,7 +227,19 @@ export default function AssetsPage() {
 
               return (
                 <Link key={asset.id} href={`/dashboard/assets/${asset.id}`} className="group h-full block cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
-                  <Card className="flex flex-col h-full overflow-hidden transition-all duration-300 hover:shadow-md hover:border-primary/50 group-hover:-translate-y-1">
+                  <Card className="relative flex flex-col h-full overflow-hidden transition-all duration-300 hover:shadow-md hover:border-primary/50 group-hover:-translate-y-1">
+                    {canManageQr && (
+                      <div
+                        className="absolute left-3 top-3 z-10 rounded-md bg-background/95 p-1 shadow-sm"
+                        onClick={(event) => event.preventDefault()}
+                      >
+                        <Checkbox
+                          checked={selectedAssetIds.includes(asset.id)}
+                          onChange={(event) => toggleAssetSelection(asset.id, event.target.checked)}
+                          aria-label={`Select ${asset.name} for QR printing`}
+                        />
+                      </div>
+                    )}
 
                     {/* Media Header */}
                     <div className="h-40 bg-muted/30 border-b relative overflow-hidden flex-shrink-0">

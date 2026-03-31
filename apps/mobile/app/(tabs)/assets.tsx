@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useRouter } from 'expo-router';
@@ -84,19 +84,19 @@ export default function AssetsScreen() {
       </TouchableOpacity>
 
       {/* List */}
-      <FlatList
-        data={assets}
-        renderItem={renderAsset}
-        keyExtractor={(item) => item.id}
+      <ScrollView
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={
+      >
+        {assets.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="cube-outline" size={48} color="#cbd5e1" />
             <Text style={styles.emptyText}>No assets found</Text>
           </View>
-        }
-      />
+        ) : (
+          assets.map((item: any) => <View key={item.id}>{renderAsset({ item })}</View>)
+        )}
+      </ScrollView>
     </View>
   );
 }

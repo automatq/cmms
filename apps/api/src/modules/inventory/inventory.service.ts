@@ -253,10 +253,10 @@ export class InventoryService {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
-      const part = await manager.getRepository(Part).findOne({ where: { id: dto.partId } });
+      const part = await manager.getRepository(Part).findOne({ where: { id: dto.partId, tenantId } });
       if (!part) throw new NotFoundException(`Part ${dto.partId} not found`);
 
-      let stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId } });
+      let stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
       if (!stock) {
         stock = stockRepo.create({ partId: dto.partId, storeroomId: dto.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
       }
@@ -290,7 +290,7 @@ export class InventoryService {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
-      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId } });
+      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
       if (!stock) throw new NotFoundException('Stock record not found');
 
       const available = stock.qtyOnHand - stock.qtyReserved;
@@ -301,7 +301,7 @@ export class InventoryService {
       stock.qtyOnHand -= dto.qty;
       await stockRepo.save(stock);
 
-      const part = await manager.getRepository(Part).findOne({ where: { id: dto.partId } });
+      const part = await manager.getRepository(Part).findOne({ where: { id: dto.partId, tenantId } });
 
       const tx = txRepo.create({
         partId: dto.partId,
@@ -329,7 +329,7 @@ export class InventoryService {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
-      let stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId } });
+      let stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
       if (!stock) {
         stock = stockRepo.create({ partId: dto.partId, storeroomId: dto.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
       }
@@ -363,7 +363,7 @@ export class InventoryService {
       const txRepo = manager.getRepository(InventoryTransaction);
 
       // Check source stock
-      const fromStock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.fromStoreroomId } });
+      const fromStock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.fromStoreroomId, tenantId } });
       if (!fromStock) throw new NotFoundException('Source stock record not found');
 
       const available = fromStock.qtyOnHand - fromStock.qtyReserved;
@@ -376,7 +376,7 @@ export class InventoryService {
       await stockRepo.save(fromStock);
 
       // Add to destination
-      let toStock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.toStoreroomId } });
+      let toStock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.toStoreroomId, tenantId } });
       if (!toStock) {
         toStock = stockRepo.create({ partId: dto.partId, storeroomId: dto.toStoreroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
       }
@@ -416,7 +416,7 @@ export class InventoryService {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
-      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId } });
+      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
       if (!stock) throw new NotFoundException('Stock record not found');
 
       const available = stock.qtyOnHand - stock.qtyReserved;
@@ -447,7 +447,7 @@ export class InventoryService {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
-      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId } });
+      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
       if (!stock) throw new NotFoundException('Stock record not found');
 
       const releaseQty = dto.qty || stock.qtyReserved;
@@ -499,7 +499,6 @@ export class InventoryService {
   }
 
   async getLowStockParts(tenantId: string): Promise<Part[]> {
-    const parts = await this.partRepo.find({ where: { reorderPoint: LessThanOrEqual(0) } });
     const lowStockParts: Part[] = [];
 
     for (const part of await this.partRepo.find({ where: { tenantId } })) {
@@ -568,6 +567,7 @@ export class InventoryService {
       const lastPO = await poRepo
         .createQueryBuilder('po')
         .where('po.poNumber LIKE :pattern', { pattern: `PO-${year}-%` })
+        .andWhere('po.tenantId = :tenantId', { tenantId })
         .orderBy('po.poNumber', 'DESC')
         .getOne();
 
@@ -607,7 +607,7 @@ export class InventoryService {
         await lineRepo.save(lineItem);
 
         // Update qty on order
-        let stock = await stockRepo.findOne({ where: { partId: item.partId, storeroomId: item.storeroomId } });
+        let stock = await stockRepo.findOne({ where: { partId: item.partId, storeroomId: item.storeroomId, tenantId } });
         if (!stock) {
           stock = stockRepo.create({ partId: item.partId, storeroomId: item.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
         }
@@ -721,7 +721,7 @@ export class InventoryService {
           await lineRepo.save(lineItem);
 
           // Update stock
-          let stock = await stockRepo.findOne({ where: { partId: lineItem.partId, storeroomId: lineItem.storeroomId } });
+          let stock = await stockRepo.findOne({ where: { partId: lineItem.partId, storeroomId: lineItem.storeroomId, tenantId } });
           if (!stock) {
             stock = stockRepo.create({ partId: lineItem.partId, storeroomId: lineItem.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
           }
@@ -778,7 +778,7 @@ export class InventoryService {
       for (const lineItem of po.lineItems) {
         const unreceived = lineItem.qtyOrdered - lineItem.qtyReceived;
         if (unreceived > 0) {
-          const stock = await stockRepo.findOne({ where: { partId: lineItem.partId, storeroomId: lineItem.storeroomId } });
+          const stock = await stockRepo.findOne({ where: { partId: lineItem.partId, storeroomId: lineItem.storeroomId, tenantId } });
           if (stock) {
             stock.qtyOnOrder = Math.max(0, stock.qtyOnOrder - unreceived);
             await stockRepo.save(stock);

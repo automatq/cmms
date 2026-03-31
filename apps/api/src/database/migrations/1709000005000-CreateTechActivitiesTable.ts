@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner, Table, TableIndex, TableForeignKey } from 'typeorm';
 
-export class CreateTechActivitiesTable1709000004000 implements MigrationInterface {
+export class CreateTechActivitiesTable1709000005000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `CREATE TYPE "tech_activity_status_enum" AS ENUM ('active', 'completed', 'abandoned')`,

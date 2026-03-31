@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosInstance } from 'axios'
+import axiosRetry from 'axios-retry'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
 
@@ -15,6 +16,14 @@ class ApiClient {
       },
     })
 
+    axiosRetry(this.client, {
+      retries: 3,
+      retryDelay: axiosRetry.exponentialDelay,
+      retryCondition: (err) =>
+        axiosRetry.isNetworkOrIdempotentRequestError(err) ||
+        (err.response?.status ?? 0) >= 500,
+    })
+
     this.client.interceptors.request.use((config) => {
       if (this.token) {
         config.headers.Authorization = `Bearer ${this.token}`
@@ -26,9 +35,9 @@ class ApiClient {
       (response) => response,
       (error: AxiosError) => {
         if (error.response?.status === 401) {
-          // Handle unauthorized - redirect to login
           if (typeof window !== 'undefined') {
-            window.location.href = '/'
+            const currentPath = window.location.pathname + window.location.search
+            window.location.href = `/sign-in?redirect_url=${encodeURIComponent(currentPath)}`
           }
         }
         return Promise.reject(error)
@@ -85,6 +94,30 @@ class ApiClient {
 
   async deleteAssetDocument(assetId: string, docId: string) {
     return this.client.delete(`/assets/${assetId}/documents/${docId}`)
+  }
+
+  async getAssetQr(assetId: string) {
+    return this.client.get(`/assets/${assetId}/qr`)
+  }
+
+  async regenerateAssetQr(assetId: string) {
+    return this.client.post(`/assets/${assetId}/qr/regenerate`)
+  }
+
+  async downloadAssetQrPng(assetId: string) {
+    return this.client.get(`/assets/${assetId}/qr.png`, { responseType: 'blob' })
+  }
+
+  async downloadAssetQrPdf(assetId: string) {
+    return this.client.get(`/assets/${assetId}/qr.pdf`, { responseType: 'blob' })
+  }
+
+  async bulkPrintAssetQrs(assetIds: string[]) {
+    return this.client.post('/assets/qr/bulk-print', { assetIds }, { responseType: 'blob' })
+  }
+
+  async resolveAssetQrToken(token: string) {
+    return this.client.get(`/assets/qr/resolve/${encodeURIComponent(token)}`)
   }
 
   async getAssetQrCode(assetId: string) {

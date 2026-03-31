@@ -45,17 +45,17 @@ jobs:
 
       - name: Run lint
         if: matrix.task == 'lint'
-        run: npm run lint --workspace=@cmms/${{ matrix.app }}
+        run: npm run lint --workspace=@nexly/${{ matrix.app }}
 
       - name: Run typecheck
         if: matrix.task == 'typecheck'
         run: |
           if [ "${{ matrix.app }}" = "web" ]; then
-            npm run typecheck --workspace=@cmms/web
+            npm run typecheck --workspace=@nexly/web
           else
-            npx --workspace=@cmms/api tsc --noEmit
+            npx --workspace=@nexly/api tsc --noEmit
           fi
 
       - name: Run tests
         if: matrix.task == 'test'
-        run: npm test --workspace=@cmms/${{ matrix.app }} -- --passWithNoTests
+        run: npm test --workspace=@nexly/${{ matrix.app }} -- --passWithNoTests

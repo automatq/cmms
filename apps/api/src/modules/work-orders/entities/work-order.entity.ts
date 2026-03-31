@@ -27,6 +27,7 @@ export enum WorkOrderType {
 
 export enum WorkOrderStatus {
   DRAFT = 'draft',
+  PENDING_APPROVAL = 'pending_approval',
   OPEN = 'open',
   IN_PROGRESS = 'in_progress',
   ON_HOLD = 'on_hold',
@@ -39,6 +40,14 @@ export enum Priority {
   HIGH = 'high',
   MEDIUM = 'medium',
   LOW = 'low',
+}
+
+export enum HoldReason {
+  AWAITING_PARTS = 'awaiting_parts',
+  AWAITING_APPROVAL = 'awaiting_approval',
+  SAFETY_LOCKOUT = 'safety_lockout',
+  SCHEDULING = 'scheduling',
+  OTHER = 'other',
 }
 
 @Entity('work_orders')
@@ -119,6 +128,9 @@ export class WorkOrder extends TenantAwareEntity {
   @Column({ nullable: true, name: 'failure_code' })
   failureCode: string;
 
+  @Column({ type: 'uuid', nullable: true, name: 'failure_code_id' })
+  failureCodeId: string;
+
   @Column({ type: 'text', nullable: true, name: 'root_cause' })
   rootCause: string;
 
@@ -139,6 +151,18 @@ export class WorkOrder extends TenantAwareEntity {
 
   @Column({ type: 'timestamptz', nullable: true, name: 'signed_off_at' })
   signedOffAt: Date;
+
+  @Column({ type: 'enum', enum: HoldReason, nullable: true, name: 'hold_reason' })
+  holdReason: HoldReason | null;
+
+  @Column({ default: false, name: 'requires_approval' })
+  requiresApproval: boolean;
+
+  @Column({ type: 'uuid', nullable: true, name: 'approved_by' })
+  approvedBy: string;
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'approved_at' })
+  approvedAt: Date;
 
   @Column({ type: 'jsonb', default: {} })
   metadata: Record<string, unknown>;

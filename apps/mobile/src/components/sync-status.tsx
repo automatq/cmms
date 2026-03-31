@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { offlineQueue, OfflineMutation } from '../lib/offline-queue';
 import { useNetwork } from '../lib/network-provider';
@@ -111,12 +111,11 @@ export function SyncStatusScreen() {
         </View>
       ) : (
         <>
-          <FlatList
-            data={mutations}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            style={styles.list}
-          />
+          <ScrollView style={styles.list}>
+            {mutations.map((item) => (
+              <View key={item.id}>{renderItem({ item })}</View>
+            ))}
+          </ScrollView>
           <TouchableOpacity
             style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
             onPress={handleSync}

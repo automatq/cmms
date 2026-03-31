@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'rea
 import { useAuthStore } from '@/lib/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorTheme, type ColorThemeName } from '@/lib/theme';
+import { useClerk } from '@clerk/clerk-expo';
 
 const themeOptions: { value: ColorThemeName; label: string; color: string }[] = [
   { value: 'default', label: 'Neutral', color: '#171717' },
@@ -14,12 +15,13 @@ const themeOptions: { value: ColorThemeName; label: string; color: string }[] = 
 ];
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
+  const { signOut } = useClerk();
   const { colorTheme, setColorTheme, colors } = useColorTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
 
   const handleLogout = async () => {
-    await logout();
+    await signOut();
   };
 
   return (
@@ -98,7 +100,7 @@ export default function ProfileScreen() {
       </TouchableOpacity>
 
       {/* Version */}
-      <Text style={styles.version}>CMMS Mobile v1.0.0</Text>
+      <Text style={styles.version}>Nexly v1.0.0</Text>
 
       {/* Theme Picker Modal */}
       <Modal

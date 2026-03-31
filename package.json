@@ -1,17 +1,21 @@
 {
-  "name": "cmms",
+  "name": "nexly",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "npm run dev --workspace=@cmms/api",
-    "dev:web": "npm run dev --workspace=@cmms/web",
-    "dev:mobile": "npm run start --workspace=@cmms/mobile",
-    "build:api": "npm run build --workspace=@cmms/api",
-    "build:web": "npm run build --workspace=@cmms/web",
+    "dev:api": "npm run dev --workspace=@nexly/api",
+    "dev:web": "npm run dev --workspace=@nexly/web",
+    "dev:mobile": "npm run start --workspace=@nexly/mobile",
+    "build:api": "npm run build --workspace=@nexly/api",
+    "build:web": "npm run build --workspace=@nexly/web",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
