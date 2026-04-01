@@ -47,46 +47,73 @@ import { HealthController } from './health.controller';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get('DB_HOST', 'localhost'),
-        port: config.get<number>('DB_PORT', 5432),
-        username: config.get('DB_USERNAME', 'cmms'),
-        password: config.get('DB_PASSWORD', 'cmms'),
-        database: config.get('DB_DATABASE', 'cmms'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
-        migrationsRun: true,
-        synchronize: false,
-        logging: config.get('DB_LOGGING', 'false') === 'true',
-        ssl: config.get('DB_SSL', 'false') === 'true'
-          ? { rejectUnauthorized: config.get('DB_SSL_REJECT_UNAUTHORIZED', 'true') === 'true' }
-          : false,
-        extra: {
-          max: config.get<number>('DB_POOL_MAX', 20),
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 5000,
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const databaseUrl = config.get<string>('DATABASE_URL');
+        const sslEnabled = config.get('DB_SSL', 'false') === 'true';
+
+        const baseOptions = {
+          type: 'postgres' as const,
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
+          migrationsRun: true,
+          synchronize: false,
+          logging: config.get('DB_LOGGING', 'false') === 'true',
+          extra: {
+            max: config.get<number>('DB_POOL_MAX', 20),
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000,
+          },
+        };
+
+        if (databaseUrl) {
+          return {
+            ...baseOptions,
+            url: databaseUrl,
+            ssl: databaseUrl.includes('sslmode=require') || sslEnabled
+              ? { rejectUnauthorized: false }
+              : false,
+          };
+        }
+
+        return {
+          ...baseOptions,
+          host: config.get<string>('DB_HOST', 'localhost'),
+          port: config.get<number>('DB_PORT', 5432),
+          username: config.get<string>('DB_USERNAME', 'nexly'),
+          password: config.get<string>('DB_PASSWORD', 'nexly'),
+          database: config.get<string>('DB_DATABASE', 'nexly'),
+          ssl: sslEnabled
+            ? { rejectUnauthorized: config.get('DB_SSL_REJECT_UNAUTHORIZED', 'true') === 'true' }
+            : false,
+        };
+      },
     }),
 
     // BullMQ for background jobs
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get('REDIS_HOST', 'localhost'),
-          port: config.get<number>('REDIS_PORT', 6379),
-          password: config.get('REDIS_PASSWORD'),
-        },
-        defaultJobOptions: {
-          removeOnComplete: { count: 1000 },
-          removeOnFail: { count: 5000 },
-          attempts: 3,
-          backoff: { type: 'exponential' as const, delay: 1000 },
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const redisUrl = config.get<string>('REDIS_URL');
+
+        const connection = redisUrl
+          ? { url: redisUrl }
+          : {
+              host: config.get('REDIS_HOST', 'localhost'),
+              port: config.get<number>('REDIS_PORT', 6379),
+              password: config.get('REDIS_PASSWORD'),
+            };
+
+        return {
+          connection,
+          defaultJobOptions: {
+            removeOnComplete: { count: 1000 },
+            removeOnFail: { count: 5000 },
+            attempts: 3,
+            backoff: { type: 'exponential' as const, delay: 1000 },
+          },
+        };
+      },
     }),
 
     // Rate Limiting

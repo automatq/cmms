@@ -28,9 +28,14 @@ export class HealthController {
 
     // Redis check
     try {
-      const redisHost = this.configService.get<string>('REDIS_HOST', 'localhost');
-      const redisPort = this.configService.get<number>('REDIS_PORT', 6379);
-      const client = createClient({ url: `redis://${redisHost}:${redisPort}` });
+      const redisUrl = this.configService.get<string>('REDIS_URL');
+      const clientOptions = redisUrl
+        ? { url: redisUrl }
+        : {
+            url: `redis://${this.configService.get('REDIS_HOST', 'localhost')}:${this.configService.get<number>('REDIS_PORT', 6379)}`,
+            password: this.configService.get('REDIS_PASSWORD') || undefined,
+          };
+      const client = createClient(clientOptions);
       await client.connect();
       await client.ping();
       await client.disconnect();

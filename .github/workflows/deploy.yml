@@ -1,8 +1,16 @@
-name: Deploy
+name: Deploy (AWS)
 
 on:
-  push:
-    branches: [main, staging]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
 
 permissions:
   id-token: write
@@ -19,14 +27,9 @@ jobs:
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
     steps:
-      - name: Set environment based on branch
+      - name: Set environment from input
         id: set-env
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "environment=production" >> "$GITHUB_OUTPUT"
-          else
-            echo "environment=staging" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "environment=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
 
   build-and-push:
     name: Build & Push ${{ matrix.image }}

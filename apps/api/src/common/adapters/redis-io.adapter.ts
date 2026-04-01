@@ -15,14 +15,15 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   async connectToRedis(configService: ConfigService): Promise<void> {
-    const host = configService.get('REDIS_HOST', 'localhost');
-    const port = configService.get<number>('REDIS_PORT', 6379);
-    const password = configService.get('REDIS_PASSWORD');
+    const redisUrl = configService.get<string>('REDIS_URL');
+    const clientOptions = redisUrl
+      ? { url: redisUrl }
+      : {
+          url: `redis://${configService.get('REDIS_HOST', 'localhost')}:${configService.get<number>('REDIS_PORT', 6379)}`,
+          password: configService.get('REDIS_PASSWORD') || undefined,
+        };
 
-    const pubClient = createClient({
-      url: `redis://${host}:${port}`,
-      password: password || undefined,
-    });
+    const pubClient = createClient(clientOptions);
     const subClient = pubClient.duplicate();
 
     await Promise.all([pubClient.connect(), subClient.connect()]);
