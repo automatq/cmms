@@ -8,8 +8,8 @@ ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 
-COPY package.json ./
-RUN npm install --legacy-peer-deps
+COPY package*.json ./
+RUN npm ci --legacy-peer-deps
 
 COPY . .
 RUN npm run build

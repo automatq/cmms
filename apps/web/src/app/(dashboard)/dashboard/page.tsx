@@ -32,12 +32,14 @@ import { useMemo, useState } from 'react'
 
 export default function DashboardPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
-  const [showOnboarding, setShowOnboarding] = useState(true)
+  const [dismissed, setDismissed] = useState(false)
 
-  const { data: organization } = useQuery({
+  const { data: organization, isLoading: isLoadingOrg } = useQuery({
     queryKey: ['organization'],
     queryFn: () => api.getOrganization().then((res) => res.data),
   })
+
+  const onboardingComplete = organization?.onboardingCompleted || dismissed
 
   const { data: dashboard, isLoading: isLoadingDashboard } = useQuery({
     queryKey: ['dashboard'],
@@ -45,15 +47,17 @@ export default function DashboardPage() {
       const res = await api.getDashboard({ days: 30 })
       return res.data
     },
+    enabled: !!onboardingComplete,
   })
 
   // Fetch Work Orders for the calendar
   const { data: workOrdersData, isLoading: isLoadingWO } = useQuery({
     queryKey: ['work-orders', 'calendar'],
     queryFn: async () => {
-      const res = await api.getWorkOrders({ limit: 100 }) // Fetching a reasonable amount for the current view
+      const res = await api.getWorkOrders({ limit: 100 })
       return res.data
     },
+    enabled: !!onboardingComplete,
   })
 
   // Fetch PM Plans for the calendar
@@ -63,9 +67,10 @@ export default function DashboardPage() {
       const res = await api.getPmPlans({ limit: 100 })
       return res.data
     },
+    enabled: !!onboardingComplete,
   })
 
-  const isLoading = isLoadingDashboard || isLoadingWO || isLoadingPM
+  const isLoadingData = isLoadingDashboard || isLoadingWO || isLoadingPM
 
   const calendarEvents = useMemo<CalendarEvent[]>(() => {
     const events: CalendarEvent[] = []
@@ -106,7 +111,30 @@ export default function DashboardPage() {
     return events
   }, [workOrdersData, pmPlansData])
 
-  if (isLoading) {
+  if (isLoadingOrg) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-20 w-full md:w-1/2" />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-[120px] w-full rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-[600px] w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  if (!onboardingComplete) {
+    return (
+      <OnboardingWizard
+        onComplete={() => setDismissed(true)}
+        onSkip={() => setDismissed(true)}
+      />
+    )
+  }
+
+  if (isLoadingData) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-20 w-full md:w-1/2" />
@@ -121,17 +149,6 @@ export default function DashboardPage() {
           <Skeleton className="h-[300px] w-full rounded-xl" />
         </div>
       </div>
-    )
-  }
-
-  const needsOnboarding = organization && !organization.onboardingCompleted && showOnboarding
-
-  if (needsOnboarding) {
-    return (
-      <OnboardingWizard
-        onComplete={() => setShowOnboarding(false)}
-        onSkip={() => setShowOnboarding(false)}
-      />
     )
   }
 
