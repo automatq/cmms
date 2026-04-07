@@ -22,6 +22,7 @@ export function Header() {
       const res = await api.getNotifications(10)
       return res.data
     },
+    enabled: !!user,
     // Fallback polling (WebSocket is primary via SocketProvider)
     refetchInterval: 300000,
   })

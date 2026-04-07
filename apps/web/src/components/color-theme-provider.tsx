@@ -19,7 +19,6 @@ const ColorThemeContext = createContext<ColorThemeContextValue>({
 
 export function ColorThemeProvider({ children }: { children: React.ReactNode }) {
     const [colorTheme, setColorThemeState] = useState<ColorTheme>("default")
-    const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
         const stored = localStorage.getItem(STORAGE_KEY) as ColorTheme | null
@@ -27,7 +26,6 @@ export function ColorThemeProvider({ children }: { children: React.ReactNode }) 
             setColorThemeState(stored)
             document.documentElement.setAttribute("data-theme", stored === "default" ? "" : stored)
         }
-        setMounted(true)
     }, [])
 
     const setColorTheme = (theme: ColorTheme) => {
@@ -38,11 +36,6 @@ export function ColorThemeProvider({ children }: { children: React.ReactNode }) 
         } else {
             document.documentElement.setAttribute("data-theme", theme)
         }
-    }
-
-    // Prevent flash of wrong theme
-    if (!mounted) {
-        return <>{children}</>
     }
 
     return (
