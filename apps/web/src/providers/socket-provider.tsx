@@ -29,6 +29,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const socketRef = useRef<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
+  // Update token on existing socket without reconnecting
+  useEffect(() => {
+    if (socketRef.current && token) {
+      socketRef.current.auth = { token }
+    }
+  }, [token])
+
+  // Connect/disconnect based on auth state
   useEffect(() => {
     if (!isAuthenticated || !token) {
       if (socketRef.current) {
@@ -38,6 +46,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       }
       return
     }
+
+    // Already connected — don't reconnect
+    if (socketRef.current) return
 
     const socket = io(SOCKET_URL, {
       auth: { token },
@@ -86,7 +97,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       socketRef.current = null
       setIsConnected(false)
     }
-  }, [isAuthenticated, token, queryClient])
+  }, [isAuthenticated]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <SocketContext.Provider value={{ socket: socketRef.current, isConnected }}>

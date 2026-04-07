@@ -42,73 +42,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { organization } = useOrganization()
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
+  const [ready, setReady] = useState(false)
   const syncedRef = useRef(false)
-  const syncAttemptRef = useRef(0)
 
+  // Initial auth sync — runs once after Clerk loads
   useEffect(() => {
     if (!isLoaded) return
 
-    if (isSignedIn && clerkUser && !syncedRef.current && !syncing) {
-      setSyncing(true)
-      const syncToken = async () => {
-        try {
-          const accessToken = await getToken()
-          if (accessToken) {
-            setToken(accessToken)
-            api.setToken(accessToken)
-
-            // Load roles from backend profile — may fail on first login while tenant is provisioning
-            let roles: string[] = []
-            let permissions: string[] = []
-            try {
-              const profile = await api.getMyProfile()
-              const profileRoles = profile.data?.roles || []
-              roles = profileRoles.map((r: any) => r.name) || []
-              permissions = Array.from(
-                new Set(
-                  profileRoles.flatMap((role: any) =>
-                    Array.isArray(role.permissions) ? role.permissions : []
-                  )
-                )
-              )
-            } catch {
-              // Profile not available yet — that's OK, backend will auto-provision
-            }
-
-            setUser({
-              id: clerkUser.id,
-              email: clerkUser.emailAddresses?.[0]?.emailAddress || '',
-              firstName: clerkUser.firstName || '',
-              lastName: clerkUser.lastName || '',
-              username: clerkUser.username || clerkUser.emailAddresses?.[0]?.emailAddress || '',
-              roles,
-              permissions,
-            })
-            syncedRef.current = true
-          }
-        } catch (error) {
-          console.error('Error syncing auth:', error)
-          // Retry up to 3 times with delay for auto-provisioning
-          syncAttemptRef.current++
-          if (syncAttemptRef.current < 3) {
-            setTimeout(() => {
-              setSyncing(false)
-            }, 2000)
-            return
-          }
-        }
-        setSyncing(false)
-      }
-      syncToken()
-    } else if (isLoaded && !isSignedIn) {
+    if (!isSignedIn) {
       syncedRef.current = false
-      syncAttemptRef.current = 0
       setUser(null)
       setToken(null)
       api.setToken(null)
+      setReady(true)
+      return
     }
-  }, [isLoaded, isSignedIn, clerkUser?.id, syncing]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    if (syncedRef.current) return
+    if (!clerkUser) return
+
+    let cancelled = false
+
+    const sync = async () => {
+      try {
+        const accessToken = await getToken()
+        if (!accessToken || cancelled) return
+
+        setToken(accessToken)
+        api.setToken(accessToken)
+
+        // Load roles from backend profile — may fail on first login while tenant is provisioning
+        let roles: string[] = []
+        let permissions: string[] = []
+        try {
+          const profile = await api.getMyProfile()
+          const profileRoles = profile.data?.roles || []
+          roles = profileRoles.map((r: any) => r.name) || []
+          permissions = Array.from(
+            new Set(
+              profileRoles.flatMap((role: any) =>
+                Array.isArray(role.permissions) ? role.permissions : []
+              )
+            )
+          )
+        } catch {
+          // Profile not available yet — continue with empty roles, backend will auto-provision
+        }
+
+        if (cancelled) return
+
+        setUser({
+          id: clerkUser.id,
+          email: clerkUser.emailAddresses?.[0]?.emailAddress || '',
+          firstName: clerkUser.firstName || '',
+          lastName: clerkUser.lastName || '',
+          username: clerkUser.username || clerkUser.emailAddresses?.[0]?.emailAddress || '',
+          roles,
+          permissions,
+        })
+        syncedRef.current = true
+      } catch (error) {
+        console.error('Auth sync failed:', error)
+      }
+
+      if (!cancelled) setReady(true)
+    }
+
+    sync()
+    return () => { cancelled = true }
+  }, [isLoaded, isSignedIn, clerkUser?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh token periodically (Clerk tokens expire after 60s by default)
   useEffect(() => {
@@ -122,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           api.setToken(newToken)
         }
       } catch {
-        // Token refresh failed
+        // Token refresh failed — will retry next interval
       }
     }, 50000)
 
@@ -140,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null)
     setUser(null)
     syncedRef.current = false
-    syncAttemptRef.current = 0
+    setReady(false)
     signOut()
   }, [signOut])
 
@@ -148,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         isAuthenticated: !!isSignedIn,
-        isLoading: !isLoaded || syncing,
+        isLoading: !ready,
         user,
         token,
         login,
