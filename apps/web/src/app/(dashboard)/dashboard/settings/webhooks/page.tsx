@@ -152,7 +152,7 @@ export default function WebhooksPage() {
                 <div className="flex items-center gap-2 ml-4">
                   <Switch
                     checked={wh.isActive}
-                    onCheckedChange={(checked) => toggleMutation.mutate({ id: wh.id, isActive: checked })}
+                    onCheckedChange={(checked: boolean) => toggleMutation.mutate({ id: wh.id, isActive: checked })}
                   />
                   <Button variant="outline" size="sm" onClick={() => testMutation.mutate(wh.id)}>
                     <Play className="h-3 w-3 mr-1" />Test

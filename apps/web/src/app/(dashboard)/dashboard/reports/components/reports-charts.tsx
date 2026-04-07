@@ -41,7 +41,7 @@ export function OverviewBarChart({ data }: { data: ChartData[] }) {
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => `${value}`}
+                    tickFormatter={(value: number) => `${value}`}
                 />
                 <Tooltip
                     contentStyle={{ backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #e2e8f0" }}
@@ -70,7 +70,7 @@ export function OverviewLineChart({ data }: { data: ChartData[] }) {
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => `${value}`}
+                    tickFormatter={(value: number) => `${value}`}
                 />
                 <Tooltip
                     contentStyle={{ backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #e2e8f0" }}

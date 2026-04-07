@@ -205,7 +205,7 @@ export default function ScheduledReportsPage() {
                 <div className="flex items-center gap-2 ml-4">
                   <Switch
                     checked={report.isActive}
-                    onCheckedChange={(checked) =>
+                    onCheckedChange={(checked: boolean) =>
                       toggleMutation.mutate({ id: report.id, isActive: checked })
                     }
                   />

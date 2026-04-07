@@ -381,7 +381,7 @@ function NotificationsTab() {
                                         <Switch
                                             id={item.key}
                                             checked={prefs[item.key] !== false}
-                                            onCheckedChange={(checked) => handleToggle(item.key, checked)}
+                                            onCheckedChange={(checked: boolean) => handleToggle(item.key, checked)}
                                             disabled={mutation.isPending}
                                         />
                                     </div>

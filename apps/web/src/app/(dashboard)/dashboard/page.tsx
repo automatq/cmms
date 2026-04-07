@@ -382,7 +382,7 @@ export default function DashboardPage() {
       )}
 
       {/* Event Details Dialog */}
-      <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+      <Dialog open={!!selectedEvent} onOpenChange={(open: boolean) => !open && setSelectedEvent(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{selectedEvent?.title}</DialogTitle>

@@ -174,7 +174,7 @@ export default function WorkRequestsPage() {
                 })}
             </div>
 
-            <Dialog open={!!rejectDialogId} onOpenChange={(open) => { if (!open) setRejectDialogId(null) }}>
+            <Dialog open={!!rejectDialogId} onOpenChange={(open: boolean) => { if (!open) setRejectDialogId(null) }}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Reject Work Request</DialogTitle>

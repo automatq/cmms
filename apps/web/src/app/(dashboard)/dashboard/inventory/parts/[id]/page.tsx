@@ -366,7 +366,7 @@ export default function PartDetailPage() {
             </div>
 
             {/* Stock Operation Dialog */}
-            <Dialog open={!!stockOp} onOpenChange={(open) => !open && setStockOp(null)}>
+            <Dialog open={!!stockOp} onOpenChange={(open: boolean) => !open && setStockOp(null)}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>{stockOp ? opLabels[stockOp].title : ''}</DialogTitle>
