@@ -96,6 +96,9 @@ export class PmPlan extends TenantAwareEntity {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  @Column({ name: 'ignore_blackouts', default: false })
+  ignoreBlackouts: boolean;
+
   @Column({ type: 'jsonb', default: {} })
   metadata: Record<string, unknown>;
 

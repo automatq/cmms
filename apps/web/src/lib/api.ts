@@ -850,6 +850,27 @@ class ApiClient {
   async getWarrantyReport(days?: number) {
     return this.client.get('/reports/warranties', { params: { days } })
   }
+
+  // ==================== Blackouts ====================
+  async getBlackouts(params?: { from?: string; to?: string }) {
+    return this.client.get('/blackouts', { params })
+  }
+
+  async createBlackout(data: { startDate: string; endDate?: string; name?: string }) {
+    return this.client.post('/blackouts', data)
+  }
+
+  async deleteBlackout(id: string) {
+    return this.client.delete(`/blackouts/${id}`)
+  }
+
+  async getWorkingDays() {
+    return this.client.get('/tenants/me/working-days')
+  }
+
+  async setWorkingDays(workingDays: number[]) {
+    return this.client.patch('/tenants/me/working-days', { workingDays })
+  }
 }
 
 export const api = new ApiClient()

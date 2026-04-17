@@ -39,6 +39,7 @@ const navigation = [
   { name: 'Work Orders', href: '/dashboard/work-orders', icon: ClipboardList },
   { name: 'Work Requests', href: '/dashboard/work-requests', icon: Inbox },
   { name: 'PM Plans', href: '/dashboard/pm', icon: Calendar },
+  { name: 'Calendar', href: '/dashboard/calendar', icon: CalendarClock },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Warehouse },
   { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
   { name: 'Data Import', href: '/dashboard/imports', icon: FileUp },

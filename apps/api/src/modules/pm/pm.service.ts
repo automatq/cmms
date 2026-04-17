@@ -24,6 +24,7 @@ import { WorkOrderType, Priority } from '../work-orders/entities/work-order.enti
 import { NotificationsService } from '../notifications/notifications.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
+import { BlackoutsService } from '../blackouts/blackouts.service';
 
 @Injectable()
 export class PmService {
@@ -42,6 +43,7 @@ export class PmService {
     private readonly notificationsService: NotificationsService,
     @Inject(forwardRef(() => WebhooksService))
     private readonly webhooksService: WebhooksService,
+    private readonly blackoutsService: BlackoutsService,
     @InjectQueue('pm-scheduler')
     private readonly pmQueue: Queue,
   ) {}
@@ -199,7 +201,7 @@ export class PmService {
 
     // Update plan
     plan.lastTriggeredAt = new Date();
-    plan.nextDueAt = this.calculateNextDueDate(plan);
+    plan.nextDueAt = await this.calculateNextDueDate(plan, tenantId);
     await this.pmPlanRepository.save(plan);
 
     try {
@@ -240,6 +242,14 @@ export class PmService {
     for (const [tenantId, plans] of plansByTenant) {
       for (const plan of plans) {
         try {
+          // Skip PMs whose next-due landed in a blackout — roll forward instead of creating a WO.
+          if (!plan.ignoreBlackouts && await this.blackoutsService.isBlackout(now, tenantId)) {
+            plan.nextDueAt = await this.blackoutsService.nextWorkingDay(now, tenantId);
+            await this.pmPlanRepository.save(plan);
+            skipped++;
+            continue;
+          }
+
           // Check if we already have an open WO for this PM
           const existingWo = await this.workOrdersService.findAll({
             page: 1,
@@ -278,7 +288,7 @@ export class PmService {
 
           // Update next due date
           plan.lastTriggeredAt = new Date();
-          plan.nextDueAt = this.calculateNextDueDate(plan);
+          plan.nextDueAt = await this.calculateNextDueDate(plan, tenantId);
           await this.pmPlanRepository.save(plan);
 
           try {
@@ -344,26 +354,35 @@ export class PmService {
     return createdWoIds;
   }
 
-  private calculateNextDueDate(plan: PmPlan): Date {
+  private async calculateNextDueDate(plan: PmPlan, tenantId: string): Promise<Date> {
     const baseDate = plan.rollingSchedule
       ? new Date()
       : plan.nextDueAt || new Date();
 
+    let next: Date;
     if (plan.triggerType === TriggerType.TIME && plan.frequencyValue && plan.frequencyUnit) {
       switch (plan.frequencyUnit) {
         case FrequencyUnit.DAY:
-          return addDays(baseDate, plan.frequencyValue);
+          next = addDays(baseDate, plan.frequencyValue);
+          break;
         case FrequencyUnit.WEEK:
-          return addWeeks(baseDate, plan.frequencyValue);
+          next = addWeeks(baseDate, plan.frequencyValue);
+          break;
         case FrequencyUnit.MONTH:
-          return addMonths(baseDate, plan.frequencyValue);
+          next = addMonths(baseDate, plan.frequencyValue);
+          break;
         case FrequencyUnit.YEAR:
-          return addYears(baseDate, plan.frequencyValue);
+          next = addYears(baseDate, plan.frequencyValue);
+          break;
+        default:
+          next = addDays(baseDate, 30);
       }
+    } else {
+      next = addDays(baseDate, 30);
     }
 
-    // Default: add 30 days
-    return addDays(baseDate, 30);
+    if (plan.ignoreBlackouts) return next;
+    return this.blackoutsService.nextWorkingDay(next, tenantId);
   }
 
   // ==================== CHECKLIST TEMPLATES ====================

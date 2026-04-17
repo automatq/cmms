@@ -8,6 +8,7 @@ import { PmSchedulerProcessor } from './pm-scheduler.processor';
 import { WorkOrdersModule } from '../work-orders/work-orders.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
+import { BlackoutsModule } from '../blackouts/blackouts.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
     forwardRef(() => WorkOrdersModule),
     forwardRef(() => NotificationsModule),
     forwardRef(() => WebhooksModule),
+    BlackoutsModule,
   ],
   providers: [PmService, PmSchedulerProcessor],
   controllers: [PmController, ChecklistTemplatesController],

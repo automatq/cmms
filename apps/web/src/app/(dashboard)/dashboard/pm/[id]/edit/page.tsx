@@ -37,6 +37,7 @@ export default function EditPmPlanPage() {
     assetId: '',
     assignedTo: '',
     checklistTemplateId: '',
+    skipBlackouts: true,
   })
 
   const { data: pm, isLoading } = useQuery({
@@ -89,6 +90,7 @@ export default function EditPmPlanPage() {
         assetId: pm.assetId || pm.asset?.id || '',
         assignedTo: pm.assignedTo?.[0]?.id || pm.assignedTo?.[0] || '',
         checklistTemplateId: pm.checklistTemplateId || pm.checklistTemplate?.id || '',
+        skipBlackouts: !pm.ignoreBlackouts,
       })
     }
   }, [pm])
@@ -122,6 +124,7 @@ export default function EditPmPlanPage() {
       assetId: formData.assetId || undefined,
       assignedTo: formData.assignedTo ? [formData.assignedTo] : undefined,
       checklistTemplateId: formData.checklistTemplateId || undefined,
+      ignoreBlackouts: !formData.skipBlackouts,
     }
 
     if (formData.triggerType === 'time_based') {
@@ -308,6 +311,16 @@ export default function EditPmPlanPage() {
                 value={formData.nextDueAt}
                 onChange={(e) => setFormData({ ...formData, nextDueAt: e.target.value })}
               />
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Switch
+                id="skipBlackouts"
+                checked={formData.skipBlackouts}
+                onCheckedChange={(checked: boolean) => setFormData({ ...formData, skipBlackouts: checked })}
+                className="data-[state=checked]:bg-emerald-500"
+              />
+              <Label htmlFor="skipBlackouts" className="cursor-pointer">Skip company blackout days</Label>
             </div>
           </CardContent>
         </Card>

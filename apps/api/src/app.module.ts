@@ -31,6 +31,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { ImportsModule } from './modules/imports/imports.module';
+import { BlackoutsModule } from './modules/blackouts/blackouts.module';
 import { FeatureGateGuard } from './common/guards/feature-gate.guard';
 import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
 import { HealthController } from './health.controller';
@@ -143,6 +144,7 @@ import { HealthController } from './health.controller';
     ActivityModule,
     WebhooksModule,
     ImportsModule,
+    BlackoutsModule,
   ],
   controllers: [HealthController],
   providers: [

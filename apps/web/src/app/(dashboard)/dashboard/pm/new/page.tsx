@@ -25,6 +25,7 @@ export default function NewPmPlanPage() {
     meterType: '',
     assetId: '',
     isActive: true,
+    skipBlackouts: true,
   })
 
   const { data: assets } = useQuery({
@@ -45,10 +46,12 @@ export default function NewPmPlanPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const { skipBlackouts, ...rest } = formData
     const data = {
-      ...formData,
+      ...rest,
       intervalDays: formData.intervalDays ? parseInt(formData.intervalDays) : undefined,
       intervalMeter: formData.intervalMeter ? parseInt(formData.intervalMeter) : undefined,
+      ignoreBlackouts: !skipBlackouts,
     }
     createMutation.mutate(data)
   }
@@ -157,6 +160,16 @@ export default function NewPmPlanPage() {
                 </div>
               </>
             )}
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                id="skipBlackouts"
+                checked={formData.skipBlackouts}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, skipBlackouts: e.target.checked })}
+                className="h-4 w-4 rounded border border-primary"
+              />
+              <Label htmlFor="skipBlackouts">Skip company blackout days</Label>
+            </div>
           </CardContent>
         </Card>
 

@@ -98,4 +98,9 @@ export class UpdatePmPlanDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  ignoreBlackouts?: boolean;
 }

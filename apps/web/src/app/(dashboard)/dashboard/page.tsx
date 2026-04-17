@@ -241,11 +241,19 @@ export default function DashboardPage() {
 
       {/* Big Calendar Section */}
       <Card className="col-span-1 border-t-4 border-t-primary">
-        <CardHeader>
-          <CardTitle>Operations Calendar</CardTitle>
-          <CardDescription>
-            Schedule of all maintenance activities, preventive maintenance plans, and reported downtimes.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle>Operations Calendar</CardTitle>
+            <CardDescription>
+              Schedule of all maintenance activities, preventive maintenance plans, and reported downtimes.
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/calendar">
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              Open calendar
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="h-[700px]">

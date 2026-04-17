@@ -95,4 +95,9 @@ export class CreatePmPlanDto {
   @IsOptional()
   @IsUUID()
   checklistTemplateId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  ignoreBlackouts?: boolean;
 }
