@@ -226,38 +226,12 @@ export class NotificationsService {
 
   // ==================== EVENT TRIGGERS ====================
 
-  async onWoAssigned(workOrder: { id: string; title: string; woNumber: string; priority?: string; description?: string }, assignedUserIds: string[], tenantId: string): Promise<void> {
-    const users = await this.userRepository.find({ where: { id: In(assignedUserIds), tenantId } });
-
-    for (const user of users) {
-      await this.createNotification(
-        user.id,
-        NotificationType.WO_ASSIGNED,
-        'Work Order Assigned',
-        `You have been assigned to ${workOrder.woNumber}: ${workOrder.title}`,
-        { workOrderId: workOrder.id },
-        tenantId,
-      );
-
-      if (user.email && user.notificationPreferences?.email_wo_assigned !== false) {
-        await this.sendEmail(user.email, `WO Assigned: ${workOrder.woNumber}`, 'wo-assigned', {
-          woNumber: workOrder.woNumber,
-          title: workOrder.title,
-          priority: workOrder.priority,
-          description: workOrder.description,
-          woId: workOrder.id,
-          appUrl: this.appUrl,
-        });
-      }
-    }
-  }
-
   async onWoStatusChanged(
-    workOrder: { id: string; woNumber: string; title?: string; status: string; assignedTo: string[] },
+    workOrder: { id: string; woNumber: string; title?: string; status: string; createdById: string },
     oldStatus: string,
     tenantId: string,
   ): Promise<void> {
-    const userIds = workOrder.assignedTo || [];
+    const userIds = workOrder.createdById ? [workOrder.createdById] : [];
     const users = userIds.length > 0
       ? await this.userRepository.find({ where: { id: In(userIds), tenantId } })
       : [];

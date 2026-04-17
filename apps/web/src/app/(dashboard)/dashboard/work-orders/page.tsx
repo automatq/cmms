@@ -10,7 +10,6 @@ import Link from 'next/link'
 import { PageHeader } from '@/components/ui/page-header'
 import { Plus, Search, ClipboardList, AlertCircle, Clock, CheckCircle } from 'lucide-react'
 import { useState } from 'react'
-import { formatDate } from '@/lib/utils'
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
@@ -165,7 +164,6 @@ export default function WorkOrdersPage() {
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
                         {wo.asset && <span><span className="font-medium">Asset:</span> {wo.asset.name}</span>}
                         <span><span className="font-medium">Type:</span> {wo.type}</span>
-                        {wo.dueDate && <span><span className="font-medium">Due:</span> {formatDate(wo.dueDate)}</span>}
                       </div>
                     </div>
                   </CardContent>

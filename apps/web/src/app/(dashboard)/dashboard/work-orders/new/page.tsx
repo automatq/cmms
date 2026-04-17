@@ -24,10 +24,7 @@ export default function NewWorkOrderPage() {
     priority: 'medium',
     assetId: '',
     locationId: '',
-    assignedTo: '',
     checklistTemplateId: '',
-    dueDate: '',
-    estimatedHours: '',
   })
 
   const { data: assets } = useQuery({
@@ -42,14 +39,6 @@ export default function NewWorkOrderPage() {
     queryKey: ['locations'],
     queryFn: async () => {
       const res = await api.getLocations()
-      return res.data?.data || res.data || []
-    },
-  })
-
-  const { data: users } = useQuery({
-    queryKey: ['users-list'],
-    queryFn: async () => {
-      const res = await api.getUsers({ limit: 200 })
       return res.data?.data || res.data || []
     },
   })
@@ -85,10 +74,7 @@ export default function NewWorkOrderPage() {
       priority: formData.priority,
       assetId: formData.assetId || undefined,
       locationId: formData.locationId || undefined,
-      assignedTo: formData.assignedTo || undefined,
       checklistTemplateId: formData.checklistTemplateId || undefined,
-      dueDate: formData.dueDate || undefined,
-      estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : undefined,
     }
 
     Object.keys(data).forEach(key => data[key] === undefined && delete data[key])
@@ -201,55 +187,18 @@ export default function NewWorkOrderPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="assignedTo">Assign To</Label>
-                <Select
-                  id="assignedTo"
-                  value={formData.assignedTo}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, assignedTo: e.target.value })}
-                >
-                  <option value="">Select technician (optional)</option>
-                  {Array.isArray(users) && users.map((u: any) => (
-                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName}{u.jobTitle ? ` — ${u.jobTitle}` : ''}</option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="checklistTemplate">Checklist Template</Label>
-                <Select
-                  id="checklistTemplate"
-                  value={formData.checklistTemplateId}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, checklistTemplateId: e.target.value })}
-                >
-                  <option value="">None</option>
-                  {Array.isArray(checklistTemplates) && checklistTemplates.map((t: any) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="dueDate">Due Date</Label>
-                <Input
-                  id="dueDate"
-                  type="date"
-                  value={formData.dueDate}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, dueDate: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="estimatedHours">Estimated Hours</Label>
-                <Input
-                  id="estimatedHours"
-                  type="number"
-                  step="0.5"
-                  value={formData.estimatedHours}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, estimatedHours: e.target.value })}
-                  placeholder="0.0"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="checklistTemplate">Checklist Template</Label>
+              <Select
+                id="checklistTemplate"
+                value={formData.checklistTemplateId}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, checklistTemplateId: e.target.value })}
+              >
+                <option value="">None</option>
+                {Array.isArray(checklistTemplates) && checklistTemplates.map((t: any) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </Select>
             </div>
           </CardContent>
         </Card>

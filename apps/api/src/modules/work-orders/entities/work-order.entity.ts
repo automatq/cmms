@@ -88,9 +88,6 @@ export class WorkOrder extends TenantAwareEntity {
   @JoinColumn({ name: 'location_id' })
   location: Location;
 
-  @Column('uuid', { array: true, default: [], name: 'assigned_to' })
-  assignedTo: string[];
-
   @Column({ name: 'created_by_id' })
   createdById: string;
 
@@ -104,17 +101,11 @@ export class WorkOrder extends TenantAwareEntity {
   @Column({ type: 'timestamptz', nullable: true, name: 'scheduled_end' })
   scheduledEnd: Date;
 
-  @Column({ type: 'timestamptz', nullable: true, name: 'due_date' })
-  dueDate: Date;
-
   @Column({ type: 'timestamptz', nullable: true, name: 'actual_start' })
   actualStart: Date;
 
   @Column({ type: 'timestamptz', nullable: true, name: 'actual_end' })
   actualEnd: Date;
-
-  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true, name: 'estimated_hours' })
-  estimatedHours: number;
 
   @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true, name: 'actual_hours' })
   actualHours: number;

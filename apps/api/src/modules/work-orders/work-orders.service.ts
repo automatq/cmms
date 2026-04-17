@@ -100,11 +100,6 @@ export class WorkOrdersService {
       await this.createChecklistFromTemplate(savedWo.id, dto.checklistTemplateId, tenantId);
     }
 
-    // Notify assigned users
-    if (dto.assignedTo?.length) {
-      await this.notificationsService.onWoAssigned(savedWo, dto.assignedTo, tenantId);
-    }
-
     // Trigger webhooks
     try {
       await this.webhooksService.trigger('wo.created', {
@@ -115,7 +110,6 @@ export class WorkOrdersService {
         priority: savedWo.priority,
         status: savedWo.status,
         assetId: savedWo.assetId,
-        assignedTo: savedWo.assignedTo,
       }, tenantId);
     } catch {}
 
@@ -132,7 +126,6 @@ export class WorkOrdersService {
       priority,
       assetId,
       locationId,
-      assignedTo,
       dateFrom,
       dateTo,
       pmPlanId,
@@ -171,10 +164,6 @@ export class WorkOrdersService {
 
     if (locationId) {
       queryBuilder.andWhere('wo.locationId = :locationId', { locationId });
-    }
-
-    if (assignedTo) {
-      queryBuilder.andWhere(':assignedTo = ANY(wo.assignedTo)', { assignedTo });
     }
 
     if (dateFrom) {
@@ -223,26 +212,9 @@ export class WorkOrdersService {
   async update(id: string, dto: UpdateWorkOrderDto, userId: string, tenantId: string): Promise<WorkOrder> {
     const workOrder = await this.findOne(id, tenantId);
 
-    const oldAssignedTo = workOrder.assignedTo || [];
     Object.assign(workOrder, dto);
 
-    const savedWo = await this.workOrderRepository.save(workOrder);
-
-    // Notify newly assigned users
-    if (dto.assignedTo) {
-      const newlyAssigned = dto.assignedTo.filter((u) => !oldAssignedTo.includes(u));
-      if (newlyAssigned.length) {
-        await this.notificationsService.onWoAssigned(savedWo, newlyAssigned, tenantId);
-        try {
-          await this.webhooksService.trigger('wo.assigned', {
-            id: savedWo.id,
-            woNumber: savedWo.woNumber,
-            title: savedWo.title,
-            assignedTo: newlyAssigned,
-          }, tenantId);
-        } catch {}
-      }
-    }
+    await this.workOrderRepository.save(workOrder);
 
     return this.findOne(id, tenantId);
   }

@@ -70,12 +70,6 @@ export default function WorkOrderDetailScreen() {
         <DetailRow label="Priority" value={wo.priority} />
         <DetailRow label="Type" value={wo.type?.replace('_', ' ')} />
         {wo.asset && <DetailRow label="Asset" value={wo.asset.name} />}
-        {wo.assignedTo && (
-          <DetailRow label="Assigned To" value={`${wo.assignedTo.firstName} ${wo.assignedTo.lastName}`} />
-        )}
-        {wo.dueDate && (
-          <DetailRow label="Due Date" value={new Date(wo.dueDate).toLocaleDateString()} />
-        )}
       </View>
 
       {/* Checklist */}

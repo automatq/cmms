@@ -7,7 +7,6 @@ import {
   IsEnum,
   IsDateString,
   IsObject,
-  IsArray,
 } from 'class-validator';
 import { WorkOrderType, Priority, WorkOrderStatus, HoldReason } from '../entities/work-order.entity';
 
@@ -42,12 +41,6 @@ export class UpdateWorkOrderDto {
   @IsUUID()
   locationId?: string;
 
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsUUID('4', { each: true })
-  assignedTo?: string[];
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
@@ -57,16 +50,6 @@ export class UpdateWorkOrderDto {
   @IsOptional()
   @IsDateString()
   scheduledEnd?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsDateString()
-  dueDate?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  estimatedHours?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

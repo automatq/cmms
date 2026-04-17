@@ -147,7 +147,7 @@ export class ActivityService {
       .andWhere('wo.status IN (:...statuses)', {
         statuses: [WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.OPEN],
       })
-      .andWhere(':userId = ANY(wo.assignedTo)', { userId })
+      .andWhere('wo.createdById = :userId', { userId })
       .orderBy(
         `CASE WHEN wo.status = '${WorkOrderStatus.IN_PROGRESS}' THEN 0 ELSE 1 END`,
         'ASC',
@@ -165,7 +165,6 @@ export class ActivityService {
           type: WorkOrderType.CORRECTIVE,
           assetId: asset.id,
           locationId: asset.location?.id || undefined,
-          assignedTo: [userId],
         },
         userId,
         tenantId,
@@ -189,11 +188,6 @@ export class ActivityService {
         userId,
         tenantId,
       );
-    }
-
-    if (!workOrder.assignedTo?.includes(userId)) {
-      workOrder.assignedTo = [...(workOrder.assignedTo || []), userId];
-      await this.workOrderRepository.save(workOrder);
     }
 
     const activity = this.activityRepository.create({

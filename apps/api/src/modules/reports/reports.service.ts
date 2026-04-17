@@ -76,19 +76,16 @@ export class ReportsService {
     startDate.setDate(startDate.getDate() - days);
 
     // Work Order KPIs
+    const now = new Date();
     const [totalWOs, openWOs, completedWOs, overdueWOs] = await Promise.all([
       this.workOrderRepo.count({ where: { tenantId, createdAt: Between(startDate, new Date()) } }),
       this.workOrderRepo.count({ where: { tenantId, status: In([WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS]) } }),
       this.workOrderRepo.count({ where: { tenantId, status: WorkOrderStatus.COMPLETED, completedAt: Between(startDate, new Date()) } }),
-      this.workOrderRepo.count({ where: { tenantId, status: In([WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS]), dueDate: Not(IsNull()) } })
-        .then(async () => {
-          const now = new Date();
-          return this.workOrderRepo.createQueryBuilder('wo')
-            .where('wo.tenantId = :tenantId', { tenantId })
-            .andWhere('wo.status IN (:...statuses)', { statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS] })
-            .andWhere('wo.dueDate < :now', { now })
-            .getCount();
-        }),
+      this.workOrderRepo.createQueryBuilder('wo')
+        .where('wo.tenantId = :tenantId', { tenantId })
+        .andWhere('wo.status IN (:...statuses)', { statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS] })
+        .andWhere('wo.scheduledEnd < :now', { now })
+        .getCount(),
     ]);
 
     // Planned vs Unplanned ratio
@@ -187,7 +184,6 @@ export class ReportsService {
     summary: any;
     byType: ChartDataPoint[];
     byPriority: ChartDataPoint[];
-    byTechnician: ChartDataPoint[];
     trend: ChartDataPoint[];
     details: any[];
   }> {
@@ -201,7 +197,6 @@ export class ReportsService {
     if (query.type) qb.andWhere('wo.type = :type', { type: query.type });
     if (query.priority) qb.andWhere('wo.priority = :priority', { priority: query.priority });
     if (query.assetId) qb.andWhere('wo.assetId = :assetId', { assetId: query.assetId });
-    if (query.technicianId) qb.andWhere(':techId = ANY(wo.assignedTo)', { techId: query.technicianId });
 
     // Summary stats
     const totalCount = await qb.getCount();
@@ -238,19 +233,6 @@ export class ReportsService {
       .groupBy('wo.priority')
       .getRawMany();
 
-    // By Technician (top 10)
-    const byTechnician = await this.workOrderRepo
-      .createQueryBuilder('wo')
-      .select('UNNEST(wo.assignedTo)', 'technician')
-      .addSelect('COUNT(*)', 'count')
-      .where('wo.tenantId = :tenantId', { tenantId })
-      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
-      .andWhere('wo.assignedTo IS NOT NULL')
-      .groupBy('UNNEST(wo.assignedTo)')
-      .orderBy('count', 'DESC')
-      .limit(10)
-      .getRawMany();
-
     // Trend (group by period)
     const trend = await this.getWorkOrderTrend(startDate, endDate, query.groupBy || ReportPeriod.DAY, tenantId);
 
@@ -264,7 +246,6 @@ export class ReportsService {
       },
       byType: byType.map((t) => ({ label: t.type, value: parseInt(t.count, 10) })),
       byPriority: byPriority.map((p) => ({ label: p.priority, value: parseInt(p.count, 10) })),
-      byTechnician: byTechnician.map((t) => ({ label: t.technician, value: parseInt(t.count, 10) })),
       trend,
       details: [], // Would include paginated WO list
     };
@@ -775,19 +756,6 @@ export class ReportsService {
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
 
-    const techStats = await this.workOrderRepo
-      .createQueryBuilder('wo')
-      .select('UNNEST(wo.assignedTo)', 'technicianId')
-      .addSelect('COUNT(*)', 'totalAssigned')
-      .addSelect(`SUM(CASE WHEN wo.status = 'completed' THEN 1 ELSE 0 END)`, 'completed')
-      .addSelect('AVG(wo.actualHours)', 'avgHours')
-      .where('wo.tenantId = :tenantId', { tenantId })
-      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
-      .andWhere('wo.assignedTo IS NOT NULL')
-      .groupBy('UNNEST(wo.assignedTo)')
-      .orderBy('completed', 'DESC')
-      .getRawMany();
-
     // Wrench time analysis from wo_labor entries
     const wrenchTimeData = await this.workOrderRepo.manager
       .createQueryBuilder()
@@ -805,13 +773,7 @@ export class ReportsService {
     const totalAll = totalDirect + totalTravel + totalWait;
 
     return {
-      technicians: techStats.map((t) => ({
-        technicianId: t.technicianId,
-        totalAssigned: parseInt(t.totalAssigned, 10),
-        completed: parseInt(t.completed, 10),
-        completionRate: Math.round((parseInt(t.completed, 10) / parseInt(t.totalAssigned, 10)) * 100),
-        avgHoursPerWO: parseFloat(t.avgHours || '0').toFixed(1),
-      })),
+      technicians: [],
       wrenchTimeSummary: {
         totalDirectHours: Math.round(totalDirect * 10) / 10,
         totalTravelHours: Math.round(totalTravel * 10) / 10,

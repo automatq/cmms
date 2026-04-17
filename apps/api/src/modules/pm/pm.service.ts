@@ -182,8 +182,6 @@ export class PmService {
         type: WorkOrderType.PREVENTIVE,
         priority: plan.priority as Priority,
         assetId: plan.assetId,
-        assignedTo: plan.assignedTo,
-        estimatedHours: plan.estimatedHours,
         pmPlanId: plan.id,
         checklistTemplateId: plan.checklistTemplateId,
       },
@@ -203,9 +201,6 @@ export class PmService {
     plan.lastTriggeredAt = new Date();
     plan.nextDueAt = this.calculateNextDueDate(plan);
     await this.pmPlanRepository.save(plan);
-
-    // Notify assigned users
-    await this.notificationsService.onPmDue(plan, plan.assignedTo, tenantId);
 
     try {
       await this.webhooksService.trigger('pm.triggered', {
@@ -266,8 +261,6 @@ export class PmService {
               type: WorkOrderType.PREVENTIVE,
               priority: plan.priority as Priority,
               assetId: plan.assetId,
-              assignedTo: plan.assignedTo,
-              estimatedHours: plan.estimatedHours,
               pmPlanId: plan.id,
               checklistTemplateId: plan.checklistTemplateId,
             },
@@ -287,9 +280,6 @@ export class PmService {
           plan.lastTriggeredAt = new Date();
           plan.nextDueAt = this.calculateNextDueDate(plan);
           await this.pmPlanRepository.save(plan);
-
-          // Notify
-          await this.notificationsService.onPmDue(plan, plan.assignedTo, tenantId);
 
           try {
             await this.webhooksService.trigger('pm.triggered', {
@@ -336,8 +326,6 @@ export class PmService {
             type: WorkOrderType.PREVENTIVE,
             priority: plan.priority as Priority,
             assetId: plan.assetId,
-            assignedTo: plan.assignedTo,
-            estimatedHours: plan.estimatedHours,
             pmPlanId: plan.id,
             checklistTemplateId: plan.checklistTemplateId,
           },

@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsEnum, IsUUID, IsDateString, IsArray } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsUUID, IsDateString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { WorkOrderType, Priority, WorkOrderStatus } from '../entities/work-order.entity';
@@ -37,11 +37,6 @@ export class WorkOrderQueryDto extends PaginationDto {
   @IsOptional()
   @IsUUID()
   locationId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  assignedTo?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import Link from 'next/link'
 import {
-  ArrowLeft, Clock, Wrench, User, MapPin, Target, CheckCircle2, FileText,
+  ArrowLeft, Clock, Wrench, MapPin, Target, CheckCircle2, FileText,
   Settings2, PlayCircle, PauseCircle, Plus, Trash2, Upload, Download,
   DollarSign, Paperclip, ClipboardCheck, Users, File as FileIcon,
 } from 'lucide-react'
@@ -713,28 +713,12 @@ export default function WorkOrderDetailPage() {
 
                 {/* Sidebar */}
                 <div className="space-y-6">
-                    <Card>
-                        <CardHeader className="pb-3 border-b border-border/50">
-                            <CardTitle className="text-lg">Scheduling</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-5 space-y-4">
-                            <div>
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Due Date</p>
-                                <div className="flex items-center gap-2">
-                                    <Clock className="h-4 w-4 text-emerald-500" />
-                                    <span className="font-medium">{wo.dueDate ? formatDate(wo.dueDate) : 'No due date set'}</span>
-                                </div>
-                            </div>
-                            {wo.estimatedHours && (
-                                <div>
-                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Estimated Effort</p>
-                                    <div className="flex items-center gap-2">
-                                        <Wrench className="h-4 w-4 text-blue-500" />
-                                        <span className="font-medium">{wo.estimatedHours} Hours</span>
-                                    </div>
-                                </div>
-                            )}
-                            {(totalLaborCost > 0 || totalPartsCost > 0) && (
+                    {(totalLaborCost > 0 || totalPartsCost > 0) && (
+                        <Card>
+                            <CardHeader className="pb-3 border-b border-border/50">
+                                <CardTitle className="text-lg">Cost</CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-5 space-y-4">
                                 <div>
                                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Total Cost</p>
                                     <div className="flex items-center gap-2">
@@ -742,33 +726,9 @@ export default function WorkOrderDetailPage() {
                                         <span className="font-medium">{formatCurrency(totalLaborCost + totalPartsCost)}</span>
                                     </div>
                                 </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="pb-3 border-b border-border/50">
-                            <CardTitle className="text-lg">Assignments</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-5 space-y-4">
-                            <div>
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Assigned To</p>
-                                {wo.assignedTo ? (
-                                    <div className="flex items-center gap-3 mt-2">
-                                        <div className="h-8 w-8 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold">
-                                            {wo.assignedTo.firstName?.[0]}{wo.assignedTo.lastName?.[0]}
-                                        </div>
-                                        <span className="font-medium">{wo.assignedTo.firstName} {wo.assignedTo.lastName}</span>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-2 text-muted-foreground mt-2">
-                                        <User className="h-4 w-4" />
-                                        <span className="text-sm">Unassigned</span>
-                                    </div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    )}
 
                     <Card className="bg-primary/5 border-primary/20">
                         <CardContent className="p-5 space-y-3">
