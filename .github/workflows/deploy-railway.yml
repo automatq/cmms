@@ -22,11 +22,11 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - service: nexly-api
+          - service: cmms-api
             src: apps/api
-          - service: nexly-worker
+          - service: cmms-worker
             src: apps/api
-          - service: nexly-web
+          - service: cmms-web
             src: apps/web
 
     steps:
