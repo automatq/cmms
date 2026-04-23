@@ -17,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { AssetsModule } from '../assets/assets.module';
 import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
+import { Asset } from '../assets/entities/asset.entity';
 import { TenantModule } from '../../common/tenant/tenant.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 
@@ -31,6 +32,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
       WorkRequest,
       ChecklistTemplate,
       Tenant,
+      Asset,
     ]),
     forwardRef(() => FilesModule),
     forwardRef(() => NotificationsModule),
