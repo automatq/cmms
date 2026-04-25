@@ -1,36 +1,23 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSignIn } from '@clerk/clerk-expo';
+import { useAuth0 } from 'react-native-auth0';
+
+const AUTH0_AUDIENCE = process.env.EXPO_PUBLIC_AUTH0_AUDIENCE || '';
 
 export default function LoginScreen() {
-  const { isLoaded, signIn, setActive } = useSignIn();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { authorize } = useAuth0();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    if (!isLoaded) return;
-
     try {
       setIsLoading(true);
       setError(null);
-
-      const attempt = await signIn.create({
-        identifier: email,
-        password,
-        strategy: 'password',
-      });
-
-      if (attempt.status === 'complete' && attempt.createdSessionId && setActive) {
-        await setActive({ session: attempt.createdSessionId });
-      } else {
-        setError('Additional sign-in steps are required.');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      setError('Invalid email or password.');
+      await authorize({ audience: AUTH0_AUDIENCE });
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -51,27 +38,12 @@ export default function LoginScreen() {
           Manage work orders, track assets, and streamline your maintenance operations.
         </Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <TouchableOpacity 
-          style={styles.button} 
+        <TouchableOpacity
+          style={styles.button}
           onPress={handleLogin}
-          disabled={isLoading || !email || !password || !isLoaded}
+          disabled={isLoading}
         >
           <Ionicons name="log-in-outline" size={24} color="#fff" />
           <Text style={styles.buttonText}>
@@ -119,16 +91,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     justifyContent: 'center',
-  },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    marginBottom: 12,
   },
   description: {
     fontSize: 16,

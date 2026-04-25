@@ -6,8 +6,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { createClerkClient, verifyToken } from '@clerk/backend';
+import { Auth0TokenService } from '../auth/auth0-token.service';
 import { UsersService } from '../users/users.service';
 
 interface AuthenticatedSocket extends Socket {
@@ -25,16 +24,11 @@ export class RealtimeGateway
   server: Server;
 
   private readonly logger = new Logger(RealtimeGateway.name);
-  private readonly clerk;
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly auth0TokenService: Auth0TokenService,
     private readonly usersService: UsersService,
-  ) {
-    this.clerk = createClerkClient({
-      secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
-    });
-  }
+  ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
@@ -46,43 +40,23 @@ export class RealtimeGateway
         throw new UnauthorizedException('No token provided');
       }
 
-      // Verify token with Clerk
-      const payload = await verifyToken(token, {
-        secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
-      }) as any;
+      const payload = await this.auth0TokenService.verifyAccessToken(token);
 
-      // Resolve email from Clerk user
-      let email = String(payload.email || '');
-      let name = 'Unknown';
-      try {
-        const clerkUser = await this.clerk.users.getUser(payload.sub);
-        email = email ||
-          clerkUser.emailAddresses?.find(
-            (e) => e.id === clerkUser.primaryEmailAddressId,
-          )?.emailAddress || '';
-        name =
-          [clerkUser.firstName, clerkUser.lastName]
-            .filter(Boolean)
-            .join(' ') || email.split('@')[0] || 'Unknown';
-      } catch {
-        // Fall through with defaults
-      }
+      const email = String(payload.email || '');
+      const name = String(payload.name || '') || email.split('@')[0] || 'Unknown';
 
-      // Resolve tenant from org_id or personal tenant
       let tenantId: string | undefined;
       if (payload.org_id) {
-        tenantId = await this.usersService.getTenantIdByClerkOrgId(payload.org_id) || undefined;
+        tenantId = await this.usersService.getTenantIdByAuth0OrgId(payload.org_id) || undefined;
         if (!tenantId) {
-          // Auto-provision for new Clerk org
           try {
-            const org = await this.clerk.organizations.getOrganization({ organizationId: payload.org_id });
-            const slug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
-            tenantId = await this.usersService.autoProvisionTenant(org.name || 'My Organization', slug, payload.org_id);
+            const orgName = String(payload.org_name || '') || `Organization ${payload.org_id}`;
+            const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `org-${Date.now()}`;
+            tenantId = await this.usersService.autoProvisionTenant(orgName, slug, payload.org_id);
           } catch { /* fall through */ }
         }
       }
       if (!tenantId && email) {
-        // Personal tenant fallback
         const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
         tenantId = await this.usersService.autoProvisionPersonalTenant(email, slug);
       }
@@ -90,19 +64,16 @@ export class RealtimeGateway
         throw new UnauthorizedException('Cannot resolve tenant');
       }
 
-      // Sync user
-      const user = await this.usersService.syncFromClerk(
+      const user = await this.usersService.syncFromAuth(
         payload.sub,
         email,
         name,
         tenantId,
       );
 
-      // Attach identity to socket
       client.userId = user.id;
       client.tenantId = tenantId;
 
-      // Join rooms
       client.join(`tenant:${tenantId}`);
       client.join(`user:${user.id}`);
 

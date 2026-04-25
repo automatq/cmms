@@ -1,46 +1,61 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
-import { NextRequest, NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+import { auth0 } from '@/lib/auth0'
 
-const isPublicRoute = createRouteMatcher([
-  '/',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/signup(.*)',
-  '/scan/asset(.*)',
-  '/api/webhooks(.*)',
-  '/request(.*)',
-])
+const publicPaths = [
+  '/sign-in',
+  '/sign-up',
+  '/signup',
+  '/api/webhooks',
+]
 
-export default clerkMiddleware(async (auth, req) => {
-  const request = req as NextRequest
+function isPublicPath(pathname: string): boolean {
+  if (publicPaths.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+    return true
+  }
+  if (pathname.startsWith('/scan/asset')) return true
+  if (pathname.startsWith('/request')) return true
+  if (pathname.startsWith('/auth')) return true
+  return false
+}
 
-  // Redirect authenticated users from home to dashboard (avoids client-side flash)
-  if (request.nextUrl.pathname === '/') {
-    const { userId } = await auth()
-    if (userId) {
+export async function middleware(request: NextRequest) {
+  // Always let the Auth0 SDK process the request first (handles /auth/* routes, session rolling, etc.)
+  const authResponse = await auth0.middleware(request)
+
+  const { pathname } = request.nextUrl
+
+  // Auth0's own routes are fully handled by the SDK
+  if (pathname.startsWith('/auth/')) {
+    return authResponse
+  }
+
+  // Redirect authenticated users from home to dashboard
+  if (pathname === '/') {
+    const session = await auth0.getSession()
+    if (session) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
-    return NextResponse.next()
+    return authResponse
   }
 
-  if (isPublicRoute(request)) {
-    return NextResponse.next()
+  if (isPublicPath(pathname)) {
+    return authResponse
   }
-  // For protected routes, check if user is authenticated
-  const { userId } = await auth()
-  if (!userId) {
-    const signInUrl = new URL('/sign-in', request.url)
-    signInUrl.searchParams.set('redirect_url', request.url)
-    return NextResponse.redirect(signInUrl)
+
+  // For protected routes, check if user has a session
+  const session = await auth0.getSession()
+  if (!session) {
+    const loginUrl = new URL('/auth/login', request.url)
+    loginUrl.searchParams.set('returnTo', pathname)
+    return NextResponse.redirect(loginUrl)
   }
-  return NextResponse.next()
-})
+
+  return authResponse
+}
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes
-    '/(api|trpc)(.*)',
+    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
   ],
 }

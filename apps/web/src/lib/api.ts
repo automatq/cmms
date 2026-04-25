@@ -37,7 +37,7 @@ class ApiClient {
         if (error.response?.status === 401) {
           if (typeof window !== 'undefined') {
             const currentPath = window.location.pathname + window.location.search
-            window.location.href = `/sign-in?redirect_url=${encodeURIComponent(currentPath)}`
+            window.location.href = `/auth/login?returnTo=${encodeURIComponent(currentPath)}`
           }
         }
         return Promise.reject(error)

@@ -13,7 +13,7 @@ import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 function validateProductionEnv() {
   const required = [
     'DB_HOST', 'DB_PASSWORD', 'DB_USERNAME', 'DB_DATABASE',
-    'CLERK_SECRET_KEY',
+    'AUTH0_DOMAIN', 'AUTH0_AUDIENCE',
     'CORS_ORIGINS',
   ];
   const missing = required.filter((key) => !process.env[key]);
@@ -91,7 +91,7 @@ async function bootstrap() {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter Clerk JWT token',
+          description: 'Enter Auth0 access token',
         },
         'JWT',
       )

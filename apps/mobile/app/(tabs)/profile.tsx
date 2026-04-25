@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'rea
 import { useAuthStore } from '@/lib/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorTheme, type ColorThemeName } from '@/lib/theme';
-import { useClerk } from '@clerk/clerk-expo';
+import { useAuth0 } from 'react-native-auth0';
 
 const themeOptions: { value: ColorThemeName; label: string; color: string }[] = [
   { value: 'default', label: 'Neutral', color: '#171717' },
@@ -16,12 +16,12 @@ const themeOptions: { value: ColorThemeName; label: string; color: string }[] = 
 
 export default function ProfileScreen() {
   const { user } = useAuthStore();
-  const { signOut } = useClerk();
+  const { clearSession } = useAuth0();
   const { colorTheme, setColorTheme, colors } = useColorTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
 
   const handleLogout = async () => {
-    await signOut();
+    await clearSession();
   };
 
   return (

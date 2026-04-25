@@ -7,32 +7,25 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
-import { createClerkClient, verifyToken } from '@clerk/backend';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 import { TenantStatus } from '../../users/entities/tenant.entity';
+import { Auth0TokenService, Auth0JwtPayload } from '../auth0-token.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  private clerk;
-  private secretKey: string;
   private readonly logger = new Logger(JwtAuthGuard.name);
   private usersService: any;
 
   constructor(
     private reflector: Reflector,
-    private configService: ConfigService,
     private moduleRef: ModuleRef,
-  ) {
-    this.secretKey = this.configService.get<string>('CLERK_SECRET_KEY', '');
-    this.clerk = createClerkClient({ secretKey: this.secretKey });
-  }
+    private auth0TokenService: Auth0TokenService,
+  ) {}
 
   private async getUsersService() {
     if (!this.usersService) {
-      // Lazy-load UsersService to avoid circular dependency / DI scope issues
       const { UsersService } = await import('../../users/users.service');
       this.usersService = this.moduleRef.get(UsersService, { strict: false });
     }
@@ -57,25 +50,22 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await verifyToken(token, { secretKey: this.secretKey }) as any;
+      const payload = await this.auth0TokenService.verifyAccessToken(token);
       const usersService = await this.getUsersService();
 
-      // Resolve tenant from Clerk org_id — auto-provision if needed
       let tenantId: string | undefined;
 
       if (payload.org_id) {
         tenantId =
-          (await usersService.getTenantIdByClerkOrgId(payload.org_id)) ||
+          (await usersService.getTenantIdByAuth0OrgId(payload.org_id)) ||
           undefined;
 
-        // Auto-provision tenant for new Clerk orgs
         if (!tenantId) {
           tenantId = await this.autoProvisionTenant(usersService, payload);
         }
       }
 
       if (!tenantId) {
-        // No org in the JWT — auto-provision a personal tenant
         tenantId = await this.autoProvisionPersonalTenant(usersService, payload);
       }
 
@@ -100,25 +90,17 @@ export class JwtAuthGuard implements CanActivate {
         );
       }
 
-      // Sync user
-      const email: string =
-        String(payload.email || '') ||
-        (payload.sub
-          ? await this.resolveEmailFromClerk(payload.sub)
-          : '');
+      const email: string = String(payload.email || '');
       const name: string =
-        payload.first_name && payload.last_name
-          ? `${payload.first_name} ${payload.last_name}`
-          : String(payload.name || '') || email.split('@')[0] || 'Unknown';
+        String(payload.name || '') || email.split('@')[0] || 'Unknown';
 
-      const user = await usersService.syncFromClerk(
+      const user = await usersService.syncFromAuth(
         payload.sub,
         email,
         name,
         tenantId,
       );
 
-      // Derive permissions from DB roles (not Clerk org_permissions)
       const rolePermissions: string[] = [];
       for (const role of user.roles || []) {
         if (role.permissions) rolePermissions.push(...role.permissions);
@@ -137,20 +119,20 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
+      if (error instanceof HttpException) throw error;
       this.logger.error('Auth error:', (error as any)?.message || error);
       throw new UnauthorizedException('Invalid or expired token');
     }
   }
 
-  private async autoProvisionTenant(usersService: any, payload: any): Promise<string | undefined> {
+  private async autoProvisionTenant(usersService: any, payload: Auth0JwtPayload): Promise<string | undefined> {
     try {
-      const org = await this.clerk.organizations.getOrganization({ organizationId: payload.org_id });
-      const orgName = org.name || 'My Organization';
-      const slug = org.slug || orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
+      const orgName = String(payload.org_name || '') || `Organization ${payload.org_id}`;
+      const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `org-${Date.now()}`;
 
       const tenantId = await usersService.autoProvisionTenant(orgName, slug, payload.org_id);
       if (tenantId) {
-        this.logger.log(`Auto-provisioned tenant ${tenantId} for Clerk org ${payload.org_id}`);
+        this.logger.log(`Auto-provisioned tenant ${tenantId} for Auth0 org ${payload.org_id}`);
       }
       return tenantId;
     } catch (error) {
@@ -159,9 +141,9 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 
-  private async autoProvisionPersonalTenant(usersService: any, payload: any): Promise<string | undefined> {
+  private async autoProvisionPersonalTenant(usersService: any, payload: Auth0JwtPayload): Promise<string | undefined> {
     try {
-      const email = payload.email || (payload.sub ? await this.resolveEmailFromClerk(payload.sub) : '');
+      const email = String(payload.email || '');
       if (!email) return undefined;
 
       const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
@@ -182,18 +164,5 @@ export class JwtAuthGuard implements CanActivate {
       return authHeader.slice(7);
     }
     return null;
-  }
-
-  private async resolveEmailFromClerk(userId: string): Promise<string> {
-    try {
-      const user = await this.clerk.users.getUser(userId);
-      return (
-        user.emailAddresses?.find(
-          (e) => e.id === user.primaryEmailAddressId,
-        )?.emailAddress || ''
-      );
-    } catch {
-      return '';
-    }
   }
 }

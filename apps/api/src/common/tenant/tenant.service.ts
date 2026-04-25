@@ -76,8 +76,8 @@ export class TenantService {
     return this.tenantRepository.findOne({ where: { slug } });
   }
 
-  async findByClerkOrgId(clerkOrgId: string): Promise<Tenant | null> {
-    return this.tenantRepository.findOne({ where: { clerkOrgId } });
+  async findByAuth0OrgId(auth0OrgId: string): Promise<Tenant | null> {
+    return this.tenantRepository.findOne({ where: { auth0OrgId } });
   }
 
   async isFeatureEnabled(tenantId: string, feature: string): Promise<boolean> {
@@ -123,15 +123,13 @@ export class TenantService {
 
   async provisionTenant(dto: CreateTenantDto): Promise<{
     tenant: Tenant;
-    clerkOrgId: string | null;
+    auth0OrgId: string | null;
   }> {
-    // Check slug uniqueness
     const existing = await this.tenantRepository.findOne({ where: { slug: dto.slug } });
     if (existing) {
       throw new ConflictException(`Slug "${dto.slug}" is already taken`);
     }
 
-    // Create tenant record
     const planLimits = PLAN_LIMITS[PlanTier.FREE];
     const tenant = this.tenantRepository.create({
       name: dto.companyName,
@@ -145,56 +143,9 @@ export class TenantService {
 
     await this.tenantRepository.save(tenant);
 
-    // Create Clerk Organization
-    let clerkOrgId: string | null = null;
-    try {
-      clerkOrgId = await this.createClerkOrganization(tenant, dto.adminEmail);
-      tenant.clerkOrgId = clerkOrgId;
-      await this.tenantRepository.save(tenant);
-    } catch (error) {
-      this.logger.error(`Failed to create Clerk Organization for tenant ${tenant.id}:`, error);
-      // Tenant is still created - Clerk org can be retried
-    }
-
-    return { tenant, clerkOrgId };
-  }
-
-  private async createClerkOrganization(
-    tenant: Tenant,
-    adminEmail: string,
-  ): Promise<string> {
-    const secretKey = this.configService.get<string>('CLERK_SECRET_KEY', '');
-
-    if (!secretKey) {
-      this.logger.warn('Clerk credentials not configured, skipping org creation');
-      return '';
-    }
-
-    const { createClerkClient } = await import('@clerk/backend');
-    const clerk = createClerkClient({ secretKey });
-
-    // Create Organization
-    const org = await clerk.organizations.createOrganization({
-      name: tenant.name,
-      slug: tenant.slug,
-      publicMetadata: {
-        tenantId: tenant.id,
-        plan: tenant.plan,
-      },
-    });
-
-    // Invite admin user to the organization
-    try {
-      await clerk.organizations.createOrganizationInvitation({
-        organizationId: org.id,
-        emailAddress: adminEmail,
-        role: 'org:admin',
-      });
-    } catch (error) {
-      this.logger.warn(`Failed to send invitation to ${adminEmail}:`, error);
-    }
-
-    return org.id;
+    // Auth0 organizations are created in the Auth0 dashboard or via Management API.
+    // The auth0OrgId will be linked when the first user from that org logs in.
+    return { tenant, auth0OrgId: null };
   }
 
   async findAll(): Promise<Tenant[]> {

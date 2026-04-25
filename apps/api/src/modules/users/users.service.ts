@@ -25,13 +25,8 @@ export class UsersService {
 
   // ==================== USER METHODS ====================
 
-  /**
-   * Sync a user from Clerk on login. Finds by email + tenantId, creates if not found.
-   * Clerk `sub` (e.g. "user_2abc123") is not a valid UUID, so we use auto-generated UUIDs
-   * for the user primary key and match on email within the tenant instead.
-   */
-  async syncFromClerk(
-    clerkUserId: string,
+  async syncFromAuth(
+    externalUserId: string,
     email: string,
     name: string,
     tenantId: string,
@@ -347,13 +342,13 @@ export class UsersService {
     return this.tenantRepository.findOne({ where: { slug } });
   }
 
-  async findTenantByClerkOrgId(clerkOrgId: string): Promise<Tenant | null> {
-    return this.tenantRepository.findOne({ where: { clerkOrgId } });
+  async findTenantByAuth0OrgId(auth0OrgId: string): Promise<Tenant | null> {
+    return this.tenantRepository.findOne({ where: { auth0OrgId } });
   }
 
-  async getTenantIdByClerkOrgId(clerkOrgId: string): Promise<string | null> {
+  async getTenantIdByAuth0OrgId(auth0OrgId: string): Promise<string | null> {
     const tenant = await this.tenantRepository.findOne({
-      where: { clerkOrgId },
+      where: { auth0OrgId },
       select: ['id'],
     });
     return tenant?.id || null;
@@ -364,7 +359,7 @@ export class UsersService {
   async autoProvisionTenant(
     companyName: string,
     slug: string,
-    clerkOrgId: string,
+    auth0OrgId: string,
   ): Promise<string | undefined> {
     try {
       // Check slug uniqueness
@@ -377,7 +372,7 @@ export class UsersService {
       const tenant = this.tenantRepository.create({
         name: companyName,
         slug: finalSlug,
-        clerkOrgId,
+        auth0OrgId,
         timezone: 'UTC',
         currency: 'USD',
       });
