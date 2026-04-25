@@ -1,40 +1,9 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
-const isPublicRoute = createRouteMatcher([
-  '/',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/signup(.*)',
-  '/scan/asset(.*)',
-  '/api/webhooks(.*)',
-  '/request(.*)',
-])
-
-export default clerkMiddleware(async (auth, req) => {
-  const request = req as NextRequest
-
-  // Redirect authenticated users from home to dashboard (avoids client-side flash)
-  if (request.nextUrl.pathname === '/') {
-    const { userId } = await auth()
-    if (userId) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
-    return NextResponse.next()
-  }
-
-  if (isPublicRoute(request)) {
-    return NextResponse.next()
-  }
-  // For protected routes, check if user is authenticated
-  const { userId } = await auth()
-  if (!userId) {
-    const signInUrl = new URL('/sign-in', request.url)
-    signInUrl.searchParams.set('redirect_url', request.url)
-    return NextResponse.redirect(signInUrl)
-  }
+export function middleware(_request: NextRequest) {
   return NextResponse.next()
-})
+}
 
 export const config = {
   matcher: [
