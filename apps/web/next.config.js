@@ -1,3 +1,5 @@
+const path = require('path')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -5,6 +7,12 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1',
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '',
+  },
+  webpack(config) {
+    // @clerk/nextjs was removed from dependencies. Alias it to a local stub
+    // so that the legacy catch-all sign-in/sign-up pages still compile.
+    config.resolve.alias['@clerk/nextjs'] = path.resolve(__dirname, 'src/lib/clerk-stub.ts')
+    return config
   },
   images: {
     remotePatterns: [
