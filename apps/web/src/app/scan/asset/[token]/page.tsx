@@ -19,7 +19,7 @@ export default function AssetScanLandingPage() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       const redirectUrl = `${window.location.pathname}${window.location.search}`
-      window.location.href = `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`
+      window.location.href = `/auth/login?returnTo=${encodeURIComponent(redirectUrl)}`
     }
   }, [isAuthenticated, isLoading])
 

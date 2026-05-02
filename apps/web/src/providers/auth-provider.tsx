@@ -60,10 +60,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false
 
     const sync = async () => {
+      let accessToken: string | null = null
       try {
-        const accessToken = await getAccessToken()
-        if (!accessToken || cancelled) return
+        accessToken = await getAccessToken()
+      } catch (error) {
+        console.error('Failed to get access token:', error)
+      }
 
+      if (cancelled) return
+
+      if (accessToken) {
         setToken(accessToken)
         api.setToken(accessToken)
 
@@ -100,8 +106,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           permissions,
         })
         syncedRef.current = true
-      } catch (error) {
-        console.error('Auth sync failed:', error)
       }
 
       if (!cancelled) setReady(true)

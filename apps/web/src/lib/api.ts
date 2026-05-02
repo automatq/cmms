@@ -33,15 +33,7 @@ class ApiClient {
 
     this.client.interceptors.response.use(
       (response) => response,
-      (error: AxiosError) => {
-        if (error.response?.status === 401) {
-          if (typeof window !== 'undefined') {
-            const currentPath = window.location.pathname + window.location.search
-            window.location.href = `/auth/login?returnTo=${encodeURIComponent(currentPath)}`
-          }
-        }
-        return Promise.reject(error)
-      }
+      (error: AxiosError) => Promise.reject(error)
     )
   }
 
