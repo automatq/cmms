@@ -323,11 +323,21 @@ export class ActivityService {
   }
 
   async getActiveActivities(tenantId: string): Promise<TechActivity[]> {
-    return this.activityRepository.find({
-      where: { tenantId, status: ActivityStatus.ACTIVE },
-      relations: ['user', 'asset', 'workOrder'],
-      order: { startedAt: 'DESC' },
-    });
+    return this.activityRepository
+      .createQueryBuilder('ta')
+      .innerJoinAndSelect('ta.user', 'user')
+      .innerJoinAndSelect('ta.asset', 'asset')
+      .innerJoinAndSelect('ta.workOrder', 'workOrder')
+      .innerJoin(
+        'members',
+        'm',
+        'm.user_id = user.id AND m.organization_id = :tenantId',
+        { tenantId },
+      )
+      .where('ta.tenantId = :tenantId', { tenantId })
+      .andWhere('ta.status = :status', { status: ActivityStatus.ACTIVE })
+      .orderBy('ta.startedAt', 'DESC')
+      .getMany();
   }
 
   async getMyActiveActivity(

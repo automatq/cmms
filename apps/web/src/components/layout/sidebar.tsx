@@ -46,6 +46,7 @@ const navigation = [
 ]
 
 const settingsSubNav = [
+  { name: 'Members', href: '/dashboard/settings/members', icon: Users },
   { name: 'Teams', href: '/dashboard/settings/teams', icon: Users },
   { name: 'Webhooks', href: '/dashboard/settings/webhooks', icon: Webhook },
   { name: 'Scheduled Reports', href: '/dashboard/settings/scheduled-reports', icon: CalendarClock },
