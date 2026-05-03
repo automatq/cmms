@@ -56,7 +56,7 @@ import { HealthController } from './health.controller';
           type: 'postgres' as const,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
-          migrationsRun: true,
+          migrationsRun: config.get('DB_RUN_MIGRATIONS', 'true') === 'true',
           synchronize: false,
           logging: config.get('DB_LOGGING', 'false') === 'true',
           extra: {
