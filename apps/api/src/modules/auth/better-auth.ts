@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { organization, bearer } from 'better-auth/plugins';
+import { expo } from '@better-auth/expo';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
 import {
@@ -33,15 +34,20 @@ const pool = databaseUrl
 
 const PUBLIC_WEB_URL = process.env.PUBLIC_WEB_URL || 'http://localhost:3000';
 
-export const auth = betterAuth({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const auth: any = betterAuth({
   database: pool,
   baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:4000',
   basePath: '/api/auth',
   secret: process.env.BETTER_AUTH_SECRET,
-  trustedOrigins: (process.env.CORS_ORIGINS || '')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean),
+  trustedOrigins: [
+    ...(process.env.CORS_ORIGINS || '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+    'nexly://',
+    'exp://',
+  ],
   advanced: {
     database: {
       generateId: () => randomUUID(),
@@ -144,6 +150,7 @@ export const auth = betterAuth({
 
   plugins: [
     bearer(),
+    expo(),
     organization({
       schema: {
         organization: {
@@ -244,4 +251,3 @@ async function seedDefaultRoles(pool: Pool, tenantId: string): Promise<void> {
   }
 }
 
-export type Auth = typeof auth;

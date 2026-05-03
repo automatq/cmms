@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { useAuthStore } from '@/lib/auth';
+import { signOut } from '@/lib/auth-client';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorTheme, type ColorThemeName } from '@/lib/theme';
 
@@ -17,6 +18,11 @@ export default function ProfileScreen() {
   const { user } = useAuthStore();
   const { colorTheme, setColorTheme, colors } = useColorTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
+
+  async function handleSignOut() {
+    await signOut();
+    // AuthGate in _layout.tsx handles redirect to /sign-in
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -84,6 +90,13 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.menuText}>Help & Support</Text>
           <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={handleSignOut}>
+          <View style={[styles.menuIcon, { backgroundColor: '#fee2e2' }]}>
+            <Ionicons name="log-out-outline" size={20} color="#dc2626" />
+          </View>
+          <Text style={[styles.menuText, { color: '#dc2626' }]}>Sign Out</Text>
         </TouchableOpacity>
       </View>
 
