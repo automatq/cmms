@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'rea
 import { useAuthStore } from '@/lib/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorTheme, type ColorThemeName } from '@/lib/theme';
-import { useAuth0 } from 'react-native-auth0';
 
 const themeOptions: { value: ColorThemeName; label: string; color: string }[] = [
   { value: 'default', label: 'Neutral', color: '#171717' },
@@ -16,13 +15,8 @@ const themeOptions: { value: ColorThemeName; label: string; color: string }[] = 
 
 export default function ProfileScreen() {
   const { user } = useAuthStore();
-  const { clearSession } = useAuth0();
   const { colorTheme, setColorTheme, colors } = useColorTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
-
-  const handleLogout = async () => {
-    await clearSession();
-  };
 
   return (
     <ScrollView style={styles.container}>
@@ -92,12 +86,6 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
         </TouchableOpacity>
       </View>
-
-      {/* Logout */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={20} color="#dc2626" />
-        <Text style={styles.logoutText}>Sign Out</Text>
-      </TouchableOpacity>
 
       {/* Version */}
       <Text style={styles.version}>Nexly v1.0.0</Text>

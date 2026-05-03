@@ -13,7 +13,7 @@ import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 function validateProductionEnv() {
   const required = [
     'DB_HOST', 'DB_PASSWORD', 'DB_USERNAME', 'DB_DATABASE',
-    'AUTH0_DOMAIN', 'AUTH0_AUDIENCE',
+    'DEFAULT_TENANT_ID', 'DEFAULT_USER_ID',
     'CORS_ORIGINS',
   ];
   const missing = required.filter((key) => !process.env[key]);

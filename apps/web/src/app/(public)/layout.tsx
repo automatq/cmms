@@ -1,13 +1,8 @@
-'use client'
-
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Wrench } from 'lucide-react'
-import { useAuth } from '@/providers/auth-provider'
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
-  const { login } = useAuth()
-
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
@@ -22,11 +17,8 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             <Link href="/pricing">
               <Button variant="ghost">Pricing</Button>
             </Link>
-            <Button variant="outline" onClick={login}>
-              Sign In
-            </Button>
-            <Link href="/signup">
-              <Button>Get Started</Button>
+            <Link href="/dashboard">
+              <Button>Open Dashboard</Button>
             </Link>
           </nav>
         </div>

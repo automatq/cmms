@@ -5,9 +5,8 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UnauthorizedException } from '@nestjs/common';
-import { Auth0TokenService } from '../auth/auth0-token.service';
-import { UsersService } from '../users/users.service';
+import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 interface AuthenticatedSocket extends Socket {
   userId: string;
@@ -25,64 +24,19 @@ export class RealtimeGateway
 
   private readonly logger = new Logger(RealtimeGateway.name);
 
-  constructor(
-    private readonly auth0TokenService: Auth0TokenService,
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
-  async handleConnection(client: AuthenticatedSocket) {
-    try {
-      const token =
-        client.handshake.auth?.token ||
-        client.handshake.headers?.authorization?.replace('Bearer ', '');
+  handleConnection(client: AuthenticatedSocket) {
+    const tenantId = this.config.get<string>('DEFAULT_TENANT_ID', '00000000-0000-0000-0000-000000000001');
+    const userId = this.config.get<string>('DEFAULT_USER_ID', '00000000-0000-0000-0000-000000000002');
 
-      if (!token) {
-        throw new UnauthorizedException('No token provided');
-      }
+    client.userId = userId;
+    client.tenantId = tenantId;
 
-      const payload = await this.auth0TokenService.verifyAccessToken(token);
+    client.join(`tenant:${tenantId}`);
+    client.join(`user:${userId}`);
 
-      const email = String(payload.email || '');
-      const name = String(payload.name || '') || email.split('@')[0] || 'Unknown';
-
-      let tenantId: string | undefined;
-      if (payload.org_id) {
-        tenantId = await this.usersService.getTenantIdByAuth0OrgId(payload.org_id) || undefined;
-        if (!tenantId) {
-          try {
-            const orgName = String(payload.org_name || '') || `Organization ${payload.org_id}`;
-            const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `org-${Date.now()}`;
-            tenantId = await this.usersService.autoProvisionTenant(orgName, slug, payload.org_id);
-          } catch { /* fall through */ }
-        }
-      }
-      if (!tenantId && email) {
-        const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
-        tenantId = await this.usersService.autoProvisionPersonalTenant(email, slug);
-      }
-      if (!tenantId) {
-        throw new UnauthorizedException('Cannot resolve tenant');
-      }
-
-      const user = await this.usersService.syncFromAuth(
-        payload.sub,
-        email,
-        name,
-        tenantId,
-      );
-
-      client.userId = user.id;
-      client.tenantId = tenantId;
-
-      client.join(`tenant:${tenantId}`);
-      client.join(`user:${user.id}`);
-
-      this.logger.log(`Client connected: ${user.id} (tenant: ${tenantId})`);
-    } catch (error) {
-      this.logger.warn(`Connection rejected: ${error instanceof Error ? error.message : error}`);
-      client.emit('error', { message: 'Authentication failed' });
-      client.disconnect(true);
-    }
+    this.logger.log(`Client connected: ${userId} (tenant: ${tenantId})`);
   }
 
   handleDisconnect(client: AuthenticatedSocket) {

@@ -1,8 +1,6 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { useUser, getAccessToken } from '@auth0/nextjs-auth0/client'
-import { api } from '@/lib/api'
+import React, { createContext, useContext } from 'react'
 
 interface User {
   id: string
@@ -23,145 +21,31 @@ interface AuthContextType {
   logout: () => void
 }
 
-const AuthContext = createContext<AuthContextType>({
-  isAuthenticated: false,
-  isLoading: true,
-  user: null,
+const STUB_USER: User = {
+  id: process.env.NEXT_PUBLIC_DEFAULT_USER_ID || '00000000-0000-0000-0000-000000000002',
+  email: 'admin@local',
+  firstName: 'Admin',
+  lastName: 'User',
+  username: 'admin',
+  roles: ['admin'],
+  permissions: ['*'],
+}
+
+const STUB_VALUE: AuthContextType = {
+  isAuthenticated: true,
+  isLoading: false,
+  user: STUB_USER,
   token: null,
   login: () => {},
   logout: () => {},
-})
+}
+
+const AuthContext = createContext<AuthContextType>(STUB_VALUE)
 
 export function useAuth() {
   return useContext(AuthContext)
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user: auth0User, isLoading: auth0Loading } = useUser()
-  const [user, setUser] = useState<User | null>(null)
-  const [token, setToken] = useState<string | null>(null)
-  const [ready, setReady] = useState(false)
-  const syncedRef = useRef(false)
-
-  useEffect(() => {
-    if (auth0Loading) return
-
-    if (!auth0User) {
-      syncedRef.current = false
-      setUser(null)
-      setToken(null)
-      api.setToken(null)
-      setReady(true)
-      return
-    }
-
-    if (syncedRef.current) return
-
-    let cancelled = false
-
-    const sync = async () => {
-      let accessToken: string | null = null
-      try {
-        accessToken = await getAccessToken()
-      } catch (error) {
-        console.error('Failed to get access token:', error)
-      }
-
-      if (cancelled) return
-
-      if (accessToken) {
-        setToken(accessToken)
-        api.setToken(accessToken)
-
-        let roles: string[] = []
-        let permissions: string[] = []
-        try {
-          const profile = await api.getMyProfile()
-          const profileRoles = profile.data?.roles || []
-          roles = profileRoles.map((r: any) => r.name) || []
-          permissions = Array.from(
-            new Set(
-              profileRoles.flatMap((role: any) =>
-                Array.isArray(role.permissions) ? role.permissions : []
-              )
-            )
-          )
-        } catch {
-          // Profile not available yet — continue with empty roles, backend will auto-provision
-        }
-
-        if (cancelled) return
-
-        const nameParts = (auth0User.name || '').split(' ')
-        const firstName = nameParts[0] || ''
-        const lastName = nameParts.slice(1).join(' ') || ''
-
-        setUser({
-          id: auth0User.sub || '',
-          email: auth0User.email || '',
-          firstName,
-          lastName,
-          username: auth0User.email || '',
-          roles,
-          permissions,
-        })
-        syncedRef.current = true
-      }
-
-      if (!cancelled) setReady(true)
-    }
-
-    sync()
-    return () => { cancelled = true }
-  }, [auth0Loading, auth0User?.sub]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!auth0User) return
-
-    const interval = setInterval(async () => {
-      try {
-        const newToken = await getAccessToken()
-        if (newToken) {
-          setToken(newToken)
-          api.setToken(newToken)
-        }
-      } catch {
-        // Token refresh failed — will retry next interval
-      }
-    }, 50000)
-
-    return () => clearInterval(interval)
-  }, [auth0User?.sub]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const login = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/auth/login'
-    }
-  }, [])
-
-  const logout = useCallback(() => {
-    api.setToken(null)
-    setToken(null)
-    setUser(null)
-    syncedRef.current = false
-    setReady(false)
-    if (typeof window !== 'undefined') {
-      window.location.href = '/auth/logout'
-    }
-  }, [])
-
-  return (
-    <AuthContext.Provider
-      value={{
-        isAuthenticated: !!auth0User,
-        isLoading: !ready,
-        user,
-        token,
-        login,
-        logout,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={STUB_VALUE}>{children}</AuthContext.Provider>
 }

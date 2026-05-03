@@ -6,7 +6,6 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, Loader2, QrCode } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
-import { useAuth } from '@/providers/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -14,14 +13,6 @@ export default function AssetScanLandingPage() {
   const router = useRouter()
   const params = useParams()
   const token = params?.token as string
-  const { isAuthenticated, isLoading, token: authToken } = useAuth()
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      const redirectUrl = `${window.location.pathname}${window.location.search}`
-      window.location.href = `/auth/login?returnTo=${encodeURIComponent(redirectUrl)}`
-    }
-  }, [isAuthenticated, isLoading])
 
   const { data, error, isLoading: isResolving } = useQuery({
     queryKey: ['scan-asset-token', token],
@@ -29,7 +20,7 @@ export default function AssetScanLandingPage() {
       const response = await api.resolveAssetQrToken(token)
       return response.data
     },
-    enabled: isAuthenticated && !!authToken && !!token,
+    enabled: !!token,
     retry: false,
   })
 
@@ -39,7 +30,7 @@ export default function AssetScanLandingPage() {
     }
   }, [data?.id, router])
 
-  if (isLoading || (isAuthenticated && isResolving)) {
+  if (isResolving) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/20 px-4">
         <Card className="w-full max-w-md">

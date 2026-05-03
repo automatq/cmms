@@ -24,21 +24,13 @@ const SOCKET_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:4000'
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, token } = useAuth()
+  const { isAuthenticated } = useAuth()
   const queryClient = useQueryClient()
   const socketRef = useRef<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
-  // Update token on existing socket without reconnecting
   useEffect(() => {
-    if (socketRef.current && token) {
-      socketRef.current.auth = { token }
-    }
-  }, [token])
-
-  // Connect/disconnect based on auth state
-  useEffect(() => {
-    if (!isAuthenticated || !token) {
+    if (!isAuthenticated) {
       if (socketRef.current) {
         socketRef.current.disconnect()
         socketRef.current = null
@@ -47,11 +39,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Already connected — don't reconnect
     if (socketRef.current) return
 
     const socket = io(SOCKET_URL, {
-      auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,

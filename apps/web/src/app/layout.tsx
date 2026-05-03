@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { Auth0Provider } from '@auth0/nextjs-auth0/client'
 import { AuthProvider } from '@/providers/auth-provider'
 import { QueryProvider } from '@/providers/query-provider'
 import { SocketProvider } from '@/providers/socket-provider'
@@ -25,25 +24,23 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <Auth0Provider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <ColorThemeProvider>
-              <ErrorBoundary>
-                <QueryProvider>
-                  <AuthProvider>
-                    <SocketProvider>{children}</SocketProvider>
-                  </AuthProvider>
-                </QueryProvider>
-              </ErrorBoundary>
-            </ColorThemeProvider>
-            <Toaster richColors closeButton position="top-right" />
-          </ThemeProvider>
-        </Auth0Provider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ColorThemeProvider>
+            <ErrorBoundary>
+              <QueryProvider>
+                <AuthProvider>
+                  <SocketProvider>{children}</SocketProvider>
+                </AuthProvider>
+              </QueryProvider>
+            </ErrorBoundary>
+          </ColorThemeProvider>
+          <Toaster richColors closeButton position="top-right" />
+        </ThemeProvider>
       </body>
     </html>
   )
