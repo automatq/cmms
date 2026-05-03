@@ -6,7 +6,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { auth } from '../auth/better-auth';
 
 interface AuthenticatedSocket extends Socket {
   userId: string;
@@ -15,6 +15,7 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
   transports: ['websocket', 'polling'],
+  cors: { origin: true, credentials: true },
 })
 export class RealtimeGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -24,19 +25,53 @@ export class RealtimeGateway
 
   private readonly logger = new Logger(RealtimeGateway.name);
 
-  constructor(private readonly config: ConfigService) {}
+  async handleConnection(client: AuthenticatedSocket) {
+    // Read bearer token from socket.io auth payload (clients pass it as auth.token)
+    // or fall back to the Authorization header for compatibility.
+    const token: string | undefined =
+      client.handshake.auth?.token ||
+      (client.handshake.headers?.authorization?.startsWith('Bearer ')
+        ? client.handshake.headers.authorization.slice(7)
+        : undefined);
 
-  handleConnection(client: AuthenticatedSocket) {
-    const tenantId = this.config.get<string>('DEFAULT_TENANT_ID', '00000000-0000-0000-0000-000000000001');
-    const userId = this.config.get<string>('DEFAULT_USER_ID', '00000000-0000-0000-0000-000000000002');
+    if (!token) {
+      this.logger.warn(`Socket connect rejected (no token): ${client.id}`);
+      client.disconnect(true);
+      return;
+    }
 
-    client.userId = userId;
-    client.tenantId = tenantId;
+    try {
+      const headers = new Headers();
+      headers.set('Authorization', `Bearer ${token}`);
+      const session = await auth.api.getSession({ headers });
 
-    client.join(`tenant:${tenantId}`);
-    client.join(`user:${userId}`);
+      if (!session?.session || !session?.user) {
+        this.logger.warn(`Socket connect rejected (invalid session): ${client.id}`);
+        client.disconnect(true);
+        return;
+      }
 
-    this.logger.log(`Client connected: ${userId} (tenant: ${tenantId})`);
+      const userId = session.user.id;
+      const tenantId = (session.session as any).activeOrganizationId;
+
+      if (!tenantId) {
+        this.logger.warn(`Socket connect rejected (no active org): user=${userId}`);
+        client.disconnect(true);
+        return;
+      }
+
+      client.userId = userId;
+      client.tenantId = tenantId;
+      client.join(`tenant:${tenantId}`);
+      client.join(`user:${userId}`);
+
+      this.logger.log(`Client connected: ${userId} (tenant: ${tenantId})`);
+    } catch (err) {
+      this.logger.warn(
+        `Socket connect rejected (auth error): ${err instanceof Error ? err.message : err}`,
+      );
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: AuthenticatedSocket) {

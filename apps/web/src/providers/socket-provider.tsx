@@ -41,8 +41,13 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
     if (socketRef.current) return
 
+    const token =
+      typeof window !== 'undefined' ? localStorage.getItem('nexly_auth_token') : null
+    if (!token) return
+
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
+      auth: { token },
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 5000,
