@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { Role } from './entities/role.entity';
@@ -11,20 +11,11 @@ import { UsersController, RolesController, OrganizationController } from './user
 import { TeamsController } from './teams.controller';
 import { BillingModule } from '../billing/billing.module';
 
+// Default roles are seeded by migration SeedDefaultTenantAndUser1714000001000.
 @Module({
   imports: [TypeOrmModule.forFeature([User, Role, Tenant, Team, AuditLog]), BillingModule],
   providers: [UsersService, TeamsService],
   controllers: [UsersController, RolesController, OrganizationController, TeamsController],
   exports: [UsersService, TeamsService],
 })
-export class UsersModule implements OnModuleInit {
-  constructor(private readonly usersService: UsersService) {}
-
-  async onModuleInit() {
-    // TODO: Multi-tenancy - seedDefaultRoles now requires a tenantId.
-    // This should iterate over all existing tenants and seed roles for each,
-    // or be called when a new tenant is provisioned.
-    // For now, skipping automatic seeding on startup.
-    // await this.usersService.seedDefaultRoles(tenantId);
-  }
-}
+export class UsersModule {}

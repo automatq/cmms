@@ -91,7 +91,7 @@ async function bootstrap() {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter Auth0 access token',
+          description: 'Enter JWT access token',
         },
         'JWT',
       )

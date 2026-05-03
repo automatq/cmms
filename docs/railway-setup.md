@@ -19,10 +19,11 @@
 ### Shared variables (set once, used by multiple services)
 | Variable | Description |
 |----------|-------------|
-| `CLERK_SECRET_KEY` | Clerk API secret key |
-| `CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
 | `JWT_SECRET` | Random 64-char string for JWT signing |
 | `PUBLIC_URL` | Public URL of the API (e.g., `https://nexly-api-production.up.railway.app`) |
+| `DEFAULT_TENANT_ID` | UUID of the seeded shared tenant (optional; defaults to `0...001`) |
+| `DEFAULT_USER_ID` | UUID of the seeded admin user (optional; defaults to `0...002`) |
+| `DEFAULT_USER_EMAIL` | Email shown on the seeded admin user (optional) |
 
 ### nexly-api service variables
 | Variable | Description |
@@ -45,7 +46,6 @@ Same `DATABASE_URL`, `REDIS_URL`, and `NODE_ENV` as the API.
 | Variable | Description |
 |----------|-------------|
 | `NEXT_PUBLIC_API_URL` | Public API URL |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
 
 ## CI/CD
 
