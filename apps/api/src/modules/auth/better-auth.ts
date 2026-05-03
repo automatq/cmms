@@ -189,6 +189,7 @@ export const auth: any = betterAuth({
             organizationId: 'organization_id',
             inviterId: 'inviter_id',
             expiresAt: 'expires_at',
+            createdAt: 'created_at',
           },
         },
         session: {
