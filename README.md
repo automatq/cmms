@@ -30,7 +30,7 @@ Built as a full-stack TypeScript monorepo with a NestJS API, Next.js web dashboa
 | **API** | NestJS 10, TypeORM, PostgreSQL, Redis, BullMQ |
 | **Web** | Next.js 14, React 18, Tailwind CSS, Shadcn/ui, Recharts |
 | **Mobile** | Expo 50, React Native 0.73, Expo Router |
-| **Auth** | Clerk (SSO, OAuth, SAML) |
+| **Auth** | None — single shared workspace mode |
 | **Storage** | MinIO / AWS S3 |
 | **Real-time** | Socket.io with Redis adapter |
 | **Jobs** | BullMQ (PM scheduling, exports, webhooks, imports, warranty checks, budget alerts) |
@@ -75,7 +75,7 @@ modules/
 ├── realtime/        WebSocket gateway
 ├── ai/              AI-powered assistant (Bedrock/Ollama)
 ├── billing/         Stripe subscriptions
-└── auth/            JWT guards, permissions, Clerk integration
+└── auth/            JWT guards, permissions (auth currently stubbed)
 ```
 
 ---
@@ -86,7 +86,6 @@ modules/
 
 - Node.js 20+
 - Docker & Docker Compose
-- A [Clerk](https://clerk.com) account (free tier works)
 
 ### 1. Clone and install
 
@@ -102,12 +101,8 @@ npm install
 cp .env.example .env
 ```
 
-Set your Clerk keys in `.env`:
-
-```
-CLERK_SECRET_KEY=sk_test_...
-CLERK_PUBLISHABLE_KEY=pk_test_...
-```
+`.env.example` has working defaults for the single shared workspace
+(default tenant + admin user are seeded automatically by migrations).
 
 ### 3. Start services
 
@@ -184,13 +179,15 @@ Provisions ECS, RDS, ElastiCache, S3, SES, ALB with SSL, and CloudWatch.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CLERK_SECRET_KEY` | Yes | Clerk backend secret key |
-| `CLERK_PUBLISHABLE_KEY` | Yes | Clerk frontend publishable key |
+| `JWT_SECRET` | Yes | Random 64-char string for JWT signing |
 | `POSTGRES_USER` | Yes | Database username |
 | `POSTGRES_PASSWORD` | Yes | Database password |
 | `POSTGRES_DB` | Yes | Database name |
 | `REDIS_URL` | Yes | Redis connection string |
 | `PUBLIC_URL` | Yes | Public-facing URL of the app |
+| `DEFAULT_TENANT_ID` | No | UUID of the seeded shared tenant |
+| `DEFAULT_USER_ID` | No | UUID of the seeded admin user |
+| `DEFAULT_USER_EMAIL` | No | Email shown on the seeded admin user |
 | `MINIO_ENDPOINT` | No | MinIO/S3 endpoint for file storage |
 | `MINIO_BUCKET` | No | Storage bucket name |
 | `STRIPE_SECRET_KEY` | No | Stripe billing integration |
@@ -203,13 +200,13 @@ Full examples in `.env.example` and `.env.production.example`.
 
 ## Architecture
 
-**Multi-tenant** — Every record is scoped to a tenant via `tenant_id`. Row-level security policies enforce isolation at the database level. First user in a tenant is automatically assigned the admin role.
+**Multi-tenant schema, single shared workspace** — Every record is still scoped to a `tenant_id` and the data model supports multiple tenants, but the app currently runs in single shared workspace mode: a default tenant and admin user are seeded by migration and used for all requests.
 
-**Auth flow** — Clerk handles authentication. The API verifies Clerk JWTs, auto-provisions tenants for new users, and derives permissions from database roles (admin, manager, technician, planner, viewer, etc.).
+**Auth flow** — Auth is currently stubbed: `JwtAuthGuard` returns a hardcoded `RequestUser` from `DEFAULT_TENANT_ID` / `DEFAULT_USER_ID` env vars instead of verifying tokens. The guard, permissions, and Socket.io auth path are kept in place so a real provider can be wired back in later.
 
 **Background jobs** — Six BullMQ processors run in a separate worker process: PM scheduling, warranty checks, report exports, budget alerts, webhook delivery, and data imports.
 
-**Real-time** — Socket.io with Redis adapter for horizontal scaling. The gateway authenticates WebSocket connections with the same Clerk JWT flow as the REST API.
+**Real-time** — Socket.io with Redis adapter for horizontal scaling. WebSocket connections currently inherit the same stubbed user as the REST API.
 
 ---
 

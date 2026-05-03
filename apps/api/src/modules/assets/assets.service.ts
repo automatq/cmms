@@ -34,7 +34,7 @@ import {
 } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { FilesService } from '../files/files.service';
-import { UsageService } from '../billing/usage.service';
+import { UsageService } from '../../common/tenant/usage.service';
 import { TenantService } from '../../common/tenant/tenant.service';
 
 export interface AssetQrMetadata {

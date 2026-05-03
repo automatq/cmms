@@ -23,8 +23,9 @@ export function Header() {
       return res.data
     },
     enabled: !!user,
-    // Fallback polling (WebSocket is primary via SocketProvider)
-    refetchInterval: 300000,
+    // Fallback polling (WebSocket invalidation is primary; fall back to 30s polling)
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   })
 
   const markReadMutation = useMutation({

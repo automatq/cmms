@@ -1,4 +1,3 @@
-import * as SecureStore from 'expo-secure-store'
 import { create } from 'zustand'
 import { api } from './api'
 
@@ -9,31 +8,6 @@ export interface User {
   lastName: string
   username: string
   roles: string[]
-}
-
-// Clerk token cache for Expo SecureStore
-export const tokenCache = {
-  async getToken(key: string) {
-    try {
-      return await SecureStore.getItemAsync(key)
-    } catch {
-      return null
-    }
-  },
-  async saveToken(key: string, value: string) {
-    try {
-      await SecureStore.setItemAsync(key, value)
-    } catch {
-      // SecureStore may fail on some devices
-    }
-  },
-  async clearToken(key: string) {
-    try {
-      await SecureStore.deleteItemAsync(key)
-    } catch {
-      // Ignore
-    }
-  },
 }
 
 interface AuthState {

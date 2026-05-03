@@ -1,38 +1,39 @@
 'use client'
 
-import { useAuth } from '@/providers/auth-provider'
+import { useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
 import { Progress } from '@/components/ui/progress'
-import { useEffect } from 'react'
+import { TrialBanner } from '@/components/trial-banner'
+import { useAuth } from '@/providers/auth-provider'
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { isAuthenticated, isLoading, login } = useAuth()
+  const { isAuthenticated, isLoading, activeOrgId } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      login()
+    if (isLoading) return
+    if (!isAuthenticated) {
+      router.replace(`/sign-in?returnTo=${encodeURIComponent(pathname || '/dashboard')}`)
+      return
     }
-  }, [isLoading, isAuthenticated, login])
+    if (!activeOrgId) {
+      router.replace('/onboarding/create-org')
+    }
+  }, [isAuthenticated, isLoading, activeOrgId, pathname, router])
 
-  if (isLoading || !isAuthenticated) {
+  if (isLoading || !isAuthenticated || !activeOrgId) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col border-r bg-card" />
-        <div className="lg:pl-64">
-          <div className="sticky top-0 z-20 bg-background border-b h-16" />
-          <main className="p-6">
-            <div className="flex items-center justify-center min-h-[50vh]">
-              <div className="w-1/3 space-y-2">
-                <Progress />
-                <p className="text-sm text-muted-foreground text-center">Loading...</p>
-              </div>
-            </div>
-          </main>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-1/3 sm:w-1/4 max-w-sm space-y-2">
+          <Progress />
+          <p className="text-sm text-muted-foreground text-center">Loading…</p>
         </div>
       </div>
     )
@@ -43,7 +44,10 @@ export default function DashboardLayout({
       <Sidebar />
       <div className="lg:pl-64">
         <Header />
-        <main className="p-6">{children}</main>
+        <main className="p-6 space-y-6">
+          <TrialBanner />
+          {children}
+        </main>
       </div>
     </div>
   )

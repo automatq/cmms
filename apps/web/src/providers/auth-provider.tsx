@@ -1,7 +1,8 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { api } from '@/lib/api'
+import React, { createContext, useCallback, useContext } from 'react'
+import { useRouter } from 'next/navigation'
+import { useSession, signOut as betterSignOut, clearStoredToken } from '@/lib/auth-client'
 
 interface User {
   id: string
@@ -17,6 +18,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   isLoading: boolean
   user: User | null
+  activeOrgId: string | null
   token: string | null
   login: () => void
   logout: () => void
@@ -26,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   isLoading: true,
   user: null,
+  activeOrgId: null,
   token: null,
   login: () => {},
   logout: () => {},
@@ -36,71 +39,45 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [token, setToken] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  // On mount, attempt to load the current session from the backend
-  useEffect(() => {
-    let cancelled = false
-
-    const init = async () => {
-      try {
-        const profile = await api.getMyProfile()
-        if (cancelled) return
-
-        const profileRoles = profile.data?.roles || []
-        const roles: string[] = profileRoles.map((r: any) => r.name)
-        const permissions: string[] = Array.from(
-          new Set(
-            profileRoles.flatMap((role: any) =>
-              Array.isArray(role.permissions) ? role.permissions : []
-            )
-          )
-        )
-
-        setUser({
-          id: profile.data?.id || '',
-          email: profile.data?.email || '',
-          firstName: profile.data?.firstName || '',
-          lastName: profile.data?.lastName || '',
-          username: profile.data?.username || profile.data?.email || '',
-          roles,
-          permissions,
-        })
-      } catch {
-        // Not authenticated — leave user as null
-      } finally {
-        if (!cancelled) setIsLoading(false)
-      }
-    }
-
-    init()
-    return () => { cancelled = true }
-  }, [])
+  const { data: session, isPending } = useSession()
+  const router = useRouter()
 
   const login = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/sign-in'
-    }
-  }, [])
+    router.push('/sign-in')
+  }, [router])
 
-  const logout = useCallback(() => {
-    api.setToken(null)
-    setToken(null)
-    setUser(null)
-    if (typeof window !== 'undefined') {
-      window.location.href = '/sign-in'
+  const logout = useCallback(async () => {
+    try {
+      await betterSignOut()
+    } finally {
+      clearStoredToken()
+      router.push('/sign-in')
     }
-  }, [])
+  }, [router])
+
+  const sessionUser = session?.user as any
+  const activeOrgId = (session?.session as any)?.activeOrganizationId ?? null
+
+  const user: User | null = sessionUser
+    ? {
+        id: sessionUser.id,
+        email: sessionUser.email,
+        firstName: sessionUser.firstName || sessionUser.name?.split(' ')[0] || '',
+        lastName: sessionUser.lastName || sessionUser.name?.split(' ').slice(1).join(' ') || '',
+        username: sessionUser.username || sessionUser.email,
+        roles: ['admin'],
+        permissions: ['*'],
+      }
+    : null
 
   return (
     <AuthContext.Provider
       value={{
-        isAuthenticated: !!user,
-        isLoading,
+        isAuthenticated: !!session,
+        isLoading: isPending,
         user,
-        token,
+        activeOrgId,
+        token: null,
         login,
         logout,
       }}

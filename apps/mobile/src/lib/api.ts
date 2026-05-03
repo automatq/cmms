@@ -19,11 +19,16 @@ class ApiClient {
     });
 
     this.client.interceptors.request.use(async (config) => {
-      if (!this.token) {
-        this.token = await SecureStore.getItemAsync('auth_token');
+      // Better Auth's expoClient stores the bearer token under this key
+      let token: string | null = null;
+      try {
+        token = SecureStore.getItem('nexly.session_token') || null;
+      } catch {
+        // SecureStore.getItem may not be available in all envs - fall back to async
+        token = await SecureStore.getItemAsync('nexly.session_token');
       }
-      if (this.token) {
-        config.headers.Authorization = `Bearer ${this.token}`;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
       return config;
     });

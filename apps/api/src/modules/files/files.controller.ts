@@ -26,7 +26,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
-import { UsageService } from '../billing/usage.service';
+import { UsageService } from '../../common/tenant/usage.service';
 import { TenantService } from '../../common/tenant/tenant.service';
 
 @ApiTags('Files')

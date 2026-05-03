@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
@@ -18,13 +17,8 @@ export default function NewWorkOrderPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    type: 'corrective',
-    priority: 'medium',
     assetId: '',
-    locationId: '',
-    checklistTemplateId: '',
+    description: '',
   })
 
   const { data: assets } = useQuery({
@@ -35,46 +29,34 @@ export default function NewWorkOrderPage() {
     },
   })
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: async () => {
-      const res = await api.getLocations()
-      return res.data?.data || res.data || []
-    },
-  })
-
-  const { data: checklistTemplates } = useQuery({
-    queryKey: ['checklist-templates'],
-    queryFn: async () => {
-      const res = await api.getChecklistTemplates()
-      return res.data?.data || res.data || []
-    },
-  })
-
   const createMutation = useMutation({
     mutationFn: (data: any) => api.createWorkOrder(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-orders'] })
-      toast.success('Work order created')
+      toast.success('Work order submitted')
       router.push('/dashboard/work-orders')
     },
     onError: (error: any) => {
       const msg = error.response?.data?.message
-      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to create work order')
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to submit work order')
     },
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    const asset = assets?.data?.find((a: any) => a.id === formData.assetId)
+    if (!asset) {
+      toast.error('Please select an asset')
+      return
+    }
+
     const data: any = {
-      title: formData.title,
+      title: `${asset.assetNumber} - ${asset.name}`,
       description: formData.description || undefined,
-      type: formData.type,
-      priority: formData.priority,
-      assetId: formData.assetId || undefined,
-      locationId: formData.locationId || undefined,
-      checklistTemplateId: formData.checklistTemplateId || undefined,
+      type: 'corrective',
+      assetId: asset.id,
+      locationId: asset.locationId || asset.location?.id || undefined,
     }
 
     Object.keys(data).forEach(key => data[key] === undefined && delete data[key])
@@ -91,26 +73,32 @@ export default function NewWorkOrderPage() {
           </Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold">New Work Order</h1>
-          <p className="text-muted-foreground">Create a new work order</p>
+          <h1 className="text-3xl font-bold">Submit Work Order</h1>
+          <p className="text-muted-foreground">Submit a work order for an asset</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Basic Information</CardTitle>
+            <CardTitle>Work Order Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
-              <Input
-                id="title"
-                value={formData.title}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="Work order title"
+              <Label htmlFor="asset">Asset Number *</Label>
+              <Select
+                id="asset"
+                value={formData.assetId}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, assetId: e.target.value })}
                 required
-              />
+              >
+                <option value="">Select an asset</option>
+                {assets?.data?.map((asset: any) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.assetNumber} - {asset.name}
+                  </option>
+                ))}
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
@@ -118,87 +106,8 @@ export default function NewWorkOrderPage() {
                 id="description"
                 value={formData.description}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Detailed description of the work required"
+                placeholder="Describe the issue or work needed"
               />
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="type">Type</Label>
-                <Select
-                  id="type"
-                  value={formData.type}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, type: e.target.value })}
-                >
-                  <option value="corrective">Corrective</option>
-                  <option value="preventive">Preventive</option>
-                  <option value="emergency">Emergency</option>
-                  <option value="project">Project</option>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Select
-                  id="priority"
-                  value={formData.priority}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, priority: e.target.value })}
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Assignment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="asset">Asset</Label>
-                <Select
-                  id="asset"
-                  value={formData.assetId}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, assetId: e.target.value })}
-                >
-                  <option value="">Select asset (optional)</option>
-                  {assets?.data?.map((asset: any) => (
-                    <option key={asset.id} value={asset.id}>
-                      {asset.assetNumber} - {asset.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
-                <Select
-                  id="location"
-                  value={formData.locationId}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, locationId: e.target.value })}
-                >
-                  <option value="">Select location (optional)</option>
-                  {Array.isArray(locations) && locations.map((loc: any) => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="checklistTemplate">Checklist Template</Label>
-              <Select
-                id="checklistTemplate"
-                value={formData.checklistTemplateId}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, checklistTemplateId: e.target.value })}
-              >
-                <option value="">None</option>
-                {Array.isArray(checklistTemplates) && checklistTemplates.map((t: any) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </Select>
             </div>
           </CardContent>
         </Card>
@@ -206,7 +115,7 @@ export default function NewWorkOrderPage() {
         <div className="flex gap-4">
           <Button type="submit" disabled={createMutation.isPending}>
             <Save className="h-4 w-4 mr-2" />
-            {createMutation.isPending ? 'Saving...' : 'Create Work Order'}
+            {createMutation.isPending ? 'Submitting...' : 'Submit Work Order'}
           </Button>
           <Button variant="outline" asChild>
             <Link href="/dashboard/work-orders">Cancel</Link>

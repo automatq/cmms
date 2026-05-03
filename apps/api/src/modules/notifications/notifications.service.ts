@@ -119,10 +119,12 @@ export class NotificationsService {
     data: Record<string, unknown> = {},
     tenantId: string,
   ): Promise<void> {
-    const users = await this.userRepository.find({
-      where: { tenantId, status: 'active' as any },
-      select: ['id'],
-    });
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .where('user.status = :status', { status: 'active' })
+      .select(['user.id'])
+      .getMany();
 
     for (const user of users) {
       try {
@@ -233,7 +235,11 @@ export class NotificationsService {
   ): Promise<void> {
     const userIds = workOrder.createdById ? [workOrder.createdById] : [];
     const users = userIds.length > 0
-      ? await this.userRepository.find({ where: { id: In(userIds), tenantId } })
+      ? await this.userRepository
+          .createQueryBuilder('user')
+          .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+          .where('user.id IN (:...userIds)', { userIds })
+          .getMany()
       : [];
 
     for (const user of users) {
@@ -261,7 +267,11 @@ export class NotificationsService {
 
   async onPmDue(pmPlan: { id: string; name: string; assetId?: string }, userIds: string[], tenantId: string): Promise<void> {
     const users = userIds?.length > 0
-      ? await this.userRepository.find({ where: { id: In(userIds), tenantId } })
+      ? await this.userRepository
+          .createQueryBuilder('user')
+          .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+          .where('user.id IN (:...userIds)', { userIds })
+          .getMany()
       : [];
 
     for (const user of users) {
@@ -285,7 +295,10 @@ export class NotificationsService {
 
   async onLowStock(part: { id: string; name: string; sku: string }, currentQty: number, tenantId: string): Promise<void> {
     // Find users with inventory permissions to notify
-    const users = await this.userRepository.find({ where: { tenantId } });
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .getMany();
 
     for (const user of users) {
       await this.createNotification(
@@ -310,7 +323,10 @@ export class NotificationsService {
 
   async onWorkRequestSubmitted(request: { id: string; title: string; submittedBy?: string; description?: string }, tenantId: string): Promise<void> {
     // Notify all active users (managers will be filtered by permissions in future)
-    const users = await this.userRepository.find({ where: { tenantId } });
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .getMany();
 
     for (const user of users) {
       await this.createNotification(

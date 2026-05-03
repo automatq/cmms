@@ -13,6 +13,7 @@ import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkRequest, WorkRequestStatus } from './entities/work-request.entity';
 import { Tenant } from '../users/entities/tenant.entity';
+import { Asset } from '../assets/entities/asset.entity';
 import { Public } from '../auth/decorators/public.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -24,8 +25,33 @@ export class PublicRequestsController {
     private readonly workRequestRepository: Repository<WorkRequest>,
     @InjectRepository(Tenant)
     private readonly tenantRepository: Repository<Tenant>,
+    @InjectRepository(Asset)
+    private readonly assetRepository: Repository<Asset>,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  @Public()
+  @Get(':tenantSlug/assets')
+  @Throttle({ default: { ttl: 60000, limit: 30 } })
+  @ApiOperation({ summary: 'List assets for public submission form' })
+  @ApiResponse({ status: 200, description: 'Minimal asset list' })
+  async listAssets(@Param('tenantSlug') tenantSlug: string) {
+    const tenant = await this.tenantRepository.findOne({
+      where: { slug: tenantSlug },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const assets = await this.assetRepository.find({
+      where: { tenantId: tenant.id },
+      select: ['id', 'assetNumber', 'name', 'locationId', 'assetTagToken'],
+      order: { assetNumber: 'ASC' },
+    });
+
+    return assets;
+  }
 
   @Public()
   @Post(':tenantSlug/requests')
@@ -41,6 +67,7 @@ export class PublicRequestsController {
       submitterName?: string;
       submitterEmail?: string;
       submitterPhone?: string;
+      assetId?: string;
       locationId?: string;
     },
   ) {
@@ -61,6 +88,7 @@ export class PublicRequestsController {
       submitterName: body.submitterName,
       submitterEmail: body.submitterEmail,
       submitterPhone: body.submitterPhone,
+      assetId: body.assetId,
       locationId: body.locationId,
       trackingToken,
       tenantId: tenant.id,

@@ -1,42 +1,134 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Wrench, CheckCircle, Search } from 'lucide-react'
+import { CheckCircle, Search, QrCode, X } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
 
+type PublicAsset = {
+  id: string
+  assetNumber: string
+  name: string
+  locationId: string | null
+  assetTagToken: string
+}
+
+const initialForm = {
+  title: '',
+  description: '',
+  submitterName: '',
+  assetId: '',
+}
+
 export default function PublicRequestPage() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>()
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    submitterName: '',
-    submitterEmail: '',
-    location: '',
-    priority: 'medium',
-  })
+  const [form, setForm] = useState(initialForm)
+  const [assets, setAssets] = useState<PublicAsset[]>([])
   const [submitted, setSubmitted] = useState(false)
   const [trackingToken, setTrackingToken] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Scanner
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const scannerRef = useRef<any>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
 
   // Track status
   const [trackInput, setTrackInput] = useState('')
   const [trackResult, setTrackResult] = useState<any>(null)
   const [trackMode, setTrackMode] = useState(false)
 
+  useEffect(() => {
+    if (!tenantSlug) return
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_URL}/public/${tenantSlug}/assets`)
+        if (!res.ok) return
+        const data = await res.json()
+        setAssets(Array.isArray(data) ? data : [])
+      } catch {
+        // Silent — submission can still proceed without an asset list
+      }
+    }
+    load()
+  }, [tenantSlug])
+
+  // QR scanner lifecycle — initialize when opened, tear down when closed
+  useEffect(() => {
+    if (!scannerOpen) {
+      setScanError(null)
+      return
+    }
+
+    let scanner: any = null
+    const init = async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode')
+        scanner = new Html5Qrcode('public-qr-reader')
+        scannerRef.current = scanner
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText: string) => {
+            // Asset QR codes encode .../scan/asset/<token>
+            const match = decodedText.match(/\/scan\/asset\/([A-Za-z0-9_-]+)/)
+            const token = match ? match[1] : decodedText.trim()
+            const asset = assets.find((a) => a.assetTagToken === token)
+            if (asset) {
+              setForm((f) => ({ ...f, assetId: asset.id }))
+              scanner.stop().catch(() => {})
+              setScannerOpen(false)
+              setError('')
+            } else {
+              setScanError('QR code did not match any asset in this organization.')
+            }
+          },
+          () => {},
+        )
+      } catch {
+        setScanError('Unable to access camera. Please check permissions.')
+      }
+    }
+
+    const t = setTimeout(init, 250)
+    return () => {
+      clearTimeout(t)
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(() => {})
+        scannerRef.current = null
+      }
+    }
+  }, [scannerOpen, assets])
+
   const handleSubmit = async () => {
     setLoading(true)
     setError('')
     try {
+      const asset = assets.find((a) => a.id === form.assetId)
+      const title =
+        form.title.trim() ||
+        (asset ? `${asset.assetNumber} - ${asset.name}` : '')
+      if (!title) {
+        throw new Error('Please scan or select an asset')
+      }
+
+      const payload = {
+        title,
+        description: form.description || undefined,
+        submitterName: form.submitterName,
+        assetId: form.assetId || undefined,
+        locationId: asset?.locationId || undefined,
+      }
+
       const res = await fetch(`${API_URL}/public/${tenantSlug}/requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -73,9 +165,9 @@ export default function PublicRequestPage() {
         <Card>
           <CardContent className="flex flex-col items-center py-12">
             <CheckCircle className="h-16 w-16 text-green-600" />
-            <h2 className="mt-4 text-2xl font-bold">Request Submitted</h2>
+            <h2 className="mt-4 text-2xl font-bold">Work Order Submitted</h2>
             <p className="mt-2 text-muted-foreground text-center">
-              Your maintenance request has been submitted successfully.
+              Your work order has been submitted successfully.
             </p>
             <div className="mt-6 p-4 bg-muted rounded-lg text-center">
               <p className="text-sm text-muted-foreground">
@@ -93,17 +185,10 @@ export default function PublicRequestPage() {
               className="mt-6"
               onClick={() => {
                 setSubmitted(false)
-                setForm({
-                  title: '',
-                  description: '',
-                  submitterName: '',
-                  submitterEmail: '',
-                  location: '',
-                  priority: 'medium',
-                })
+                setForm(initialForm)
               }}
             >
-              Submit Another Request
+              Submit Another Work Order
             </Button>
           </CardContent>
         </Card>
@@ -111,12 +196,14 @@ export default function PublicRequestPage() {
     )
   }
 
+  const selectedAsset = assets.find((a) => a.id === form.assetId)
+
   return (
     <div className="container mx-auto max-w-lg px-4 py-16">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold">Maintenance Request</h1>
+        <h1 className="text-3xl font-bold">Submit Work Order</h1>
         <p className="text-muted-foreground mt-2">
-          Submit a maintenance request or check the status of an existing one
+          Submit a work order or check the status of an existing one
         </p>
       </div>
 
@@ -126,21 +213,21 @@ export default function PublicRequestPage() {
           className="flex-1"
           onClick={() => setTrackMode(false)}
         >
-          New Request
+          New Work Order
         </Button>
         <Button
           variant={trackMode ? 'default' : 'outline'}
           className="flex-1"
           onClick={() => setTrackMode(true)}
         >
-          Track Request
+          Track Work Order
         </Button>
       </div>
 
       {trackMode ? (
         <Card>
           <CardHeader>
-            <CardTitle>Track Your Request</CardTitle>
+            <CardTitle>Track Your Work Order</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2">
@@ -183,9 +270,77 @@ export default function PublicRequestPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Submit a Request</CardTitle>
+            <CardTitle>Submit a Work Order</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Asset selection: scan or pick from list */}
+            <div>
+              <label className="text-sm font-medium">Asset</label>
+              <div className="mt-1 space-y-2">
+                {scannerOpen ? (
+                  <div className="space-y-2">
+                    <div
+                      id="public-qr-reader"
+                      className="w-full rounded-lg overflow-hidden border bg-black aspect-square"
+                    />
+                    {scanError && (
+                      <p className="text-sm text-destructive text-center">{scanError}</p>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => setScannerOpen(false)}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel scan
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => setScannerOpen(true)}
+                    >
+                      <QrCode className="h-4 w-4 mr-2" />
+                      Scan asset QR code
+                    </Button>
+                    <select
+                      className="w-full rounded-md border border-input px-3 py-2 text-sm"
+                      value={form.assetId}
+                      onChange={(e) => setForm({ ...form, assetId: e.target.value })}
+                    >
+                      <option value="">Or select an asset…</option>
+                      {assets.map((asset) => (
+                        <option key={asset.id} value={asset.id}>
+                          {asset.assetNumber} - {asset.name}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedAsset && (
+                      <p className="text-xs text-muted-foreground">
+                        Selected: <span className="font-medium">{selectedAsset.assetNumber} — {selectedAsset.name}</span>
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <textarea
+                className="w-full rounded-md border border-input px-3 py-2 text-sm min-h-[100px]"
+                placeholder="Describe the issue or work needed..."
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+              />
+            </div>
+
             <div>
               <label className="text-sm font-medium">Your Name</label>
               <Input
@@ -196,72 +351,14 @@ export default function PublicRequestPage() {
                 }
               />
             </div>
-            <div>
-              <label className="text-sm font-medium">Email</label>
-              <Input
-                type="email"
-                placeholder="john@example.com"
-                value={form.submitterEmail}
-                onChange={(e) =>
-                  setForm({ ...form, submitterEmail: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                What needs attention?
-              </label>
-              <Input
-                placeholder="e.g. Broken AC in Room 204"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Description</label>
-              <textarea
-                className="w-full rounded-md border border-input px-3 py-2 text-sm min-h-[100px]"
-                placeholder="Provide details about the issue..."
-                value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Location</label>
-              <Input
-                placeholder="Building, floor, room..."
-                value={form.location}
-                onChange={(e) =>
-                  setForm({ ...form, location: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Priority</label>
-              <select
-                className="w-full rounded-md border border-input px-3 py-2 text-sm"
-                value={form.priority}
-                onChange={(e) =>
-                  setForm({ ...form, priority: e.target.value })
-                }
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
+
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button
               className="w-full"
               onClick={handleSubmit}
-              disabled={
-                !form.title || !form.submitterName || loading
-              }
+              disabled={!form.assetId || !form.submitterName || loading}
             >
-              {loading ? 'Submitting...' : 'Submit Request'}
+              {loading ? 'Submitting...' : 'Submit Work Order'}
             </Button>
           </CardContent>
         </Card>

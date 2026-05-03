@@ -12,7 +12,6 @@ import {
   Calendar,
   Warehouse,
   BarChart3,
-  Bell,
   Settings,
   LogOut,
   Menu,
@@ -47,6 +46,7 @@ const navigation = [
 ]
 
 const settingsSubNav = [
+  { name: 'Members', href: '/dashboard/settings/members', icon: Users },
   { name: 'Teams', href: '/dashboard/settings/teams', icon: Users },
   { name: 'Webhooks', href: '/dashboard/settings/webhooks', icon: Webhook },
   { name: 'Scheduled Reports', href: '/dashboard/settings/scheduled-reports', icon: CalendarClock },
@@ -219,7 +219,7 @@ export function Sidebar() {
                   Settings
                 </Link>
               </Button>
-              <Button variant="ghost" size="icon" onClick={logout}>
+              <Button variant="ghost" size="icon" onClick={logout} title="Sign out">
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>

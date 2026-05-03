@@ -3,41 +3,86 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
-  Logger,
+  ForbiddenException,
   HttpException,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
-import { ModuleRef } from '@nestjs/core';
-import { createClerkClient, verifyToken } from '@clerk/backend';
+import { fromNodeHeaders } from 'better-auth/node';
+import type { Auth } from 'better-auth';
+import { InjectBetterAuth } from 'nestjs-better-auth';
+import { Pool } from 'pg';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
-import { TenantStatus } from '../../users/entities/tenant.entity';
+import { PlanTier, TenantStatus } from '../../users/entities/tenant.entity';
+
+// All non-billing permissions used by the app.
+const ALL_NON_BILLING_PERMISSIONS = [
+  'work_orders:read', 'work_orders:write', 'work_orders:write:own',
+  'work_requests:write',
+  'assets:read', 'assets:write',
+  'pm:read', 'pm:write',
+  'inventory:read', 'inventory:write', 'inventory:delete',
+  'reports:read',
+  'users:read', 'users:write',
+  'settings:read', 'settings:write',
+  'ai:read',
+  'admin:tenants',
+];
+
+const BILLING_PERMISSIONS = ['billing:read', 'billing:write'];
+
+const PERMISSIONS_BY_ROLE: Record<string, string[]> = {
+  // Owner is the user who created the org. Full access including billing.
+  owner: ['*'],
+  // Admins manage everyday operations but not billing by default.
+  admin: ALL_NON_BILLING_PERMISSIONS,
+  // Members get the technician permission set.
+  member: [
+    'work_orders:read',
+    'work_orders:write:own',
+    'assets:read',
+    'inventory:read',
+    'pm:read',
+    'reports:read',
+  ],
+};
+
+let pool: Pool | undefined;
+function getPool(): Pool {
+  if (!pool) {
+    const databaseUrl = process.env.DATABASE_URL;
+    pool = databaseUrl
+      ? new Pool({
+          connectionString: databaseUrl,
+          ssl:
+            process.env.DB_SSL === 'true' || databaseUrl.includes('sslmode=require')
+              ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+              : undefined,
+        })
+      : new Pool({
+          host: process.env.DB_HOST,
+          port: parseInt(process.env.DB_PORT || '5432', 10),
+          user: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_DATABASE,
+          ssl:
+            process.env.DB_SSL === 'true'
+              ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+              : undefined,
+        });
+  }
+  return pool;
+}
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  private clerk;
-  private secretKey: string;
   private readonly logger = new Logger(JwtAuthGuard.name);
-  private usersService: any;
 
   constructor(
     private reflector: Reflector,
-    private configService: ConfigService,
-    private moduleRef: ModuleRef,
-  ) {
-    this.secretKey = this.configService.get<string>('CLERK_SECRET_KEY', '');
-    this.clerk = createClerkClient({ secretKey: this.secretKey });
-  }
-
-  private async getUsersService() {
-    if (!this.usersService) {
-      // Lazy-load UsersService to avoid circular dependency / DI scope issues
-      const { UsersService } = await import('../../users/users.service');
-      this.usersService = this.moduleRef.get(UsersService, { strict: false });
-    }
-    return this.usersService;
-  }
+    @InjectBetterAuth() private readonly auth: Auth,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -50,150 +95,85 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const token = this.extractToken(request);
+    const headers = fromNodeHeaders(request.headers);
 
-    if (!token) {
+    let session: Awaited<ReturnType<typeof this.auth.api.getSession>>;
+    try {
+      session = await this.auth.api.getSession({ headers });
+    } catch (err) {
+      this.logger.error('Failed to read session', err);
       throw new UnauthorizedException('Authentication required');
     }
 
+    if (!session?.session || !session?.user) {
+      throw new UnauthorizedException('Authentication required');
+    }
+
+    const tenantId = (session.session as any).activeOrganizationId;
+    if (!tenantId) {
+      throw new ForbiddenException(
+        'No active organization. Create or join one before using this resource.',
+      );
+    }
+
+    let role = 'member';
     try {
-      const payload = await verifyToken(token, { secretKey: this.secretKey }) as any;
-      const usersService = await this.getUsersService();
+      const member = await (this.auth.api as any).getActiveMember({ headers });
+      role = member?.role || 'member';
+    } catch {
+      // No member record - fall back to member
+    }
 
-      // Resolve tenant from Clerk org_id — auto-provision if needed
-      let tenantId: string | undefined;
+    // Check the org's billing/trial status. If the trial has expired without a
+    // payment method, suspend the org. Suspended orgs return 402 (payment
+    // required) on every non-billing request - the frontend redirects to a
+    // "Reactivate" page.
+    const orgRow = await getPool().query(
+      `SELECT status, plan, trial_ends_at FROM organizations WHERE id = $1 LIMIT 1`,
+      [tenantId],
+    );
+    const org = orgRow.rows[0];
+    if (!org) {
+      throw new ForbiddenException('Organization not found');
+    }
 
-      if (payload.org_id) {
-        tenantId =
-          (await usersService.getTenantIdByClerkOrgId(payload.org_id)) ||
-          undefined;
+    let status: string = org.status;
+    if (status === 'trial' && org.trial_ends_at && new Date(org.trial_ends_at) < new Date()) {
+      status = 'suspended';
+      // persist the new status
+      await getPool().query(
+        `UPDATE organizations SET status = 'suspended', updated_at = now() WHERE id = $1`,
+        [tenantId],
+      );
+    }
 
-        // Auto-provision tenant for new Clerk orgs
-        if (!tenantId) {
-          tenantId = await this.autoProvisionTenant(usersService, payload);
-        }
-      }
-
-      if (!tenantId) {
-        // No org in the JWT — auto-provision a personal tenant
-        tenantId = await this.autoProvisionPersonalTenant(usersService, payload);
-      }
-
-      if (!tenantId) {
-        throw new UnauthorizedException(
-          'Unable to resolve tenant. Please ensure you are part of an organization.',
-        );
-      }
-
-      const tenant = await usersService.findTenantById(tenantId);
-      if (
-        tenant.status === TenantStatus.SUSPENDED ||
-        tenant.status === TenantStatus.CANCELLED
-      ) {
+    if (status === TenantStatus.SUSPENDED || status === TenantStatus.CANCELLED) {
+      // Allow billing endpoints through so users can reactivate.
+      const path: string = request.path || request.url || '';
+      const isBillingPath = path.includes('/billing/');
+      if (!isBillingPath) {
         throw new HttpException(
           {
-            message:
-              'Subscription inactive. Please update your billing to continue.',
-            status: tenant.status,
+            message: 'Subscription inactive. Add a payment method to continue.',
+            status,
           },
           402,
         );
       }
-
-      // Sync user
-      const email: string =
-        String(payload.email || '') ||
-        (payload.sub
-          ? await this.resolveEmailFromClerk(payload.sub)
-          : '');
-      const name: string =
-        payload.first_name && payload.last_name
-          ? `${payload.first_name} ${payload.last_name}`
-          : String(payload.name || '') || email.split('@')[0] || 'Unknown';
-
-      const user = await usersService.syncFromClerk(
-        payload.sub,
-        email,
-        name,
-        tenantId,
-      );
-
-      // Derive permissions from DB roles (not Clerk org_permissions)
-      const rolePermissions: string[] = [];
-      for (const role of user.roles || []) {
-        if (role.permissions) rolePermissions.push(...role.permissions);
-      }
-
-      const requestUser: RequestUser = {
-        userId: user.id,
-        tenantId,
-        email: email || user.email,
-        plan: tenant.plan,
-        permissions: rolePermissions,
-        roles: user.roles?.map((r) => r.name) || [],
-      };
-
-      request.user = requestUser;
-      return true;
-    } catch (error) {
-      if (error instanceof UnauthorizedException) throw error;
-      this.logger.error('Auth error:', (error as any)?.message || error);
-      throw new UnauthorizedException('Invalid or expired token');
     }
-  }
 
-  private async autoProvisionTenant(usersService: any, payload: any): Promise<string | undefined> {
-    try {
-      const org = await this.clerk.organizations.getOrganization({ organizationId: payload.org_id });
-      const orgName = org.name || 'My Organization';
-      const slug = org.slug || orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
+    const permissions = PERMISSIONS_BY_ROLE[role] || PERMISSIONS_BY_ROLE.member;
 
-      const tenantId = await usersService.autoProvisionTenant(orgName, slug, payload.org_id);
-      if (tenantId) {
-        this.logger.log(`Auto-provisioned tenant ${tenantId} for Clerk org ${payload.org_id}`);
-      }
-      return tenantId;
-    } catch (error) {
-      this.logger.error(`Failed to auto-provision tenant for org ${payload.org_id}:`, error);
-      return undefined;
-    }
-  }
+    const requestUser: RequestUser = {
+      userId: session.user.id,
+      tenantId,
+      email: session.user.email,
+      plan: (org.plan as PlanTier) || PlanTier.FREE,
+      permissions,
+      roles: [role],
+    };
 
-  private async autoProvisionPersonalTenant(usersService: any, payload: any): Promise<string | undefined> {
-    try {
-      const email = payload.email || (payload.sub ? await this.resolveEmailFromClerk(payload.sub) : '');
-      if (!email) return undefined;
-
-      const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
-      const tenantId = await usersService.autoProvisionPersonalTenant(email, slug);
-      if (tenantId) {
-        this.logger.log(`Auto-provisioned personal tenant ${tenantId} for ${email}`);
-      }
-      return tenantId;
-    } catch (error) {
-      this.logger.error('Failed to auto-provision personal tenant:', error);
-      return undefined;
-    }
-  }
-
-  private extractToken(request: any): string | null {
-    const authHeader = request.headers?.authorization;
-    if (authHeader?.startsWith('Bearer ')) {
-      return authHeader.slice(7);
-    }
-    return null;
-  }
-
-  private async resolveEmailFromClerk(userId: string): Promise<string> {
-    try {
-      const user = await this.clerk.users.getUser(userId);
-      return (
-        user.emailAddresses?.find(
-          (e) => e.id === user.primaryEmailAddressId,
-        )?.emailAddress || ''
-      );
-    } catch {
-      return '';
-    }
+    request.user = requestUser;
+    return true;
   }
 }

@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -36,6 +35,8 @@ import axios from 'axios'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
 
+const adminClient = axios.create({ baseURL: API_URL })
+
 interface Tenant {
   id: string
   name: string
@@ -46,8 +47,8 @@ interface Tenant {
   assetCount: number
   storageBytesUsed: number
   createdAt: string
-  stripeCustomerId?: string
-  stripeSubscriptionId?: string
+  polarCustomerId?: string
+  polarSubscriptionId?: string
 }
 
 const statusColors: Record<string, string> = {
@@ -79,20 +80,14 @@ export default function AdminTenantsPage() {
   const { data: tenants = [], isLoading } = useQuery<Tenant[]>({
     queryKey: ['admin-tenants'],
     queryFn: async () => {
-      const res = await axios.get(`${API_URL}/tenants`, {
-        headers: { Authorization: `Bearer ${(api as any).token}` },
-      })
+      const res = await adminClient.get('/tenants')
       return res.data
     },
   })
 
   const updatePlan = useMutation({
     mutationFn: async ({ id, plan }: { id: string; plan: string }) => {
-      await axios.patch(
-        `${API_URL}/tenants/${id}/plan`,
-        { plan },
-        { headers: { Authorization: `Bearer ${(api as any).token}` } },
-      )
+      await adminClient.patch(`/tenants/${id}/plan`, { plan })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-tenants'] })
@@ -102,11 +97,7 @@ export default function AdminTenantsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      await axios.patch(
-        `${API_URL}/tenants/${id}/status`,
-        { status },
-        { headers: { Authorization: `Bearer ${(api as any).token}` } },
-      )
+      await adminClient.patch(`/tenants/${id}/status`, { status })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-tenants'] })
@@ -284,10 +275,10 @@ export default function AdminTenantsPage() {
                   <span className="text-muted-foreground">Storage</span>
                   <span>{formatBytes(selectedTenant.storageBytesUsed)}</span>
                 </div>
-                {selectedTenant.stripeCustomerId && (
+                {selectedTenant.polarCustomerId && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Stripe Customer</span>
-                    <span className="font-mono text-xs">{selectedTenant.stripeCustomerId}</span>
+                    <span className="text-muted-foreground">Polar Customer</span>
+                    <span className="font-mono text-xs">{selectedTenant.polarCustomerId}</span>
                   </div>
                 )}
               </div>

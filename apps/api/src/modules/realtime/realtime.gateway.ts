@@ -5,10 +5,8 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { createClerkClient, verifyToken } from '@clerk/backend';
-import { UsersService } from '../users/users.service';
+import { Logger } from '@nestjs/common';
+import { auth } from '../auth/better-auth';
 
 interface AuthenticatedSocket extends Socket {
   userId: string;
@@ -17,6 +15,7 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
   transports: ['websocket', 'polling'],
+  cors: { origin: true, credentials: true },
 })
 export class RealtimeGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -25,91 +24,52 @@ export class RealtimeGateway
   server: Server;
 
   private readonly logger = new Logger(RealtimeGateway.name);
-  private readonly clerk;
-
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly usersService: UsersService,
-  ) {
-    this.clerk = createClerkClient({
-      secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
-    });
-  }
 
   async handleConnection(client: AuthenticatedSocket) {
+    // Read bearer token from socket.io auth payload (clients pass it as auth.token)
+    // or fall back to the Authorization header for compatibility.
+    const token: string | undefined =
+      client.handshake.auth?.token ||
+      (client.handshake.headers?.authorization?.startsWith('Bearer ')
+        ? client.handshake.headers.authorization.slice(7)
+        : undefined);
+
+    if (!token) {
+      this.logger.warn(`Socket connect rejected (no token): ${client.id}`);
+      client.disconnect(true);
+      return;
+    }
+
     try {
-      const token =
-        client.handshake.auth?.token ||
-        client.handshake.headers?.authorization?.replace('Bearer ', '');
+      const headers = new Headers();
+      headers.set('Authorization', `Bearer ${token}`);
+      const session = await auth.api.getSession({ headers });
 
-      if (!token) {
-        throw new UnauthorizedException('No token provided');
+      if (!session?.session || !session?.user) {
+        this.logger.warn(`Socket connect rejected (invalid session): ${client.id}`);
+        client.disconnect(true);
+        return;
       }
 
-      // Verify token with Clerk
-      const payload = await verifyToken(token, {
-        secretKey: this.configService.get<string>('CLERK_SECRET_KEY', ''),
-      }) as any;
+      const userId = session.user.id;
+      const tenantId = (session.session as any).activeOrganizationId;
 
-      // Resolve email from Clerk user
-      let email = String(payload.email || '');
-      let name = 'Unknown';
-      try {
-        const clerkUser = await this.clerk.users.getUser(payload.sub);
-        email = email ||
-          clerkUser.emailAddresses?.find(
-            (e) => e.id === clerkUser.primaryEmailAddressId,
-          )?.emailAddress || '';
-        name =
-          [clerkUser.firstName, clerkUser.lastName]
-            .filter(Boolean)
-            .join(' ') || email.split('@')[0] || 'Unknown';
-      } catch {
-        // Fall through with defaults
-      }
-
-      // Resolve tenant from org_id or personal tenant
-      let tenantId: string | undefined;
-      if (payload.org_id) {
-        tenantId = await this.usersService.getTenantIdByClerkOrgId(payload.org_id) || undefined;
-        if (!tenantId) {
-          // Auto-provision for new Clerk org
-          try {
-            const org = await this.clerk.organizations.getOrganization({ organizationId: payload.org_id });
-            const slug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `org-${Date.now()}`;
-            tenantId = await this.usersService.autoProvisionTenant(org.name || 'My Organization', slug, payload.org_id);
-          } catch { /* fall through */ }
-        }
-      }
-      if (!tenantId && email) {
-        // Personal tenant fallback
-        const slug = email.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `user-${Date.now()}`;
-        tenantId = await this.usersService.autoProvisionPersonalTenant(email, slug);
-      }
       if (!tenantId) {
-        throw new UnauthorizedException('Cannot resolve tenant');
+        this.logger.warn(`Socket connect rejected (no active org): user=${userId}`);
+        client.disconnect(true);
+        return;
       }
 
-      // Sync user
-      const user = await this.usersService.syncFromClerk(
-        payload.sub,
-        email,
-        name,
-        tenantId,
-      );
-
-      // Attach identity to socket
-      client.userId = user.id;
+      client.userId = userId;
       client.tenantId = tenantId;
-
-      // Join rooms
       client.join(`tenant:${tenantId}`);
-      client.join(`user:${user.id}`);
+      client.join(`user:${userId}`);
 
-      this.logger.log(`Client connected: ${user.id} (tenant: ${tenantId})`);
-    } catch (error) {
-      this.logger.warn(`Connection rejected: ${error instanceof Error ? error.message : error}`);
-      client.emit('error', { message: 'Authentication failed' });
+      this.logger.log(`Client connected: ${userId} (tenant: ${tenantId})`);
+    } catch (err) {
+      this.logger.warn(
+        `Socket connect rejected (auth error): ${err instanceof Error ? err.message : err}`,
+      );
       client.disconnect(true);
     }
   }

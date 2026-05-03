@@ -1,15 +1,25 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Like, ILike } from 'typeorm';
-import { v4 as uuidv4 } from 'uuid';
+import { Repository, In } from 'typeorm';
 import { User, UserStatus } from './entities/user.entity';
 import { Role } from './entities/role.entity';
 import { Tenant } from './entities/tenant.entity';
 import { CreateUserDto, UpdateUserDto, UserQueryDto, CreateRoleDto, UpdateRoleDto } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
-import { UsageService } from '../billing/usage.service';
+import { UsageService } from '../../common/tenant/usage.service';
 import { TenantService } from '../../common/tenant/tenant.service';
 
+/**
+ * UsersService — works on Better Auth's `users` table.
+ *
+ * Users are GLOBAL identities; their membership in an organization is tracked
+ * via the `members` table. Every tenant-scoped lookup JOINs through `members`
+ * to enforce that the requested user actually belongs to the requesting tenant.
+ *
+ * Better Auth owns the row lifecycle (sign-up creates the user; org-invite
+ * creates the member). Our `roles`/`user_roles` tables are kept for
+ * fine-grained per-permission roles in addition to Better Auth's owner/admin/member.
+ */
 @Injectable()
 export class UsersService {
   constructor(
@@ -26,73 +36,24 @@ export class UsersService {
   // ==================== USER METHODS ====================
 
   /**
-   * Sync a user from Clerk on login. Finds by email + tenantId, creates if not found.
-   * Clerk `sub` (e.g. "user_2abc123") is not a valid UUID, so we use auto-generated UUIDs
-   * for the user primary key and match on email within the tenant instead.
+   * Create a user as a member of the given tenant.
+   * Used for admin-driven user creation in Settings > Users.
+   * Note: this creates BOTH the auth identity AND the member row;
+   * for invitation flows, use Better Auth's invitation API instead.
    */
-  async syncFromClerk(
-    clerkUserId: string,
-    email: string,
-    name: string,
-    tenantId: string,
-  ): Promise<User> {
-    // Find existing user by email in this tenant
-    let user = await this.userRepository.findOne({
-      where: { email, tenantId },
-      relations: ['roles'],
-    });
-
-    if (user) {
-      user.lastLoginAt = new Date();
-      return this.userRepository.save(user);
-    }
-
-    // Auto-provision new user on first login
-    // First user in a tenant gets admin role, subsequent users get technician
-    const existingUserCount = await this.userRepository.count({ where: { tenantId } });
-    const roleName = existingUserCount === 0 ? 'admin' : 'technician';
-    const defaultRole = await this.roleRepository.findOne({
-      where: { name: roleName, tenantId },
-    });
-
-    const [firstName, ...lastParts] = name.split(' ');
-
-    user = this.userRepository.create({
-      id: uuidv4(),
-      tenantId,
-      username: email.split('@')[0],
-      email,
-      firstName: firstName || '',
-      lastName: lastParts.join(' ') || '',
-      lastLoginAt: new Date(),
-    });
-
-    user = await this.userRepository.save(user);
-
-    // Assign default role via raw query since user_roles has tenant_id
-    if (defaultRole) {
-      await this.userRepository.query(
-        `INSERT INTO user_roles (user_id, role_id, tenant_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-        [user.id, defaultRole.id, tenantId],
-      );
-      user.roles = [defaultRole];
-    }
-
-    return user;
-  }
-
   async create(dto: CreateUserDto, tenantId: string): Promise<User> {
     await this.usageService.enforceUserLimit(tenantId);
 
-    const existingUser = await this.userRepository.findOne({
-      where: [
-        { email: dto.email, tenantId },
-        { username: dto.username, tenantId },
-      ],
-    });
-
-    if (existingUser) {
-      throw new ConflictException('User with this email or username already exists');
+    // Email is globally unique now
+    const existingByEmail = await this.userRepository.findOne({ where: { email: dto.email } });
+    if (existingByEmail) {
+      // If user exists but isn't a member of this tenant, add them
+      const isMember = await this.isMemberOfTenant(existingByEmail.id, tenantId);
+      if (isMember) {
+        throw new ConflictException('User already exists in this organization');
+      }
+      await this.addMember(existingByEmail.id, tenantId, 'member');
+      return this.findOne(existingByEmail.id, tenantId);
     }
 
     const roles = dto.roleIds?.length
@@ -100,12 +61,11 @@ export class UsersService {
       : [];
 
     const { roleIds, ...userData } = dto;
-    const user = this.userRepository.create({
-      ...userData,
-      tenantId,
-    });
-
+    const user = this.userRepository.create(userData);
     const savedUser = await this.userRepository.save(user);
+
+    await this.addMember(savedUser.id, tenantId, 'member');
+
     if (roles.length > 0) {
       await this.setUserRoleIds(savedUser.id, roles.map((role) => role.id), tenantId);
     }
@@ -118,9 +78,8 @@ export class UsersService {
 
     const queryBuilder = this.userRepository
       .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
       .leftJoinAndSelect('user.roles', 'role');
-
-    queryBuilder.andWhere('user.tenantId = :tenantId', { tenantId });
 
     if (search) {
       queryBuilder.andWhere(
@@ -151,23 +110,26 @@ export class UsersService {
   }
 
   async findOne(id: string, tenantId: string): Promise<User> {
-    const user = await this.userRepository.findOne({
-      where: { id, tenantId },
-      relations: ['roles'],
-    });
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .leftJoinAndSelect('user.roles', 'role')
+      .where('user.id = :id', { id })
+      .getOne();
 
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-
     return user;
   }
 
   async findByEmail(email: string, tenantId: string): Promise<User | null> {
-    return this.userRepository.findOne({
-      where: { email, tenantId },
-      relations: ['roles'],
-    });
+    return this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .leftJoinAndSelect('user.roles', 'role')
+      .where('user.email = :email', { email })
+      .getOne();
   }
 
   async update(id: string, dto: UpdateUserDto, tenantId: string): Promise<User> {
@@ -228,6 +190,25 @@ export class UsersService {
       [userId, roleId, tenantId],
     );
     return this.findOne(userId, tenantId);
+  }
+
+  // ==================== MEMBERSHIP HELPERS ====================
+
+  private async isMemberOfTenant(userId: string, tenantId: string): Promise<boolean> {
+    const result = await this.userRepository.query(
+      `SELECT 1 FROM members WHERE user_id = $1 AND organization_id = $2 LIMIT 1`,
+      [userId, tenantId],
+    );
+    return result.length > 0;
+  }
+
+  private async addMember(userId: string, tenantId: string, role: string): Promise<void> {
+    await this.userRepository.query(
+      `INSERT INTO members (id, user_id, organization_id, role, created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, now())
+       ON CONFLICT DO NOTHING`,
+      [userId, tenantId, role],
+    );
   }
 
   // ==================== ROLE METHODS ====================
@@ -295,31 +276,16 @@ export class UsersService {
 
   // ==================== TENANT / ORGANIZATION METHODS ====================
 
-  async getOrganization(tenantId?: string): Promise<Tenant> {
-    let org: Tenant | null;
-
-    if (tenantId) {
-      org = await this.tenantRepository.findOne({ where: { id: tenantId } });
-    } else {
-      // Fallback for public endpoints without tenant context
-      org = await this.tenantRepository.findOne({ where: {} });
-    }
-
+  async getOrganization(tenantId: string): Promise<Tenant> {
+    const org = await this.tenantRepository.findOne({ where: { id: tenantId } });
     if (!org) {
-      org = this.tenantRepository.create({
-        name: 'My Organization',
-        slug: 'default',
-      });
-      org = await this.tenantRepository.save(org);
+      throw new NotFoundException(`Organization with ID ${tenantId} not found`);
     }
-
     return org;
   }
 
   async updateOrganization(data: Partial<Tenant>, tenantId: string): Promise<Tenant> {
     const org = await this.getOrganization(tenantId);
-    // Only allow updating safe tenant profile fields here.
-    // Plan-controlled modules are managed by billing/admin flows.
     const { name, logoUrl, timezone, currency, settings } = data as any;
     if (name !== undefined) org.name = name;
     if (logoUrl !== undefined) org.logoUrl = logoUrl;
@@ -347,126 +313,39 @@ export class UsersService {
     return this.tenantRepository.findOne({ where: { slug } });
   }
 
-  async findTenantByClerkOrgId(clerkOrgId: string): Promise<Tenant | null> {
-    return this.tenantRepository.findOne({ where: { clerkOrgId } });
-  }
-
-  async getTenantIdByClerkOrgId(clerkOrgId: string): Promise<string | null> {
-    const tenant = await this.tenantRepository.findOne({
-      where: { clerkOrgId },
-      select: ['id'],
-    });
-    return tenant?.id || null;
-  }
-
-  // ==================== AUTO-PROVISIONING ====================
-
-  async autoProvisionTenant(
-    companyName: string,
-    slug: string,
-    clerkOrgId: string,
-  ): Promise<string | undefined> {
-    try {
-      // Check slug uniqueness
-      let finalSlug = slug;
-      const existing = await this.tenantRepository.findOne({ where: { slug: finalSlug } });
-      if (existing) {
-        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
-      }
-
-      const tenant = this.tenantRepository.create({
-        name: companyName,
-        slug: finalSlug,
-        clerkOrgId,
-        timezone: 'UTC',
-        currency: 'USD',
-      });
-      await this.tenantRepository.save(tenant);
-      await this.seedDefaultRoles(tenant.id);
-      return tenant.id;
-    } catch {
-      return undefined;
-    }
-  }
-
-  async autoProvisionPersonalTenant(
-    email: string,
-    slug: string,
-  ): Promise<string | undefined> {
-    try {
-      // Check if user already exists in any tenant
-      const existingUser = await this.userRepository.findOne({ where: { email } });
-      if (existingUser) return existingUser.tenantId;
-
-      // Check if slug already exists
-      let finalSlug = slug;
-      const existing = await this.tenantRepository.findOne({ where: { slug: finalSlug } });
-      if (existing) {
-        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
-      }
-
-      const tenant = this.tenantRepository.create({
-        name: `${email.split('@')[0]}'s Organization`,
-        slug: finalSlug,
-        timezone: 'UTC',
-        currency: 'USD',
-      });
-      await this.tenantRepository.save(tenant);
-      await this.seedDefaultRoles(tenant.id);
-      return tenant.id;
-    } catch {
-      return undefined;
-    }
-  }
-
   // ==================== SEED DEFAULT ROLES ====================
 
+  /**
+   * Called from Better Auth's organization.afterCreate hook in better-auth.ts.
+   * Seeds the standard role catalog so admins can assign granular permissions.
+   */
   async seedDefaultRoles(tenantId: string): Promise<void> {
     const defaultRoles = [
-      {
-        name: 'admin',
-        description: 'Full system access',
-        permissions: ['*'],
-        isSystem: true,
-      },
+      { name: 'admin', description: 'Full system access', permissions: ['*'], isSystem: true },
       {
         name: 'manager',
         description: 'Manage work orders, assets, and users',
         permissions: [
-          'work_orders:read',
-          'work_orders:write',
-          'assets:read',
-          'assets:write',
-          'pm:read',
-          'pm:write',
-          'inventory:read',
-          'inventory:write',
-          'reports:read',
-          'users:read',
+          'work_orders:read', 'work_orders:write',
+          'assets:read', 'assets:write',
+          'pm:read', 'pm:write',
+          'inventory:read', 'inventory:write',
+          'reports:read', 'users:read',
         ],
         isSystem: true,
       },
       {
         name: 'technician',
         description: 'Complete assigned work orders',
-        permissions: [
-          'work_orders:read',
-          'work_orders:write:own',
-          'assets:read',
-          'inventory:read',
-        ],
+        permissions: ['work_orders:read', 'work_orders:write:own', 'assets:read', 'inventory:read'],
         isSystem: true,
       },
       {
         name: 'planner',
         description: 'Plan and schedule maintenance',
         permissions: [
-          'work_orders:read',
-          'work_orders:write',
-          'assets:read',
-          'pm:read',
-          'pm:write',
-          'inventory:read',
+          'work_orders:read', 'work_orders:write',
+          'assets:read', 'pm:read', 'pm:write', 'inventory:read',
         ],
         isSystem: true,
       },
@@ -479,23 +358,13 @@ export class UsersService {
       {
         name: 'inventory_manager',
         description: 'Manage inventory and parts',
-        permissions: [
-          'inventory:read',
-          'inventory:write',
-          'work_orders:read',
-        ],
+        permissions: ['inventory:read', 'inventory:write', 'work_orders:read'],
         isSystem: true,
       },
       {
         name: 'viewer',
         description: 'Read-only access',
-        permissions: [
-          'work_orders:read',
-          'assets:read',
-          'pm:read',
-          'inventory:read',
-          'reports:read',
-        ],
+        permissions: ['work_orders:read', 'assets:read', 'pm:read', 'inventory:read', 'reports:read'],
         isSystem: true,
       },
     ];
@@ -506,10 +375,7 @@ export class UsersService {
       });
 
       if (!existing) {
-        const role = this.roleRepository.create({
-          ...roleData,
-          tenantId,
-        });
+        const role = this.roleRepository.create({ ...roleData, tenantId });
         await this.roleRepository.save(role);
       }
     }

@@ -1,5 +1,5 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
-import { TenantService, PLAN_LIMITS } from '../../common/tenant/tenant.service';
+import { TenantService, PLAN_LIMITS } from './tenant.service';
 
 @Injectable()
 export class UsageService {
@@ -31,7 +31,7 @@ export class UsageService {
     const tenant = await this.tenantService.findById(tenantId);
     const limits = PLAN_LIMITS[tenant.plan];
     const maxBytes = limits.maxStorageGB * 1024 * 1024 * 1024;
-    const projectedUsage = tenant.storageBytesUsed + fileSizeBytes;
+    const projectedUsage = Number(tenant.storageBytesUsed) + fileSizeBytes;
 
     if (projectedUsage > maxBytes) {
       throw new ForbiddenException(

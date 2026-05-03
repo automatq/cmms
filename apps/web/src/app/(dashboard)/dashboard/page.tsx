@@ -256,7 +256,7 @@ export default function DashboardPage() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="h-[700px]">
+          <div className="min-h-[700px]">
             <DashboardCalendar
               events={calendarEvents}
               onEventClick={(event) => {

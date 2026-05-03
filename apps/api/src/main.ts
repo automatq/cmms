@@ -4,16 +4,18 @@ import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
-import { json } from 'express';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { JsonLoggerService } from './common/logger/json-logger.service';
 import { RequestLoggingInterceptor } from './common/logger/request-logging.interceptor';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
+import { auth } from './modules/auth/better-auth';
 
 function validateProductionEnv() {
   const required = [
     'DB_HOST', 'DB_PASSWORD', 'DB_USERNAME', 'DB_DATABASE',
-    'CLERK_SECRET_KEY',
+    'BETTER_AUTH_SECRET', 'BETTER_AUTH_URL',
+    'PUBLIC_WEB_URL',
     'CORS_ORIGINS',
   ];
   const missing = required.filter((key) => !process.env[key]);
@@ -31,6 +33,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
+    bodyParser: false, // Better Auth needs the raw body; we re-add JSON parsing below for /api/v1/*
     ...(isProduction ? { logger: new JsonLoggerService() } : {}),
   });
 
@@ -48,23 +51,99 @@ async function bootstrap() {
   // Compression
   app.use(compression());
 
-  // Request body size limit
-  app.use(json({ limit: '10mb' }));
+  // Build trusted CORS origins list (used by both Better Auth handler below
+  // and NestJS CORS middleware further down).
+  const corsOriginsList = (configService.get('CORS_ORIGINS', '') || '')
+    .split(',')
+    .map((o: string) => o.trim())
+    .filter(Boolean);
 
-  // Global prefix
+  // Mount Better Auth handler at /api/auth/* BEFORE body parsers and global prefix.
+  // Better Auth needs raw bodies; everything else (api/v1/*) gets JSON parsing.
+  // We can't use nestjs-better-auth's auto-mounting because it uses Express-5 *splat
+  // syntax that doesn't match in Express 4 (which Nest 10's platform-express ships).
+  // We also handle CORS inline here because NestJS's app.enableCors() runs after
+  // these routes are matched (the Express router matches by registration order).
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.all('/api/auth/*', async (req: any, res: any) => {
+    const requestOrigin = req.headers.origin as string | undefined;
+    const allowedOrigin =
+      requestOrigin && (corsOriginsList.length === 0 || corsOriginsList.includes(requestOrigin))
+        ? requestOrigin
+        : (corsOriginsList[0] || '*');
+
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, Cookie',
+    );
+    res.setHeader('Access-Control-Expose-Headers', 'set-auth-token, set-auth-jwt');
+    res.setHeader('Vary', 'Origin');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+
+    try {
+      const url = new URL(req.url, `${req.protocol}://${req.get('host')}`);
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (Array.isArray(value)) value.forEach((v) => headers.append(key, v));
+        else if (value !== undefined) headers.append(key, String(value));
+      }
+      const init: RequestInit = { method: req.method, headers };
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        const chunks: Buffer[] = [];
+        await new Promise<void>((resolve, reject) => {
+          req.on('data', (chunk: Buffer) => chunks.push(chunk));
+          req.on('end', () => resolve());
+          req.on('error', reject);
+        });
+        if (chunks.length > 0) init.body = Buffer.concat(chunks);
+      }
+      const response = await auth.handler(new Request(url.toString(), init));
+      res.status(response.status);
+      response.headers.forEach((value, key) => {
+        // Don't let Better Auth's responses overwrite our CORS headers
+        if (!key.toLowerCase().startsWith('access-control-')) {
+          res.setHeader(key, value);
+        }
+      });
+      const body = response.body ? await response.text() : null;
+      res.send(body);
+    } catch (err) {
+      console.error('Better Auth handler error:', err);
+      res.status(500).json({ error: 'Internal authentication error' });
+    }
+  });
+
+  // Re-enable body parsing for non-Better Auth routes
+  // (bodyParser:false on NestFactory.create disabled it so Better Auth can read raw bodies)
+  expressApp.use((req: any, res: any, next: any) => {
+    if (req.path.startsWith('/api/auth')) return next();
+    json({ limit: '10mb' })(req, res, (err) => {
+      if (err) return next(err);
+      urlencoded({ extended: true, limit: '10mb' })(req, res, next);
+    });
+  });
+
+  // Global prefix (Better Auth's /api/auth/* is already mounted above and bypasses this)
   app.setGlobalPrefix('api/v1');
 
   // CORS - require explicit origin configuration in production
-  const corsOrigins = configService.get('CORS_ORIGINS', '');
   const nodeEnv = configService.get('NODE_ENV', 'development');
   app.enableCors({
-    origin: corsOrigins
-      ? corsOrigins.split(',').map((o: string) => o.trim())
+    origin: corsOriginsList.length > 0
+      ? corsOriginsList
       : nodeEnv === 'production'
         ? false
         : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['set-auth-token', 'set-auth-jwt'],
     credentials: true,
   });
 
@@ -91,7 +170,7 @@ async function bootstrap() {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'Enter Clerk JWT token',
+          description: 'Enter JWT access token',
         },
         'JWT',
       )
