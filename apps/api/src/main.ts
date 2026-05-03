@@ -9,6 +9,7 @@ import { AppModule } from './app.module';
 import { JsonLoggerService } from './common/logger/json-logger.service';
 import { RequestLoggingInterceptor } from './common/logger/request-logging.interceptor';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
+import { auth } from './modules/auth/better-auth';
 
 function validateProductionEnv() {
   const required = [
@@ -50,9 +51,43 @@ async function bootstrap() {
   // Compression
   app.use(compression());
 
-  // Re-enable body parsing for non-Better Auth routes
-  // (bodyParser:false above disabled it so Better Auth can read raw bodies)
+  // Mount Better Auth handler at /api/auth/* BEFORE body parsers and global prefix.
+  // Better Auth needs raw bodies; everything else (api/v1/*) gets JSON parsing.
+  // We can't use nestjs-better-auth's auto-mounting because it uses Express-5 *splat
+  // syntax that doesn't match in Express 4 (which Nest 10's platform-express ships).
   const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.all('/api/auth/*', async (req: any, res: any) => {
+    try {
+      const url = new URL(req.url, `${req.protocol}://${req.get('host')}`);
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (Array.isArray(value)) value.forEach((v) => headers.append(key, v));
+        else if (value !== undefined) headers.append(key, String(value));
+      }
+      const init: RequestInit = { method: req.method, headers };
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        // raw body via express's default - we haven't body-parsed /api/auth/*
+        const chunks: Buffer[] = [];
+        await new Promise<void>((resolve, reject) => {
+          req.on('data', (chunk: Buffer) => chunks.push(chunk));
+          req.on('end', () => resolve());
+          req.on('error', reject);
+        });
+        if (chunks.length > 0) init.body = Buffer.concat(chunks);
+      }
+      const response = await auth.handler(new Request(url.toString(), init));
+      res.status(response.status);
+      response.headers.forEach((value, key) => res.setHeader(key, value));
+      const body = response.body ? await response.text() : null;
+      res.send(body);
+    } catch (err) {
+      console.error('Better Auth handler error:', err);
+      res.status(500).json({ error: 'Internal authentication error' });
+    }
+  });
+
+  // Re-enable body parsing for non-Better Auth routes
+  // (bodyParser:false on NestFactory.create disabled it so Better Auth can read raw bodies)
   expressApp.use((req: any, res: any, next: any) => {
     if (req.path.startsWith('/api/auth')) return next();
     json({ limit: '10mb' })(req, res, (err) => {
@@ -61,7 +96,7 @@ async function bootstrap() {
     });
   });
 
-  // Global prefix (Better Auth handler is mounted at /api/auth/* by its module — bypasses prefix)
+  // Global prefix (Better Auth's /api/auth/* is already mounted above and bypasses this)
   app.setGlobalPrefix('api/v1');
 
   // CORS - require explicit origin configuration in production
