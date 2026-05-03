@@ -1,5 +1,7 @@
 import { Resend } from 'resend';
+import { Logger } from '@nestjs/common';
 
+const logger = new Logger('EmailSender');
 const resend = new Resend(process.env.RESEND_API_KEY || '');
 
 const FROM = process.env.EMAIL_FROM || 'Nexly <noreply@nexly.local>';
@@ -7,14 +9,21 @@ const APP_NAME = 'Nexly';
 
 async function send(to: string, subject: string, html: string): Promise<void> {
   if (!process.env.RESEND_API_KEY) {
-    // No-op if not configured (dev environments)
-    console.log(`[email-sender] skip: ${subject} -> ${to}`);
+    logger.warn(`No RESEND_API_KEY set; skipping "${subject}" -> ${to}`);
     return;
   }
+
   try {
-    await resend.emails.send({ from: FROM, to, subject, html });
-  } catch (err) {
-    console.error('[email-sender] failed:', err);
+    const result = await resend.emails.send({ from: FROM, to, subject, html });
+    if (result.error) {
+      logger.error(
+        `Resend rejected "${subject}" -> ${to}: ${result.error.name}: ${result.error.message}`,
+      );
+      return;
+    }
+    logger.log(`Email sent: id=${result.data?.id} to=${to} subject="${subject}"`);
+  } catch (err: any) {
+    logger.error(`Resend send threw for "${subject}" -> ${to}: ${err?.message || err}`);
   }
 }
 
