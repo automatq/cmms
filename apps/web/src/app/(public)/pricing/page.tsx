@@ -24,8 +24,8 @@ const plans = [
       { name: 'AI assistant', included: false },
       { name: 'IoT sensors', included: false },
     ],
-    cta: 'Open Dashboard',
-    href: '/dashboard',
+    cta: 'Start free trial',
+    href: '/sign-up',
     popular: false,
   },
   {
@@ -45,8 +45,8 @@ const plans = [
       { name: 'AI assistant', included: true },
       { name: 'IoT sensors', included: false },
     ],
-    cta: 'Open Dashboard',
-    href: '/dashboard',
+    cta: 'Start free trial',
+    href: '/sign-up',
     popular: true,
   },
   {
@@ -66,8 +66,8 @@ const plans = [
       { name: 'AI assistant', included: true },
       { name: 'IoT sensors', included: true },
     ],
-    cta: 'Open Dashboard',
-    href: '/dashboard',
+    cta: 'Start free trial',
+    href: '/sign-up',
     popular: false,
   },
 ]

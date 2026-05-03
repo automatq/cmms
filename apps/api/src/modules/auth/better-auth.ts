@@ -210,12 +210,15 @@ export const auth: any = betterAuth({
         afterCreate: async ({ organization }) => {
           // Seed default permission roles for the new tenant
           await seedDefaultRoles(pool, organization.id);
-          // Set sensible defaults on the org
+          // New orgs get a 14-day Pro trial (no card required upfront).
+          // When trial_ends_at passes without a payment, the JwtAuthGuard flips
+          // status to 'suspended' (see suspended-trial check in guard).
           await pool.query(
             `UPDATE organizations SET
-               status = COALESCE(status, 'trial'),
-               plan = COALESCE(plan, 'free'),
-               modules = COALESCE(modules, '{"preventiveMaintenance":true,"inventory":true,"purchaseOrders":true,"reports":true,"aiAssistant":true,"sensors":true,"workRequestsPortal":true,"dataImport":true}'::jsonb),
+               status = 'trial',
+               plan = 'pro',
+               trial_ends_at = now() + interval '14 days',
+               modules = '{"preventiveMaintenance":true,"inventory":true,"purchaseOrders":true,"reports":true,"aiAssistant":true,"sensors":false,"workRequestsPortal":true,"dataImport":true}'::jsonb,
                settings = COALESCE(settings, '{}'::jsonb),
                timezone = COALESCE(timezone, 'UTC'),
                currency = COALESCE(currency, 'USD'),

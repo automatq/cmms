@@ -4,19 +4,40 @@ import {
   ExecutionContext,
   UnauthorizedException,
   ForbiddenException,
+  HttpException,
   Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Auth } from 'better-auth';
 import { InjectBetterAuth } from 'nestjs-better-auth';
+import { Pool } from 'pg';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
-import { PlanTier } from '../../users/entities/tenant.entity';
+import { PlanTier, TenantStatus } from '../../users/entities/tenant.entity';
+
+// All non-billing permissions used by the app.
+const ALL_NON_BILLING_PERMISSIONS = [
+  'work_orders:read', 'work_orders:write', 'work_orders:write:own',
+  'work_requests:write',
+  'assets:read', 'assets:write',
+  'pm:read', 'pm:write',
+  'inventory:read', 'inventory:write', 'inventory:delete',
+  'reports:read',
+  'users:read', 'users:write',
+  'settings:read', 'settings:write',
+  'ai:read',
+  'admin:tenants',
+];
+
+const BILLING_PERMISSIONS = ['billing:read', 'billing:write'];
 
 const PERMISSIONS_BY_ROLE: Record<string, string[]> = {
+  // Owner is the user who created the org. Full access including billing.
   owner: ['*'],
-  admin: ['*'],
+  // Admins manage everyday operations but not billing by default.
+  admin: ALL_NON_BILLING_PERMISSIONS,
+  // Members get the technician permission set.
   member: [
     'work_orders:read',
     'work_orders:write:own',
@@ -26,6 +47,33 @@ const PERMISSIONS_BY_ROLE: Record<string, string[]> = {
     'reports:read',
   ],
 };
+
+let pool: Pool | undefined;
+function getPool(): Pool {
+  if (!pool) {
+    const databaseUrl = process.env.DATABASE_URL;
+    pool = databaseUrl
+      ? new Pool({
+          connectionString: databaseUrl,
+          ssl:
+            process.env.DB_SSL === 'true' || databaseUrl.includes('sslmode=require')
+              ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+              : undefined,
+        })
+      : new Pool({
+          host: process.env.DB_HOST,
+          port: parseInt(process.env.DB_PORT || '5432', 10),
+          user: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_DATABASE,
+          ssl:
+            process.env.DB_SSL === 'true'
+              ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+              : undefined,
+        });
+  }
+  return pool;
+}
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -73,7 +121,45 @@ export class JwtAuthGuard implements CanActivate {
       const member = await (this.auth.api as any).getActiveMember({ headers });
       role = member?.role || 'member';
     } catch {
-      // No member record (org owner, race, etc.) - fall back to member
+      // No member record - fall back to member
+    }
+
+    // Check the org's billing/trial status. If the trial has expired without a
+    // payment method, suspend the org. Suspended orgs return 402 (payment
+    // required) on every non-billing request - the frontend redirects to a
+    // "Reactivate" page.
+    const orgRow = await getPool().query(
+      `SELECT status, plan, trial_ends_at FROM organizations WHERE id = $1 LIMIT 1`,
+      [tenantId],
+    );
+    const org = orgRow.rows[0];
+    if (!org) {
+      throw new ForbiddenException('Organization not found');
+    }
+
+    let status: string = org.status;
+    if (status === 'trial' && org.trial_ends_at && new Date(org.trial_ends_at) < new Date()) {
+      status = 'suspended';
+      // persist the new status
+      await getPool().query(
+        `UPDATE organizations SET status = 'suspended', updated_at = now() WHERE id = $1`,
+        [tenantId],
+      );
+    }
+
+    if (status === TenantStatus.SUSPENDED || status === TenantStatus.CANCELLED) {
+      // Allow billing endpoints through so users can reactivate.
+      const path: string = request.path || request.url || '';
+      const isBillingPath = path.includes('/billing/');
+      if (!isBillingPath) {
+        throw new HttpException(
+          {
+            message: 'Subscription inactive. Add a payment method to continue.',
+            status,
+          },
+          402,
+        );
+      }
     }
 
     const permissions = PERMISSIONS_BY_ROLE[role] || PERMISSIONS_BY_ROLE.member;
@@ -82,7 +168,7 @@ export class JwtAuthGuard implements CanActivate {
       userId: session.user.id,
       tenantId,
       email: session.user.email,
-      plan: PlanTier.ENTERPRISE,
+      plan: (org.plan as PlanTier) || PlanTier.FREE,
       permissions,
       roles: [role],
     };

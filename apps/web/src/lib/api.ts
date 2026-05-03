@@ -38,7 +38,18 @@ class ApiClient {
 
     this.client.interceptors.response.use(
       (response) => response,
-      (error: AxiosError) => Promise.reject(error)
+      (error: AxiosError) => {
+        // 402 means the org's trial expired or subscription is cancelled.
+        // Redirect to a "reactivate" page (unless we're already there or in
+        // billing endpoints, which the API allows through for reactivation).
+        if (error.response?.status === 402 && typeof window !== 'undefined') {
+          const path = window.location.pathname
+          if (!path.startsWith('/reactivate') && !path.startsWith('/auth/')) {
+            window.location.href = '/reactivate'
+          }
+        }
+        return Promise.reject(error)
+      }
     )
   }
 

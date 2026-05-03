@@ -13,14 +13,20 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             </div>
             <span className="font-bold text-lg">Nexly</span>
           </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/pricing">
-              <Button variant="ghost">Pricing</Button>
-            </Link>
-            <Link href="/dashboard">
-              <Button>Open Dashboard</Button>
-            </Link>
+          <nav className="hidden md:flex items-center gap-6 text-sm">
+            <Link href="/features" className="text-muted-foreground hover:text-foreground">Features</Link>
+            <Link href="/pricing" className="text-muted-foreground hover:text-foreground">Pricing</Link>
+            <Link href="/about" className="text-muted-foreground hover:text-foreground">About</Link>
+            <Link href="/contact" className="text-muted-foreground hover:text-foreground">Contact</Link>
           </nav>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" asChild>
+              <Link href="/sign-in">Sign in</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/sign-up">Start free trial</Link>
+            </Button>
+          </div>
         </div>
       </header>
       {children}

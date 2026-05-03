@@ -100,6 +100,9 @@ export class Tenant {
   @Column({ name: 'onboarding_completed', default: false })
   onboardingCompleted: boolean;
 
+  @Column({ type: 'timestamptz', nullable: true, name: 'trial_ends_at' })
+  trialEndsAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
