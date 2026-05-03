@@ -40,15 +40,17 @@ export class ActivityService {
   ) {}
 
   private async getUserDisplayName(userId: string, tenantId: string): Promise<string> {
-    const user = await this.userRepository.findOne({
-      where: { id: userId, tenantId },
-    });
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .where('user.id = :userId', { userId })
+      .getOne();
 
     if (!user) {
       return 'Unknown';
     }
 
-    return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username;
+    return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || user.email;
   }
 
   private async getActiveSession(userId: string, tenantId: string): Promise<TechActivity | null> {

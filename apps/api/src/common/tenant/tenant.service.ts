@@ -1,9 +1,8 @@
-import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Tenant, TenantStatus, PlanTier } from '../../modules/users/entities/tenant.entity';
-import { CreateTenantDto } from './dto/create-tenant.dto';
 
 // Plan limits configuration
 export const PLAN_LIMITS = {
@@ -76,10 +75,6 @@ export class TenantService {
     return this.tenantRepository.findOne({ where: { slug } });
   }
 
-  async findByAuth0OrgId(auth0OrgId: string): Promise<Tenant | null> {
-    return this.tenantRepository.findOne({ where: { auth0OrgId } });
-  }
-
   async isFeatureEnabled(tenantId: string, feature: string): Promise<boolean> {
     const tenant = await this.findById(tenantId);
     return tenant.modules?.[feature] === true;
@@ -117,35 +112,6 @@ export class TenantService {
 
   async updateStorageUsage(tenantId: string, bytesChange: number): Promise<void> {
     await this.tenantRepository.increment({ id: tenantId }, 'storageBytesUsed', bytesChange);
-  }
-
-  // ==================== TENANT PROVISIONING ====================
-
-  async provisionTenant(dto: CreateTenantDto): Promise<{
-    tenant: Tenant;
-    auth0OrgId: string | null;
-  }> {
-    const existing = await this.tenantRepository.findOne({ where: { slug: dto.slug } });
-    if (existing) {
-      throw new ConflictException(`Slug "${dto.slug}" is already taken`);
-    }
-
-    const planLimits = PLAN_LIMITS[PlanTier.FREE];
-    const tenant = this.tenantRepository.create({
-      name: dto.companyName,
-      slug: dto.slug,
-      status: TenantStatus.TRIAL,
-      plan: PlanTier.FREE,
-      modules: planLimits.modules,
-      timezone: dto.timezone || 'UTC',
-      currency: dto.currency || 'USD',
-    });
-
-    await this.tenantRepository.save(tenant);
-
-    // Auth0 organizations are created in the Auth0 dashboard or via Management API.
-    // The auth0OrgId will be linked when the first user from that org logs in.
-    return { tenant, auth0OrgId: null };
   }
 
   async findAll(): Promise<Tenant[]> {

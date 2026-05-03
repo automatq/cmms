@@ -1,14 +1,10 @@
 import {
   Controller,
-  Post,
   Get,
   Patch,
   Body,
   Param,
   ParseUUIDPipe,
-  UseGuards,
-  HttpCode,
-  HttpStatus,
   Query,
 } from '@nestjs/common';
 import {
@@ -18,9 +14,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { TenantService } from './tenant.service';
-import { CreateTenantDto } from './dto/create-tenant.dto';
 import { Public } from '../../modules/auth/decorators/public.decorator';
-import { Throttle } from '@nestjs/throttler';
 import { Permissions } from '../../modules/auth/decorators/permissions.decorator';
 import { PlanTier, TenantStatus } from '../../modules/users/entities/tenant.entity';
 
@@ -28,26 +22,6 @@ import { PlanTier, TenantStatus } from '../../modules/users/entities/tenant.enti
 @Controller('tenants')
 export class TenantController {
   constructor(private readonly tenantService: TenantService) {}
-
-  @Post('signup')
-  @Public()
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Sign up a new tenant (public)' })
-  @ApiResponse({ status: 201, description: 'Tenant created successfully' })
-  @ApiResponse({ status: 409, description: 'Slug already taken' })
-  async signup(@Body() dto: CreateTenantDto) {
-    const { tenant, auth0OrgId } = await this.tenantService.provisionTenant(dto);
-
-    return {
-      id: tenant.id,
-      name: tenant.name,
-      slug: tenant.slug,
-      plan: tenant.plan,
-      status: tenant.status,
-      auth0OrgId,
-    };
-  }
 
   @Get('check-slug')
   @Public()

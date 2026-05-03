@@ -66,9 +66,11 @@ export class TeamsService {
 
   async addMember(teamId: string, userId: string, tenantId: string): Promise<Team> {
     const team = await this.findOne(teamId, tenantId);
-    const user = await this.userRepository.findOne({
-      where: { id: userId, tenantId },
-    });
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .where('user.id = :userId', { userId })
+      .getOne();
 
     if (!user) {
       throw new NotFoundException(`User ${userId} not found`);

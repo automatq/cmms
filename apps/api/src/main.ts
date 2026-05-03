@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
-import { json } from 'express';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { JsonLoggerService } from './common/logger/json-logger.service';
 import { RequestLoggingInterceptor } from './common/logger/request-logging.interceptor';
@@ -13,7 +13,8 @@ import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 function validateProductionEnv() {
   const required = [
     'DB_HOST', 'DB_PASSWORD', 'DB_USERNAME', 'DB_DATABASE',
-    'DEFAULT_TENANT_ID', 'DEFAULT_USER_ID',
+    'BETTER_AUTH_SECRET', 'BETTER_AUTH_URL',
+    'PUBLIC_WEB_URL',
     'CORS_ORIGINS',
   ];
   const missing = required.filter((key) => !process.env[key]);
@@ -31,6 +32,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
+    bodyParser: false, // Better Auth needs the raw body; we re-add JSON parsing below for /api/v1/*
     ...(isProduction ? { logger: new JsonLoggerService() } : {}),
   });
 
@@ -48,10 +50,18 @@ async function bootstrap() {
   // Compression
   app.use(compression());
 
-  // Request body size limit
-  app.use(json({ limit: '10mb' }));
+  // Re-enable body parsing for non-Better Auth routes
+  // (bodyParser:false above disabled it so Better Auth can read raw bodies)
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.use((req: any, res: any, next: any) => {
+    if (req.path.startsWith('/api/auth')) return next();
+    json({ limit: '10mb' })(req, res, (err) => {
+      if (err) return next(err);
+      urlencoded({ extended: true, limit: '10mb' })(req, res, next);
+    });
+  });
 
-  // Global prefix
+  // Global prefix (Better Auth handler is mounted at /api/auth/* by its module — bypasses prefix)
   app.setGlobalPrefix('api/v1');
 
   // CORS - require explicit origin configuration in production

@@ -20,7 +20,7 @@ export enum PlanTier {
   ENTERPRISE = 'enterprise',
 }
 
-@Entity('tenants')
+@Entity('organizations')
 export class Tenant {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -85,8 +85,8 @@ export class Tenant {
   @Column({ nullable: true, name: 'stripe_subscription_id' })
   stripeSubscriptionId: string;
 
-  @Column({ nullable: true, name: 'auth0_org_id' })
-  auth0OrgId: string;
+  @Column({ type: 'jsonb', default: {} })
+  metadata: Record<string, unknown>;
 
   @Column({ type: 'int', default: 0, name: 'user_count' })
   userCount: number;
