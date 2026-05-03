@@ -35,10 +35,13 @@ export default function WorkRequestsPage() {
     const [rejectReason, setRejectReason] = useState('')
     const [filter, setFilter] = useState<string>('pending')
 
+    // Fetch all requests, filter client-side. The API's WorkOrderQueryDto only
+    // accepts WorkOrderStatus enum values; work_requests use a different status enum
+    // (pending/approved/rejected), so passing it as a query param gets rejected.
     const { data, isLoading } = useQuery({
-        queryKey: ['work-requests', filter],
+        queryKey: ['work-requests'],
         queryFn: async () => {
-            const res = await api.getWorkRequests({ status: filter || undefined })
+            const res = await api.getWorkRequests()
             return res.data?.data || res.data || []
         },
     })
@@ -63,7 +66,8 @@ export default function WorkRequestsPage() {
         onError: () => toast.error('Failed to reject work request'),
     })
 
-    const requests = Array.isArray(data) ? data : []
+    const allRequests = Array.isArray(data) ? data : []
+    const requests = filter ? allRequests.filter((r: any) => r.status === filter) : allRequests
 
     if (isLoading) {
         return (
