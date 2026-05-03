@@ -13,6 +13,7 @@ import {
   Warehouse,
   BarChart3,
   Settings,
+  LogOut,
   Menu,
   X,
   Wrench,
@@ -59,7 +60,7 @@ const reportSubNav = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
 
@@ -210,12 +211,17 @@ export function Sidebar() {
                 </p>
               </div>
             </div>
-            <Button variant="ghost" size="sm" className="w-full justify-start" asChild>
-              <Link href="/dashboard/settings">
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" className="flex-1 justify-start" asChild>
+                <Link href="/dashboard/settings">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Link>
+              </Button>
+              <Button variant="ghost" size="icon" onClick={logout} title="Sign out">
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>

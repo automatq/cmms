@@ -25,8 +25,13 @@ class ApiClient {
     })
 
     this.client.interceptors.request.use((config) => {
-      if (this.token) {
-        config.headers.Authorization = `Bearer ${this.token}`
+      const token =
+        this.token ||
+        (typeof window !== 'undefined'
+          ? localStorage.getItem('nexly_auth_token')
+          : null)
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
       }
       return config
     })

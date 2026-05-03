@@ -1,6 +1,8 @@
 'use client'
 
-import React, { createContext, useContext } from 'react'
+import React, { createContext, useCallback, useContext } from 'react'
+import { useRouter } from 'next/navigation'
+import { useSession, signOut as betterSignOut, clearStoredToken } from '@/lib/auth-client'
 
 interface User {
   id: string
@@ -16,48 +18,71 @@ interface AuthContextType {
   isAuthenticated: boolean
   isLoading: boolean
   user: User | null
+  activeOrgId: string | null
   token: string | null
   login: () => void
   logout: () => void
 }
 
-const STUB_USER: User = {
-  id: process.env.NEXT_PUBLIC_DEFAULT_USER_ID || '00000000-0000-0000-0000-000000000002',
-  email: 'admin@local',
-  firstName: 'Admin',
-  lastName: 'User',
-  username: 'admin',
-  roles: ['admin'],
-  permissions: [
-    '*',
-    'work_orders:read', 'work_orders:write', 'work_orders:write:own',
-    'work_requests:write',
-    'assets:read', 'assets:write',
-    'pm:read', 'pm:write',
-    'inventory:read', 'inventory:write', 'inventory:delete',
-    'reports:read',
-    'users:read', 'users:write',
-    'settings:read', 'settings:write',
-    'ai:read',
-    'admin:tenants',
-  ],
-}
-
-const STUB_VALUE: AuthContextType = {
-  isAuthenticated: true,
-  isLoading: false,
-  user: STUB_USER,
+const AuthContext = createContext<AuthContextType>({
+  isAuthenticated: false,
+  isLoading: true,
+  user: null,
+  activeOrgId: null,
   token: null,
   login: () => {},
   logout: () => {},
-}
-
-const AuthContext = createContext<AuthContextType>(STUB_VALUE)
+})
 
 export function useAuth() {
   return useContext(AuthContext)
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  return <AuthContext.Provider value={STUB_VALUE}>{children}</AuthContext.Provider>
+  const { data: session, isPending } = useSession()
+  const router = useRouter()
+
+  const login = useCallback(() => {
+    router.push('/sign-in')
+  }, [router])
+
+  const logout = useCallback(async () => {
+    try {
+      await betterSignOut()
+    } finally {
+      clearStoredToken()
+      router.push('/sign-in')
+    }
+  }, [router])
+
+  const sessionUser = session?.user as any
+  const activeOrgId = (session?.session as any)?.activeOrganizationId ?? null
+
+  const user: User | null = sessionUser
+    ? {
+        id: sessionUser.id,
+        email: sessionUser.email,
+        firstName: sessionUser.firstName || sessionUser.name?.split(' ')[0] || '',
+        lastName: sessionUser.lastName || sessionUser.name?.split(' ').slice(1).join(' ') || '',
+        username: sessionUser.username || sessionUser.email,
+        roles: ['admin'],
+        permissions: ['*'],
+      }
+    : null
+
+  return (
+    <AuthContext.Provider
+      value={{
+        isAuthenticated: !!session,
+        isLoading: isPending,
+        user,
+        activeOrgId,
+        token: null,
+        login,
+        logout,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
 }
