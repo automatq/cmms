@@ -46,7 +46,7 @@ export class PublicRequestsController {
 
     const assets = await this.assetRepository.find({
       where: { tenantId: tenant.id },
-      select: ['id', 'assetNumber', 'name', 'locationId'],
+      select: ['id', 'assetNumber', 'name', 'locationId', 'assetTagToken'],
       order: { assetNumber: 'ASC' },
     });
 

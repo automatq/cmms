@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { CheckCircle, Search } from 'lucide-react'
+import { CheckCircle, Search, QrCode, X } from 'lucide-react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
 
@@ -14,13 +14,13 @@ type PublicAsset = {
   assetNumber: string
   name: string
   locationId: string | null
+  assetTagToken: string
 }
 
 const initialForm = {
   title: '',
   description: '',
   submitterName: '',
-  submitterEmail: '',
   assetId: '',
 }
 
@@ -32,6 +32,11 @@ export default function PublicRequestPage() {
   const [trackingToken, setTrackingToken] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Scanner
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const scannerRef = useRef<any>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
 
   // Track status
   const [trackInput, setTrackInput] = useState('')
@@ -53,6 +58,53 @@ export default function PublicRequestPage() {
     load()
   }, [tenantSlug])
 
+  // QR scanner lifecycle — initialize when opened, tear down when closed
+  useEffect(() => {
+    if (!scannerOpen) {
+      setScanError(null)
+      return
+    }
+
+    let scanner: any = null
+    const init = async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode')
+        scanner = new Html5Qrcode('public-qr-reader')
+        scannerRef.current = scanner
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText: string) => {
+            // Asset QR codes encode .../scan/asset/<token>
+            const match = decodedText.match(/\/scan\/asset\/([A-Za-z0-9_-]+)/)
+            const token = match ? match[1] : decodedText.trim()
+            const asset = assets.find((a) => a.assetTagToken === token)
+            if (asset) {
+              setForm((f) => ({ ...f, assetId: asset.id }))
+              scanner.stop().catch(() => {})
+              setScannerOpen(false)
+              setError('')
+            } else {
+              setScanError('QR code did not match any asset in this organization.')
+            }
+          },
+          () => {},
+        )
+      } catch {
+        setScanError('Unable to access camera. Please check permissions.')
+      }
+    }
+
+    const t = setTimeout(init, 250)
+    return () => {
+      clearTimeout(t)
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(() => {})
+        scannerRef.current = null
+      }
+    }
+  }, [scannerOpen, assets])
+
   const handleSubmit = async () => {
     setLoading(true)
     setError('')
@@ -62,14 +114,13 @@ export default function PublicRequestPage() {
         form.title.trim() ||
         (asset ? `${asset.assetNumber} - ${asset.name}` : '')
       if (!title) {
-        throw new Error('Please select an asset or describe the issue')
+        throw new Error('Please scan or select an asset')
       }
 
       const payload = {
         title,
         description: form.description || undefined,
         submitterName: form.submitterName,
-        submitterEmail: form.submitterEmail,
         assetId: form.assetId || undefined,
         locationId: asset?.locationId || undefined,
       }
@@ -144,6 +195,8 @@ export default function PublicRequestPage() {
       </div>
     )
   }
+
+  const selectedAsset = assets.find((a) => a.id === form.assetId)
 
   return (
     <div className="container mx-auto max-w-lg px-4 py-16">
@@ -220,42 +273,62 @@ export default function PublicRequestPage() {
             <CardTitle>Submit a Work Order</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Asset selection: scan or pick from list */}
             <div>
-              <label className="text-sm font-medium">Your Name</label>
-              <Input
-                placeholder="John Doe"
-                value={form.submitterName}
-                onChange={(e) =>
-                  setForm({ ...form, submitterName: e.target.value })
-                }
-              />
+              <label className="text-sm font-medium">Asset</label>
+              <div className="mt-1 space-y-2">
+                {scannerOpen ? (
+                  <div className="space-y-2">
+                    <div
+                      id="public-qr-reader"
+                      className="w-full rounded-lg overflow-hidden border bg-black aspect-square"
+                    />
+                    {scanError && (
+                      <p className="text-sm text-destructive text-center">{scanError}</p>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => setScannerOpen(false)}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel scan
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => setScannerOpen(true)}
+                    >
+                      <QrCode className="h-4 w-4 mr-2" />
+                      Scan asset QR code
+                    </Button>
+                    <select
+                      className="w-full rounded-md border border-input px-3 py-2 text-sm"
+                      value={form.assetId}
+                      onChange={(e) => setForm({ ...form, assetId: e.target.value })}
+                    >
+                      <option value="">Or select an asset…</option>
+                      {assets.map((asset) => (
+                        <option key={asset.id} value={asset.id}>
+                          {asset.assetNumber} - {asset.name}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedAsset && (
+                      <p className="text-xs text-muted-foreground">
+                        Selected: <span className="font-medium">{selectedAsset.assetNumber} — {selectedAsset.name}</span>
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium">Email</label>
-              <Input
-                type="email"
-                placeholder="john@example.com"
-                value={form.submitterEmail}
-                onChange={(e) =>
-                  setForm({ ...form, submitterEmail: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Asset Number</label>
-              <select
-                className="w-full rounded-md border border-input px-3 py-2 text-sm"
-                value={form.assetId}
-                onChange={(e) => setForm({ ...form, assetId: e.target.value })}
-              >
-                <option value="">Select an asset</option>
-                {assets.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.assetNumber} - {asset.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+
             <div>
               <label className="text-sm font-medium">Description</label>
               <textarea
@@ -267,6 +340,18 @@ export default function PublicRequestPage() {
                 }
               />
             </div>
+
+            <div>
+              <label className="text-sm font-medium">Your Name</label>
+              <Input
+                placeholder="John Doe"
+                value={form.submitterName}
+                onChange={(e) =>
+                  setForm({ ...form, submitterName: e.target.value })
+                }
+              />
+            </div>
+
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button
               className="w-full"
