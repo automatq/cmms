@@ -45,6 +45,8 @@ export default function MembersPage() {
       return res.data?.members ?? []
     },
     enabled: !!activeOrgId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   })
 
   const invitationsQuery = useQuery({
@@ -54,6 +56,8 @@ export default function MembersPage() {
       return res.data ?? []
     },
     enabled: !!activeOrgId,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   })
 
   const inviteMutation = useMutation({
@@ -68,6 +72,7 @@ export default function MembersPage() {
       setRole('member')
       setInviteOpen(false)
       queryClient.invalidateQueries({ queryKey: ['org-invitations', activeOrgId] })
+      queryClient.invalidateQueries({ queryKey: ['org-members', activeOrgId] })
     },
     onError: (err: any) => toast.error(err.message || 'Failed to invite member'),
   })
