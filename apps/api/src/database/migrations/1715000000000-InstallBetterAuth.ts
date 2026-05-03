@@ -52,8 +52,9 @@ export class InstallBetterAuth1715000000000 implements MigrationInterface {
     // 4. Mutate users table to be Better Auth compatible.
     //    - Drop tenant_id (users are global identities)
     //    - Drop tenant-scoped unique constraints on email/username
-    //    - Add globally-unique email constraint
     //    - Add Better Auth columns: name, email_verified, image
+    //    NOTE: globally-unique email constraint is added AFTER truncating data
+    //    (existing rows may have duplicate emails across tenants).
     await queryRunner.query(`ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "FK_users_tenant"`);
     await queryRunner.query(`ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "UQ_users_tenant_email"`);
     await queryRunner.query(`ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "UQ_users_tenant_username"`);
@@ -68,17 +69,6 @@ export class InstallBetterAuth1715000000000 implements MigrationInterface {
     await queryRunner.query(`ALTER TABLE "users" ALTER COLUMN "first_name" DROP NOT NULL`);
     await queryRunner.query(`ALTER TABLE "users" ALTER COLUMN "last_name" DROP NOT NULL`);
     await queryRunner.query(`ALTER TABLE "users" ALTER COLUMN "username" DROP NOT NULL`);
-
-    // Add globally unique email constraint (only if not already there)
-    await queryRunner.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'users_email_unique'
-        ) THEN
-          ALTER TABLE "users" ADD CONSTRAINT "users_email_unique" UNIQUE ("email");
-        END IF;
-      END $$;
-    `);
 
     // 5. Sessions table (Better Auth)
     await queryRunner.query(`
@@ -164,6 +154,18 @@ export class InstallBetterAuth1715000000000 implements MigrationInterface {
     //     CASCADE ripples through every tenant_id FK we've already preserved.
     await queryRunner.query(`TRUNCATE TABLE "organizations" CASCADE`);
     await queryRunner.query(`TRUNCATE TABLE "users" CASCADE`);
+
+    // 11. NOW add the globally-unique email constraint (after truncating, so duplicate
+    //     emails from the per-tenant era don't block index creation).
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'users_email_unique'
+        ) THEN
+          ALTER TABLE "users" ADD CONSTRAINT "users_email_unique" UNIQUE ("email");
+        END IF;
+      END $$;
+    `);
   }
 
   public async down(): Promise<void> {
