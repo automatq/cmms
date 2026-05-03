@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuth } from '@/providers/auth-provider'
@@ -37,18 +36,16 @@ export function TrialBanner() {
       <div className="flex items-center gap-2 text-sm">
         <AlertTriangle className="h-4 w-4 shrink-0" />
         <span>
-          <strong>{daysLeft} day{daysLeft === 1 ? '' : 's'}</strong> left in your Pro trial.
+          <strong>{daysLeft} day{daysLeft === 1 ? '' : 's'}</strong> left in your trial.
           {canManageBilling
             ? ' Add a payment method to keep access after it ends.'
             : ' Ask the workspace owner to add a payment method.'}
         </span>
       </div>
       {canManageBilling && (
-        <Button size="sm" variant="outline" asChild className="bg-white">
-          <Link href="/dashboard/settings?tab=billing">
-            <CreditCard className="mr-1.5 h-3.5 w-3.5" />
-            Add payment method
-          </Link>
+        <Button size="sm" variant="outline" onClick={() => api.startPolarCheckout()} className="bg-white">
+          <CreditCard className="mr-1.5 h-3.5 w-3.5" />
+          Add payment method
         </Button>
       )}
     </div>

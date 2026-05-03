@@ -22,9 +22,9 @@ export const PLAN_LIMITS = {
     },
   },
   [PlanTier.PRO]: {
-    maxUsers: 25,
-    maxAssets: 500,
-    maxStorageGB: 10,
+    maxUsers: -1,
+    maxAssets: -1,
+    maxStorageGB: 50,
     modules: {
       preventiveMaintenance: true,
       inventory: true,
@@ -32,7 +32,7 @@ export const PLAN_LIMITS = {
       reports: true,
       aiAssistant: true,
       dataImport: true,
-      sensors: false,
+      sensors: true,
       workRequestsPortal: true,
     },
   },
@@ -131,11 +131,11 @@ export class TenantService {
     return this.tenantRepository.save(tenant);
   }
 
-  async updateStripeCustomerId(tenantId: string, stripeCustomerId: string): Promise<void> {
-    await this.tenantRepository.update(tenantId, { stripeCustomerId });
+  async updatePolarCustomerId(tenantId: string, polarCustomerId: string): Promise<void> {
+    await this.tenantRepository.update(tenantId, { polarCustomerId });
   }
 
-  async updateStripeSubscriptionId(tenantId: string, stripeSubscriptionId: string): Promise<void> {
-    await this.tenantRepository.update(tenantId, { stripeSubscriptionId });
+  async updatePolarSubscriptionId(tenantId: string, polarSubscriptionId: string): Promise<void> {
+    await this.tenantRepository.update(tenantId, { polarSubscriptionId });
   }
 }

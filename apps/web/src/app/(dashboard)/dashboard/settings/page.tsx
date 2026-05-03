@@ -1282,70 +1282,20 @@ function RolesTab() {
 }
 
 function BillingTab() {
-    const queryClient = useQueryClient()
-
-    const { data: subscription, isLoading } = useQuery({
-        queryKey: ['subscription'],
+    const { data: org, isLoading } = useQuery({
+        queryKey: ['organization'],
         queryFn: async () => {
-            const res = await api.getSubscription()
+            const res = await api.getOrganization()
             return res.data
         },
     })
-
-    const { data: invoices } = useQuery({
-        queryKey: ['invoices'],
-        queryFn: async () => {
-            const res = await api.getInvoices(10)
-            return res.data
-        },
-    })
-
-    const [showCancelDialog, setShowCancelDialog] = useState(false)
-
-    const cancelMutation = useMutation({
-        mutationFn: () => api.cancelSubscription(),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['subscription'] })
-            toast.success('Subscription will be cancelled at the end of the billing period')
-            setShowCancelDialog(false)
-        },
-        onError: () => toast.error('Failed to cancel subscription'),
-    })
-
-    const handleUpgrade = async (plan: string) => {
-        try {
-            const res = await api.createCheckoutSession({
-                plan,
-                successUrl: window.location.href,
-                cancelUrl: window.location.href,
-            })
-            window.location.href = res.data.url
-        } catch {
-            toast.error('Failed to start checkout')
-        }
-    }
-
-    const handleManageBilling = async () => {
-        try {
-            const res = await api.createBillingPortal({ returnUrl: window.location.href })
-            window.location.href = res.data.url
-        } catch {
-            toast.error('Failed to open billing portal')
-        }
-    }
 
     const statusColors: Record<string, string> = {
         active: 'bg-green-500/10 text-green-700 border-green-500/20',
-        trialing: 'bg-blue-500/10 text-blue-700 border-blue-500/20',
-        past_due: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
-        canceled: 'bg-red-500/10 text-red-700 border-red-500/20',
+        trial: 'bg-blue-500/10 text-blue-700 border-blue-500/20',
+        suspended: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
+        cancelled: 'bg-red-500/10 text-red-700 border-red-500/20',
     }
-
-    const plans = [
-        { id: 'free', name: 'Free', price: '$0', period: '/month', features: ['5 assets', '2 users', 'Basic work orders', 'Email support'] },
-        { id: 'pro', name: 'Pro', price: '$49', period: '/month', features: ['Unlimited assets', '10 users', 'PM scheduling', 'Inventory management', 'Reports', 'Priority support'] },
-        { id: 'enterprise', name: 'Enterprise', price: '$149', period: '/month', features: ['Unlimited everything', 'Unlimited users', 'AI assistant', 'Custom integrations', 'SSO & audit logs', 'Dedicated support'] },
-    ]
 
     if (isLoading) {
         return (
@@ -1357,158 +1307,89 @@ function BillingTab() {
         )
     }
 
-    const currentPlan = subscription?.plan || 'free'
-    const status = subscription?.status || 'active'
+    const status: string = org?.status || 'trial'
+    const isOnPaidPlan = status === 'active'
+    const trialEndsAt = org?.trialEndsAt ? new Date(org.trialEndsAt) : null
+    const daysLeft = trialEndsAt
+        ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+        : 0
 
     return (
         <TabsContent value="billing" className="space-y-6">
             {/* Current Plan */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Current Plan</CardTitle>
-                    <CardDescription>Your subscription details and billing information.</CardDescription>
+                    <CardTitle>Subscription</CardTitle>
+                    <CardDescription>$269 CAD/month. Cancel anytime.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div>
-                                <span className="text-2xl font-bold capitalize">{currentPlan}</span>
-                                <Badge className={`ml-3 ${statusColors[status] || 'bg-gray-500/10 text-gray-700'}`}>
-                                    {status.replace('_', ' ')}
-                                </Badge>
-                            </div>
+                        <div>
+                            <span className="text-2xl font-bold">Nexly</span>
+                            <Badge className={`ml-3 ${statusColors[status] || 'bg-gray-500/10 text-gray-700'}`}>
+                                {status}
+                            </Badge>
                         </div>
-                        <Button variant="outline" onClick={handleManageBilling}>
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Manage Billing
-                        </Button>
+                        {isOnPaidPlan ? (
+                            <Button variant="outline" onClick={() => api.openPolarPortal()}>
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Manage subscription
+                            </Button>
+                        ) : (
+                            <Button onClick={() => api.startPolarCheckout()}>
+                                Add payment method
+                            </Button>
+                        )}
                     </div>
-                    {subscription?.currentPeriodEnd && (
-                        <p className="text-sm text-muted-foreground mt-2">
-                            {subscription.cancelAtPeriodEnd
-                                ? `Cancels on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
-                                : `Renews on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
-                            }
+                    {status === 'trial' && trialEndsAt && (
+                        <p className="text-sm text-muted-foreground">
+                            {daysLeft > 0
+                                ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left in your trial. Add a payment method to keep access.`
+                                : 'Your trial has ended. Add a payment method to reactivate.'}
                         </p>
                     )}
-                    {subscription?.cancelAtPeriodEnd && (
-                        <p className="text-sm text-amber-600 mt-1 font-medium">
-                            Your subscription is set to cancel at the end of the current billing period.
+                    {status === 'suspended' && (
+                        <p className="text-sm text-amber-700 dark:text-amber-300">
+                            Your subscription is suspended. Add a payment method to restore access.
+                        </p>
+                    )}
+                    {status === 'cancelled' && (
+                        <p className="text-sm text-muted-foreground">
+                            Your subscription was cancelled. You can resubscribe any time.
                         </p>
                     )}
                 </CardContent>
             </Card>
 
-            {/* Plan Comparison */}
-            <div className="grid gap-4 md:grid-cols-3">
-                {plans.map((plan) => (
-                    <Card key={plan.id} className={currentPlan === plan.id ? 'ring-2 ring-primary' : ''}>
-                        <CardHeader>
-                            <CardTitle className="flex items-center justify-between">
-                                {plan.name}
-                                {currentPlan === plan.id && (
-                                    <Badge variant="default" className="text-xs">Current</Badge>
-                                )}
-                            </CardTitle>
-                            <div>
-                                <span className="text-3xl font-bold">{plan.price}</span>
-                                <span className="text-muted-foreground">{plan.period}</span>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <ul className="space-y-2">
-                                {plan.features.map((feature) => (
-                                    <li key={feature} className="flex items-center gap-2 text-sm">
-                                        <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                                        {feature}
-                                    </li>
-                                ))}
-                            </ul>
-                            {currentPlan !== plan.id && plan.id !== 'free' && (
-                                <Button className="w-full" onClick={() => handleUpgrade(plan.id)}>
-                                    {plans.findIndex(p => p.id === currentPlan) < plans.findIndex(p => p.id === plan.id) ? 'Upgrade' : 'Switch'} to {plan.name}
-                                </Button>
-                            )}
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
-
-            {/* Cancel Subscription */}
-            {currentPlan !== 'free' && !subscription?.cancelAtPeriodEnd && (
-                <Card>
-                    <CardContent className="flex items-center justify-between py-4">
-                        <div>
-                            <p className="font-medium">Cancel Subscription</p>
-                            <p className="text-sm text-muted-foreground">Your access will continue until the end of the billing period.</p>
-                        </div>
-                        <Button variant="destructive" size="sm" onClick={() => setShowCancelDialog(true)}>
-                            Cancel Plan
-                        </Button>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Invoice History */}
-            {Array.isArray(invoices) && invoices.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Invoice History</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="border rounded-md">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b bg-muted/50">
-                                        <th className="text-left p-3 font-medium">Date</th>
-                                        <th className="text-left p-3 font-medium">Amount</th>
-                                        <th className="text-left p-3 font-medium">Status</th>
-                                        <th className="text-right p-3 font-medium">Invoice</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {invoices.map((inv: any) => (
-                                        <tr key={inv.id} className="border-b last:border-0">
-                                            <td className="p-3">{inv.created ? new Date(inv.created * 1000).toLocaleDateString() : '—'}</td>
-                                            <td className="p-3 font-medium">{inv.amount_due != null ? `$${(inv.amount_due / 100).toFixed(2)}` : '—'}</td>
-                                            <td className="p-3">
-                                                <Badge variant={inv.status === 'paid' ? 'default' : 'secondary'} className="text-xs capitalize">
-                                                    {inv.status || 'unknown'}
-                                                </Badge>
-                                            </td>
-                                            <td className="p-3 text-right">
-                                                {inv.invoice_pdf && (
-                                                    <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
-                                                        Download PDF
-                                                    </a>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Cancel Confirmation Dialog */}
-            <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Cancel Subscription</DialogTitle>
-                        <DialogDescription>
-                            Are you sure you want to cancel? Your subscription will remain active until the end of the current billing period.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="ghost" onClick={() => setShowCancelDialog(false)}>Keep Subscription</Button>
-                        <Button variant="destructive" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
-                            {cancelMutation.isPending ? 'Cancelling...' : 'Yes, Cancel'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {/* What's included */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>What's included</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <ul className="grid gap-2 sm:grid-cols-2 text-sm">
+                        {[
+                            'Unlimited users',
+                            'Unlimited assets',
+                            'Work orders & PM scheduling',
+                            'Public work request portal',
+                            'Inventory & purchase orders',
+                            'Reports, KPIs & dashboards',
+                            'AI assistant',
+                            'IoT sensor integrations',
+                            'CSV import/export',
+                            'Mobile apps for iOS & Android',
+                            '50 GB file storage',
+                            'Email support',
+                        ].map((item) => (
+                            <li key={item} className="flex items-center gap-2">
+                                <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                                {item}
+                            </li>
+                        ))}
+                    </ul>
+                </CardContent>
+            </Card>
         </TabsContent>
     )
 }

@@ -68,7 +68,7 @@ export default function HomePage() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground mt-4">
-          No credit card required · Full access to Pro features for 14 days
+          No credit card required · Full access for 14 days
         </p>
       </section>
 
@@ -128,7 +128,7 @@ export default function HomePage() {
           <Card className="border-primary/20">
             <CardContent className="p-8 space-y-4">
               <div className="text-5xl font-bold text-primary">14 days</div>
-              <p className="text-lg font-medium">Full Pro access. No card required.</p>
+              <p className="text-lg font-medium">Full access. No card required.</p>
               <p className="text-sm text-muted-foreground">
                 Try every feature free for 14 days. If you love it, add a payment method to keep going.
                 If you don't, walk away — no charges, no calls.

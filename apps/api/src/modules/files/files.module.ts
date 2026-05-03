@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { FilesService } from './files.service';
 import { FilesController } from './files.controller';
-import { BillingModule } from '../billing/billing.module';
+import { TenantModule } from '../../common/tenant/tenant.module';
 
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
@@ -32,7 +32,7 @@ const ALLOWED_MIME_TYPES = [
         }
       },
     }),
-    BillingModule,
+    TenantModule,
   ],
   providers: [FilesService],
   controllers: [FilesController],

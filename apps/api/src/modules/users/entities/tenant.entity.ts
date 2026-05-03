@@ -37,7 +37,7 @@ export class Tenant {
   @Column({ default: 'UTC' })
   timezone: string;
 
-  @Column({ default: 'USD' })
+  @Column({ default: 'CAD' })
   currency: string;
 
   @Column({
@@ -79,11 +79,11 @@ export class Tenant {
   @Column({ type: 'jsonb', default: {} })
   settings: Record<string, unknown>;
 
-  @Column({ nullable: true, name: 'stripe_customer_id' })
-  stripeCustomerId: string;
+  @Column({ nullable: true, name: 'polar_customer_id' })
+  polarCustomerId: string;
 
-  @Column({ nullable: true, name: 'stripe_subscription_id' })
-  stripeSubscriptionId: string;
+  @Column({ nullable: true, name: 'polar_subscription_id' })
+  polarSubscriptionId: string;
 
   @Column({ type: 'jsonb', default: {} })
   metadata: Record<string, unknown>;

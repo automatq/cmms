@@ -24,7 +24,7 @@ import {
 import { DowntimeController } from './downtime.controller';
 import { AssetCsvController, LocationCsvController } from './csv.controller';
 import { FilesModule } from '../files/files.module';
-import { BillingModule } from '../billing/billing.module';
+import { TenantModule } from '../../common/tenant/tenant.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -43,7 +43,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ]),
     BullModule.registerQueue({ name: 'warranty-checker' }),
     forwardRef(() => FilesModule),
-    BillingModule,
+    TenantModule,
     NotificationsModule,
   ],
   providers: [AssetsService, DowntimeService, WarrantyCheckProcessor],

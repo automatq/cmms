@@ -1,13 +1,18 @@
 import { betterAuth } from 'better-auth';
 import { organization, bearer } from 'better-auth/plugins';
 import { expo } from '@better-auth/expo';
+import { polar, checkout, portal, webhooks } from '@polar-sh/better-auth';
+import { Polar } from '@polar-sh/sdk';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
+import { Logger } from '@nestjs/common';
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendInvitationEmail,
 } from './email-sender';
+
+const polarLogger = new Logger('PolarWebhooks');
 
 const databaseUrl = process.env.DATABASE_URL;
 const sslEnabled = process.env.DB_SSL === 'true';
@@ -33,6 +38,13 @@ const pool = databaseUrl
     });
 
 const PUBLIC_WEB_URL = process.env.PUBLIC_WEB_URL || 'http://localhost:3000';
+
+const polarClient = process.env.POLAR_ACCESS_TOKEN
+  ? new Polar({
+      accessToken: process.env.POLAR_ACCESS_TOKEN,
+      server: process.env.POLAR_ENV === 'sandbox' ? 'sandbox' : 'production',
+    })
+  : null;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const auth: any = betterAuth({
@@ -161,13 +173,13 @@ export const auth: any = betterAuth({
           },
           additionalFields: {
             timezone: { type: 'string', required: false, defaultValue: 'UTC', fieldName: 'timezone' },
-            currency: { type: 'string', required: false, defaultValue: 'USD', fieldName: 'currency' },
+            currency: { type: 'string', required: false, defaultValue: 'CAD', fieldName: 'currency' },
             status: { type: 'string', required: false, defaultValue: 'trial', fieldName: 'status' },
             plan: { type: 'string', required: false, defaultValue: 'free', fieldName: 'plan' },
             modules: { type: 'string', required: false, fieldName: 'modules' },
             settings: { type: 'string', required: false, fieldName: 'settings' },
-            stripeCustomerId: { type: 'string', required: false, fieldName: 'stripe_customer_id' },
-            stripeSubscriptionId: { type: 'string', required: false, fieldName: 'stripe_subscription_id' },
+            polarCustomerId: { type: 'string', required: false, fieldName: 'polar_customer_id' },
+            polarSubscriptionId: { type: 'string', required: false, fieldName: 'polar_subscription_id' },
             userCount: { type: 'number', required: false, defaultValue: 0, fieldName: 'user_count' },
             assetCount: { type: 'number', required: false, defaultValue: 0, fieldName: 'asset_count' },
             storageBytesUsed: { type: 'number', required: false, defaultValue: 0, fieldName: 'storage_bytes_used' },
@@ -221,7 +233,7 @@ export const auth: any = betterAuth({
                modules = '{"preventiveMaintenance":true,"inventory":true,"purchaseOrders":true,"reports":true,"aiAssistant":true,"sensors":false,"workRequestsPortal":true,"dataImport":true}'::jsonb,
                settings = COALESCE(settings, '{}'::jsonb),
                timezone = COALESCE(timezone, 'UTC'),
-               currency = COALESCE(currency, 'USD'),
+               currency = COALESCE(currency, 'CAD'),
                user_count = COALESCE(user_count, 1),
                asset_count = COALESCE(asset_count, 0),
                storage_bytes_used = COALESCE(storage_bytes_used, 0),
@@ -232,8 +244,132 @@ export const auth: any = betterAuth({
         },
       },
     }),
+    ...(polarClient
+      ? [
+          polar({
+            client: polarClient,
+            createCustomerOnSignUp: true,
+            use: [
+              checkout({
+                products: [
+                  {
+                    productId: process.env.POLAR_PRODUCT_ID!,
+                    slug: 'pro',
+                  },
+                ],
+                successUrl: `${PUBLIC_WEB_URL}/dashboard?checkout=success`,
+                authenticatedUsersOnly: true,
+              }),
+              portal(),
+              webhooks({
+                secret: process.env.POLAR_WEBHOOK_SECRET || '',
+                onSubscriptionActive: async (payload: any) => {
+                  await handleSubscriptionStatusChange(payload, 'active');
+                },
+                onSubscriptionUpdated: async (payload: any) => {
+                  await handleSubscriptionStatusChange(payload, 'active');
+                },
+                onSubscriptionCanceled: async (payload: any) => {
+                  await handleSubscriptionStatusChange(payload, 'cancelled');
+                },
+                onSubscriptionRevoked: async (payload: any) => {
+                  await handleSubscriptionStatusChange(payload, 'suspended');
+                },
+              }),
+            ],
+          }),
+        ]
+      : []),
   ],
 });
+
+async function handleSubscriptionStatusChange(
+  payload: any,
+  status: 'active' | 'cancelled' | 'suspended',
+): Promise<void> {
+  try {
+    const subscription = payload?.data ?? payload;
+    const polarCustomerId =
+      subscription?.customer?.id ?? subscription?.customerId ?? null;
+    const polarSubscriptionId = subscription?.id ?? null;
+    const externalId =
+      subscription?.customer?.externalId ?? subscription?.externalId ?? null;
+
+    if (!polarCustomerId) {
+      polarLogger.warn(
+        `Polar webhook: no customer id in payload (status=${status})`,
+      );
+      return;
+    }
+
+    // Polar's createCustomerOnSignUp uses the user.id as externalId. Map it
+    // back to the user's active organization.
+    const orgId = await resolveOrgIdForPolarCustomer(
+      polarCustomerId,
+      externalId,
+    );
+    if (!orgId) {
+      polarLogger.warn(
+        `Polar webhook: no org found for customer ${polarCustomerId} (externalId=${externalId})`,
+      );
+      return;
+    }
+
+    await pool.query(
+      `UPDATE organizations SET
+         status = $1,
+         polar_customer_id = COALESCE($2, polar_customer_id),
+         polar_subscription_id = COALESCE($3, polar_subscription_id),
+         updated_at = now()
+       WHERE id = $4`,
+      [status, polarCustomerId, polarSubscriptionId, orgId],
+    );
+
+    polarLogger.log(
+      `Polar webhook: org ${orgId} → status=${status}, sub=${polarSubscriptionId}`,
+    );
+  } catch (err) {
+    polarLogger.error(
+      `Polar webhook handler failed: ${(err as Error).message}`,
+      (err as Error).stack,
+    );
+  }
+}
+
+async function resolveOrgIdForPolarCustomer(
+  polarCustomerId: string,
+  externalId: string | null,
+): Promise<string | null> {
+  // 1. Already-linked org
+  const linked = await pool.query<{ id: string }>(
+    `SELECT id FROM organizations WHERE polar_customer_id = $1 LIMIT 1`,
+    [polarCustomerId],
+  );
+  if (linked.rows[0]) return linked.rows[0].id;
+
+  // 2. Map via externalId (= user.id) → that user's active org
+  if (externalId) {
+    const session = await pool.query<{ active_organization_id: string | null }>(
+      `SELECT active_organization_id FROM sessions
+       WHERE user_id = $1 AND active_organization_id IS NOT NULL
+       ORDER BY updated_at DESC LIMIT 1`,
+      [externalId],
+    );
+    if (session.rows[0]?.active_organization_id) {
+      return session.rows[0].active_organization_id;
+    }
+    // Fallback: any org the user owns
+    const owned = await pool.query<{ organization_id: string }>(
+      `SELECT organization_id FROM members
+       WHERE user_id = $1 AND role = 'owner'
+       ORDER BY created_at ASC LIMIT 1`,
+      [externalId],
+    );
+    if (owned.rows[0]) return owned.rows[0].organization_id;
+  }
+
+  return null;
+}
 
 async function seedDefaultRoles(pool: Pool, tenantId: string): Promise<void> {
   const roles = [

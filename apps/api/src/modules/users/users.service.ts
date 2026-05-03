@@ -6,7 +6,7 @@ import { Role } from './entities/role.entity';
 import { Tenant } from './entities/tenant.entity';
 import { CreateUserDto, UpdateUserDto, UserQueryDto, CreateRoleDto, UpdateRoleDto } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
-import { UsageService } from '../billing/usage.service';
+import { UsageService } from '../../common/tenant/usage.service';
 import { TenantService } from '../../common/tenant/tenant.service';
 
 /**

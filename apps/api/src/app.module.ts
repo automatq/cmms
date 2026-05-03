@@ -26,7 +26,6 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { FilesModule } from './modules/files/files.module';
 import { AiModule } from './modules/ai/ai.module';
 import { ReportsModule } from './modules/reports/reports.module';
-import { BillingModule } from './modules/billing/billing.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
@@ -139,7 +138,6 @@ import { HealthController } from './health.controller';
     FilesModule,
     AiModule,
     ReportsModule,
-    BillingModule,
     RealtimeModule,
     ActivityModule,
     WebhooksModule,

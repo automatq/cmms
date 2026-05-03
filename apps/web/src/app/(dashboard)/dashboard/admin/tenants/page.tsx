@@ -47,8 +47,8 @@ interface Tenant {
   assetCount: number
   storageBytesUsed: number
   createdAt: string
-  stripeCustomerId?: string
-  stripeSubscriptionId?: string
+  polarCustomerId?: string
+  polarSubscriptionId?: string
 }
 
 const statusColors: Record<string, string> = {
@@ -275,10 +275,10 @@ export default function AdminTenantsPage() {
                   <span className="text-muted-foreground">Storage</span>
                   <span>{formatBytes(selectedTenant.storageBytesUsed)}</span>
                 </div>
-                {selectedTenant.stripeCustomerId && (
+                {selectedTenant.polarCustomerId && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Stripe Customer</span>
-                    <span className="font-mono text-xs">{selectedTenant.stripeCustomerId}</span>
+                    <span className="text-muted-foreground">Polar Customer</span>
+                    <span className="font-mono text-xs">{selectedTenant.polarCustomerId}</span>
                   </div>
                 )}
               </div>

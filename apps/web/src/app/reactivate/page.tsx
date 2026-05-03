@@ -15,18 +15,13 @@ export default function ReactivatePage() {
 
   const canManageBilling = user?.permissions?.includes('*') || user?.permissions?.includes('billing:write')
 
-  async function handleAddPayment() {
+  function handleAddPayment() {
     setSubmitting(true)
     setError(null)
     try {
-      const successUrl = `${window.location.origin}/dashboard`
-      const cancelUrl = `${window.location.origin}/reactivate`
-      const res = await api.createCheckoutSession({ plan: 'pro', successUrl, cancelUrl })
-      const url = (res.data as any)?.url
-      if (!url) throw new Error('Could not start checkout')
-      window.location.href = url
+      api.startPolarCheckout()
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Failed to start checkout')
+      setError(err?.message || 'Failed to start checkout')
       setSubmitting(false)
     }
   }
