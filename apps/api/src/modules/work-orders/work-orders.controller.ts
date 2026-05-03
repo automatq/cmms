@@ -74,6 +74,45 @@ export class WorkOrdersController {
     return this.workOrdersService.getOverdueCount(user.tenantId);
   }
 
+  // ==================== WORK REQUESTS (authenticated) ====================
+  // IMPORTANT: these literal-path routes MUST be declared before @Get(':id')
+  // and @Patch(':id') because NestJS matches routes in registration order.
+  // Otherwise GET /work-orders/requests hits findOne(id='requests') and
+  // ParseUUIDPipe rejects it with 400.
+
+  @Get('requests')
+  @Permissions('work_orders:read')
+  @ApiOperation({ summary: 'Get all work requests' })
+  @ApiResponse({ status: 200, description: 'List of work requests' })
+  findAllRequests(@Query() query: WorkOrderQueryDto, @CurrentUser() user: RequestUser) {
+    return this.workOrdersService.findAllRequests(query, user.tenantId);
+  }
+
+  @Patch('requests/:id/approve')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Approve work request' })
+  @ApiResponse({ status: 200, description: 'Work request approved' })
+  approveRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.approveRequest(id, user.userId, user.tenantId);
+  }
+
+  @Patch('requests/:id/reject')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Reject work request' })
+  @ApiResponse({ status: 200, description: 'Work request rejected' })
+  rejectRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('reason') reason: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.rejectRequest(id, reason, user.userId, user.tenantId);
+  }
+
+  // ==================== WORK ORDER CRUD ====================
+
   @Get(':id')
   @Permissions('work_orders:read')
   @ApiOperation({ summary: 'Get work order by ID' })
@@ -296,38 +335,6 @@ export class WorkOrdersController {
     return { signatureUrl: url };
   }
 
-  // ==================== WORK REQUESTS (authenticated) ====================
-
-  @Get('requests')
-  @Permissions('work_orders:read')
-  @ApiOperation({ summary: 'Get all work requests' })
-  @ApiResponse({ status: 200, description: 'List of work requests' })
-  findAllRequests(@Query() query: WorkOrderQueryDto, @CurrentUser() user: RequestUser) {
-    return this.workOrdersService.findAllRequests(query, user.tenantId);
-  }
-
-  @Patch('requests/:id/approve')
-  @Permissions('work_orders:write')
-  @ApiOperation({ summary: 'Approve work request' })
-  @ApiResponse({ status: 200, description: 'Work request approved' })
-  approveRequest(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: RequestUser,
-  ) {
-    return this.workOrdersService.approveRequest(id, user.userId, user.tenantId);
-  }
-
-  @Patch('requests/:id/reject')
-  @Permissions('work_orders:write')
-  @ApiOperation({ summary: 'Reject work request' })
-  @ApiResponse({ status: 200, description: 'Work request rejected' })
-  rejectRequest(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body('reason') reason: string,
-    @CurrentUser() user: RequestUser,
-  ) {
-    return this.workOrdersService.rejectRequest(id, reason, user.userId, user.tenantId);
-  }
 }
 
 // ==================== PUBLIC WORK REQUESTS (slug-based) ====================
