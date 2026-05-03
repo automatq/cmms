@@ -45,6 +45,7 @@
     "compression": "^1.8.1",
     "date-fns": "^3.0.0",
     "fast-csv": "^5.0.0",
+    "graphql": "^15.8.0",
     "handlebars": "^4.7.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
