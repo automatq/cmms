@@ -28,7 +28,19 @@ const STUB_USER: User = {
   lastName: 'User',
   username: 'admin',
   roles: ['admin'],
-  permissions: ['*'],
+  permissions: [
+    '*',
+    'work_orders:read', 'work_orders:write', 'work_orders:write:own',
+    'work_requests:write',
+    'assets:read', 'assets:write',
+    'pm:read', 'pm:write',
+    'inventory:read', 'inventory:write', 'inventory:delete',
+    'reports:read',
+    'users:read', 'users:write',
+    'settings:read', 'settings:write',
+    'ai:read',
+    'admin:tenants',
+  ],
 }
 
 const STUB_VALUE: AuthContextType = {
