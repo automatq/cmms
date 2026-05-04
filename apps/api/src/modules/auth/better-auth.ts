@@ -66,6 +66,42 @@ export const auth: any = betterAuth({
     },
   },
 
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session: any) => {
+          const userId = session?.userId;
+          if (!userId) return { data: session };
+
+          const result = await pool.query<{ organization_id: string }>(
+            `SELECT organization_id
+               FROM members
+              WHERE user_id = $1
+              ORDER BY
+                CASE role
+                  WHEN 'owner' THEN 0
+                  WHEN 'admin' THEN 1
+                  ELSE 2
+                END,
+                created_at ASC
+              LIMIT 1`,
+            [userId],
+          );
+
+          if (result.rows[0]) {
+            return {
+              data: {
+                ...session,
+                activeOrganizationId: result.rows[0].organization_id,
+              },
+            };
+          }
+          return { data: session };
+        },
+      },
+    },
+  },
+
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // set to true once SMTP is verified
