@@ -39,3 +39,10 @@ coverage/
 *.tgz
 .turbo
 .qoder/
+
+# Playwright e2e
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
+apps/web/.playwright/
+apps/web/playwright/.cache/

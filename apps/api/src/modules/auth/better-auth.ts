@@ -268,8 +268,8 @@ export const auth: any = betterAuth({
           null;
         await sendInvitationEmail(email, organization.name, inviterName, url);
       },
-      organizationCreation: {
-        afterCreate: async ({ organization }) => {
+      organizationHooks: {
+        afterCreateOrganization: async ({ organization }: { organization: { id: string } }) => {
           // Seed default permission roles for the new tenant
           await seedDefaultRoles(pool, organization.id);
           // New orgs get a 14-day Pro trial (no card required upfront).

@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
@@ -54,6 +57,7 @@
     "zustand": "^4.5.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^20.11.19",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.2.57",
