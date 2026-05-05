@@ -1,9 +1,9 @@
-# CMMS Wiki
+# MainTek Wiki
 
-Welcome to the CMMS (Computerized Maintenance Management System) documentation. This wiki provides comprehensive information about the system's features, architecture, and usage.
+Welcome to the MainTek documentation. MainTek is a computerized maintenance management system (CMMS); this wiki provides comprehensive information about the system's features, architecture, and usage.
 
 ## Table of Contents
-- [About CMMS](#about-cmms)
+- [About MainTek](#about-maintek)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Getting Started](#getting-started)
@@ -11,8 +11,8 @@ Welcome to the CMMS (Computerized Maintenance Management System) documentation. 
 - [API Documentation](#api-documentation)
 - [Troubleshooting](#troubleshooting)
 
-## About CMMS
-The CMMS is an AI-augmented maintenance management system designed to streamline maintenance operations, track work orders, manage assets, and optimize preventive maintenance schedules.
+## About MainTek
+MainTek is an AI-augmented CMMS designed to streamline maintenance operations, track work orders, manage assets, and optimize preventive maintenance schedules.
 
 ## Features
 - **Asset Management**: Track and manage all your equipment, machinery, and facilities
@@ -25,7 +25,7 @@ The CMMS is an AI-augmented maintenance management system designed to streamline
 - **Mobile Support**: Access the system from mobile devices
 
 ## Architecture
-The CMMS is built as a modern full-stack application with the following components:
+MainTek is built as a modern full-stack application with the following components:
 
 - **Frontend**: Next.js 14 with React, Shadcn UI components
 - **Backend**: NestJS API with TypeScript
@@ -95,7 +95,7 @@ Track parts, materials, and supplies.
 - Purchase order creation
 
 ## API Documentation
-The CMMS provides a comprehensive REST API accessible at `/api/v1`. Detailed documentation is available via Swagger at `/api/docs` when the API is running.
+MainTek provides a comprehensive REST API accessible at `/api/v1`. Detailed documentation is available via Swagger at `/api/docs` when the API is running.
 
 ### Authentication
 All API endpoints require authentication via JWT tokens obtained through the Keycloak integration.

@@ -4,7 +4,7 @@ Follow these steps to add documentation to your GitHub repository's wiki.
 
 ## Accessing the Wiki
 
-1. Go to your GitHub repository: https://github.com/automatq/cmms
+1. Go to your GitHub repository: https://github.com/automatq/maintek
 2. Click on the "Wiki" tab near the top of the page (between "Code" and "Issues")
 3. Click "Create the first page" if the wiki is empty
 
@@ -18,7 +18,7 @@ Follow these steps to add documentation to your GitHub repository's wiki.
 
 ### Method 2: Git Repository (Advanced)
 GitHub wikis are stored in a separate git repository:
-1. Clone the wiki repository: `git clone https://github.com/automatq/cmms.wiki.git`
+1. Clone the wiki repository: `git clone https://github.com/automatq/maintek.wiki.git`
 2. Create or edit `.md` files in the cloned directory
 3. Add, commit, and push changes: 
    ```

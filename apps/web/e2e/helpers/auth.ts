@@ -18,8 +18,8 @@ function authBaseURL(webBaseURL: string): string {
   // ask the page for it.
   return (
     process.env.E2E_API_BASE_URL ||
-    webBaseURL.replace(/cmms-web/, 'cmms-api-production-9cd6') ||
-    'https://cmms-api-production-9cd6.up.railway.app'
+    webBaseURL.replace(/maintek-web/, 'maintek-api-production') ||
+    'https://maintek-api-production.up.railway.app'
   )
 }
 

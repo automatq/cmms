@@ -1,4 +1,4 @@
-# Nexly
+# MainTek
 
 **Modern maintenance management platform.** Track assets, automate preventive maintenance, manage inventory, and keep your operations running — from any device.
 
@@ -90,8 +90,8 @@ modules/
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/chrisdbender/Nexly.git
-cd Nexly
+git clone https://github.com/automatq/maintek.git
+cd maintek
 npm install
 ```
 

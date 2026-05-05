@@ -9,9 +9,9 @@ Create a separate Railway service for MinIO and attach a persistent volume.
 Set these variables on the MinIO service:
 
 ```env
-MINIO_ROOT_USER=cmms_minio
+MINIO_ROOT_USER=maintek_minio
 MINIO_ROOT_PASSWORD=change-me
-MINIO_BUCKET=cmms-files
+MINIO_BUCKET=maintek-files
 PORT=9000
 ```
 
