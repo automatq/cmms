@@ -79,9 +79,9 @@ import { HealthController } from './health.controller';
           ...baseOptions,
           host: config.get<string>('DB_HOST', 'localhost'),
           port: config.get<number>('DB_PORT', 5432),
-          username: config.get<string>('DB_USERNAME', 'nexly'),
-          password: config.get<string>('DB_PASSWORD', 'nexly'),
-          database: config.get<string>('DB_DATABASE', 'nexly'),
+          username: config.get<string>('DB_USERNAME', 'maintek'),
+          password: config.get<string>('DB_PASSWORD', 'maintek'),
+          database: config.get<string>('DB_DATABASE', 'maintek'),
           ssl: sslEnabled
             ? { rejectUnauthorized: config.get('DB_SSL_REJECT_UNAUTHORIZED', 'true') === 'true' }
             : false,

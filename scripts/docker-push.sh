@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Docker Push Script for Nexly
+# Docker Push Script for MainTek
 # Usage: ./scripts/docker-push.sh [registry_url] [tag]
-# Example: ./scripts/docker-push.sh registry.example.com/nexly v1.0.0
+# Example: ./scripts/docker-push.sh registry.example.com/maintek v1.0.0
 
 set -e
 
@@ -12,12 +12,12 @@ TAG=${2:-"latest"}
 if [ -z "$REGISTRY" ]; then
   echo "Error: Registry URL is required"
   echo "Usage: $0 <registry_url> [tag]"
-  echo "Example: $0 registry.example.com/nexly v1.0.0"
+  echo "Example: $0 registry.example.com/maintek v1.0.0"
   exit 1
 fi
 
 echo "========================================="
-echo "Pushing Nexly Docker Images"
+echo "Pushing MainTek Docker Images"
 echo "Registry: $REGISTRY"
 echo "Tag: $TAG"
 echo "========================================="
@@ -34,20 +34,20 @@ fi
 # Push API image
 echo ""
 echo "Pushing API image..."
-docker push $REGISTRY/nexly-api:$TAG
-docker push $REGISTRY/nexly-api:latest
+docker push $REGISTRY/maintek-api:$TAG
+docker push $REGISTRY/maintek-api:latest
 
 # Push Worker image
 echo ""
 echo "Pushing Worker image..."
-docker push $REGISTRY/nexly-worker:$TAG
-docker push $REGISTRY/nexly-worker:latest
+docker push $REGISTRY/maintek-worker:$TAG
+docker push $REGISTRY/maintek-worker:latest
 
 # Push Web image
 echo ""
 echo "Pushing Web image..."
-docker push $REGISTRY/nexly-web:$TAG
-docker push $REGISTRY/nexly-web:latest
+docker push $REGISTRY/maintek-web:$TAG
+docker push $REGISTRY/maintek-web:latest
 
 echo ""
 echo "========================================="
@@ -55,6 +55,6 @@ echo "Push completed successfully!"
 echo "========================================="
 echo ""
 echo "Images pushed:"
-echo "  - $REGISTRY/nexly-api:$TAG"
-echo "  - $REGISTRY/nexly-worker:$TAG"
-echo "  - $REGISTRY/nexly-web:$TAG"
+echo "  - $REGISTRY/maintek-api:$TAG"
+echo "  - $REGISTRY/maintek-worker:$TAG"
+echo "  - $REGISTRY/maintek-web:$TAG"

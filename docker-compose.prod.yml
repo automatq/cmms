@@ -1,6 +1,6 @@
 version: '3.9'
 
-# Production Docker Compose for Nexly
+# Production Docker Compose for MainTek
 # This file uses pre-built images from a private registry
 #
 # Usage:
@@ -21,13 +21,13 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - nexly-web
-      - nexly-api
+      - maintek-web
+      - maintek-api
     networks:
-      - nexly-network
+      - maintek-network
 
-  nexly-api:
-    image: cb37/nexly:api-0.1.1
+  maintek-api:
+    image: cb37/maintek:api-0.1.1
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -45,7 +45,7 @@ services:
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET: nexly-files
+      MINIO_BUCKET: maintek-files
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
       DEFAULT_USER_ID: ${DEFAULT_USER_ID:-00000000-0000-0000-0000-000000000002}
       DEFAULT_USER_EMAIL: ${DEFAULT_USER_EMAIL:-admin@local}
@@ -67,10 +67,10 @@ services:
     volumes:
       - api_uploads:/app/uploads
     networks:
-      - nexly-network
+      - maintek-network
 
-  nexly-worker:
-    image: cb37/nexly:worker-0.1.1
+  maintek-worker:
+    image: cb37/maintek:worker-0.1.1
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -98,16 +98,16 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - nexly-network
+      - maintek-network
 
-  nexly-web:
-    image: cb37/nexly:web-0.1.2
+  maintek-web:
+    image: cb37/maintek:web-0.1.2
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api/v1
       APP_BASE_URL: ${PUBLIC_URL}
     networks:
-      - nexly-network
+      - maintek-network
 
   postgres:
     image: timescale/timescaledb:2.17.2-pg16
@@ -125,7 +125,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nexly-network
+      - maintek-network
 
   redis:
     image: redis:7-alpine
@@ -139,7 +139,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nexly-network
+      - maintek-network
 
   minio:
     image: minio/minio:RELEASE.2024-11-07T00-52-20Z
@@ -156,7 +156,7 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - nexly-network
+      - maintek-network
 
   ollama:
     image: ollama/ollama:0.4.7
@@ -166,7 +166,7 @@ services:
     profiles:
       - ai
     networks:
-      - nexly-network
+      - maintek-network
 
 volumes:
   postgres_data:
@@ -178,5 +178,5 @@ volumes:
   ollama_models:
 
 networks:
-  nexly-network:
+  maintek-network:
     driver: bridge

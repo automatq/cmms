@@ -13,12 +13,12 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - nexly-web
-      - nexly-api
+      - maintek-web
+      - maintek-api
     networks:
-      - nexly-network
+      - maintek-network
 
-  nexly-api:
+  maintek-api:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
@@ -40,7 +40,7 @@ services:
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET: nexly-files
+      MINIO_BUCKET: maintek-files
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
       DEFAULT_USER_ID: ${DEFAULT_USER_ID:-00000000-0000-0000-0000-000000000002}
       DEFAULT_USER_EMAIL: ${DEFAULT_USER_EMAIL:-admin@local}
@@ -61,9 +61,9 @@ services:
     volumes:
       - api_uploads:/app/uploads
     networks:
-      - nexly-network
+      - maintek-network
 
-  nexly-worker:
+  maintek-worker:
     build:
       context: ./apps/api
       dockerfile: Dockerfile.worker
@@ -94,9 +94,9 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - nexly-network
+      - maintek-network
 
-  nexly-web:
+  maintek-web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
@@ -107,7 +107,7 @@ services:
       NEXT_PUBLIC_API_URL: ${PUBLIC_URL}/api/v1
       APP_BASE_URL: ${PUBLIC_URL}
     networks:
-      - nexly-network
+      - maintek-network
 
   postgres:
     image: docker.io/timescale/timescaledb:latest-pg16
@@ -125,7 +125,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nexly-network
+      - maintek-network
 
   redis:
     image: docker.io/library/redis:7-alpine
@@ -139,7 +139,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nexly-network
+      - maintek-network
 
   minio:
     image: docker.io/minio/minio:latest
@@ -156,7 +156,7 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - nexly-network
+      - maintek-network
 
   mailpit:
     image: docker.io/axllent/mailpit:latest
@@ -169,7 +169,7 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
     networks:
-      - nexly-network
+      - maintek-network
 
   ollama:
     image: docker.io/ollama/ollama:latest
@@ -179,7 +179,7 @@ services:
     profiles:
       - ai
     networks:
-      - nexly-network
+      - maintek-network
 
   pgadmin:
     image: docker.io/dpage/pgadmin4:latest
@@ -192,7 +192,7 @@ services:
     profiles:
       - debug
     networks:
-      - nexly-network
+      - maintek-network
 
 volumes:
   postgres_data:
@@ -206,5 +206,5 @@ volumes:
   pgadmin_data:
 
 networks:
-  nexly-network:
+  maintek-network:
     driver: bridge

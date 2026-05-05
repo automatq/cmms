@@ -57,7 +57,7 @@ export class FilesService {
     }
 
     this.bucket = this.configService.get<string>('STORAGE_BUCKET',
-      this.configService.get<string>('MINIO_BUCKET', 'nexly-files'),
+      this.configService.get<string>('MINIO_BUCKET', 'maintek-files'),
     );
     this.ready = this.ensureBucket();
   }
