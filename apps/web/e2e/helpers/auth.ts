@@ -1,7 +1,7 @@
 // Auth flow helpers for e2e tests.
 //
 // All flows assume a Better Auth bearer-token setup: the client stores the
-// token in localStorage under 'nexly_auth_token'. Sign-out is performed
+// token in localStorage under 'maintek_auth_token'. Sign-out is performed
 // programmatically (POST /api/auth/sign-out + clear localStorage) since
 // the dashboard's sign-out UI lives in a header dropdown that's awkward
 // to drive in headless.
@@ -10,7 +10,7 @@ import type { Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 import type { TestAccount } from './test-data'
 
-export const AUTH_TOKEN_KEY = 'nexly_auth_token'
+export const AUTH_TOKEN_KEY = 'maintek_auth_token'
 
 function authBaseURL(webBaseURL: string): string {
   // /api/auth/* lives on the API service. Hardcoded here because the web

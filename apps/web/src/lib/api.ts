@@ -31,7 +31,7 @@ class ApiClient {
       const token =
         this.token ||
         (typeof window !== 'undefined'
-          ? localStorage.getItem('nexly_auth_token')
+          ? localStorage.getItem('maintek_auth_token')
           : null)
       if (token) {
         config.headers.Authorization = `Bearer ${token}`

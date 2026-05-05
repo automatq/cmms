@@ -6,14 +6,14 @@ import * as SecureStore from 'expo-secure-store';
 const RAW_API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 const AUTH_BASE = RAW_API.replace(/\/api\/v1\/?$/, '') + '/api/auth';
 
-export const SESSION_TOKEN_KEY = 'nexly.session_token';
+export const SESSION_TOKEN_KEY = 'maintek.session_token';
 
 export const authClient = createAuthClient({
   baseURL: AUTH_BASE,
   plugins: [
     expoClient({
-      scheme: 'nexly',
-      storagePrefix: 'nexly',
+      scheme: 'maintek',
+      storagePrefix: 'maintek',
       storage: SecureStore,
     }),
     organizationClient(),

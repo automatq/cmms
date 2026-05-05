@@ -57,7 +57,7 @@ export const auth: any = betterAuth({
       .split(',')
       .map((o) => o.trim())
       .filter(Boolean),
-    'nexly://',
+    'maintek://',
     'exp://',
   ],
   advanced: {

@@ -22,10 +22,10 @@ class ApiClient {
       // Better Auth's expoClient stores the bearer token under this key
       let token: string | null = null;
       try {
-        token = SecureStore.getItem('nexly.session_token') || null;
+        token = SecureStore.getItem('maintek.session_token') || null;
       } catch {
         // SecureStore.getItem may not be available in all envs - fall back to async
-        token = await SecureStore.getItemAsync('nexly.session_token');
+        token = await SecureStore.getItemAsync('maintek.session_token');
       }
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
