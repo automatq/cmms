@@ -12,13 +12,14 @@ import type { TestAccount } from './test-data'
 
 export const AUTH_TOKEN_KEY = 'maintek_auth_token'
 
-function authBaseURL(webBaseURL: string): string {
+function authBaseURL(_webBaseURL: string): string {
   // /api/auth/* lives on the API service. Hardcoded here because the web
   // app reads NEXT_PUBLIC_API_URL at build time, not runtime — we can't
-  // ask the page for it.
+  // ask the page for it. The API doesn't have a custom domain yet, so it
+  // still serves from its Railway-generated URL even though the web is at
+  // maintek.app.
   return (
     process.env.E2E_API_BASE_URL ||
-    webBaseURL.replace(/cmms-web/, 'cmms-api-production-9cd6') ||
     'https://cmms-api-production-9cd6.up.railway.app'
   )
 }

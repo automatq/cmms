@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const baseURL =
-  process.env.E2E_BASE_URL || 'https://cmms-web-production.up.railway.app'
+  process.env.E2E_BASE_URL || 'https://maintek.app'
 
 export default defineConfig({
   testDir: './e2e',
