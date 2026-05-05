@@ -16,10 +16,15 @@ const polarLogger = new Logger('PolarWebhooks');
 
 const databaseUrl = process.env.DATABASE_URL;
 const sslEnabled = process.env.DB_SSL === 'true';
+// Match TypeORM's pool size (default 20). node-postgres defaults to 10,
+// which serializes parallel auth requests under load (3+ concurrent
+// signups each acquire ~3 connections via Better Auth's session/org hooks).
+const poolMax = parseInt(process.env.DB_POOL_MAX || '20', 10);
 
 const pool = databaseUrl
   ? new Pool({
       connectionString: databaseUrl,
+      max: poolMax,
       ssl:
         sslEnabled || databaseUrl.includes('sslmode=require')
           ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
@@ -31,6 +36,7 @@ const pool = databaseUrl
       user: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
+      max: poolMax,
       ssl:
         sslEnabled
           ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }

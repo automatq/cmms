@@ -8,10 +8,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 1,
-  // Each test signs up a fresh user → org. The Railway API is on a small
-  // instance and chokes on more than ~2 concurrent signups, so cap workers
-  // low. Bump if/when the API moves to a larger plan.
-  workers: 2,
+  // Each test signs up a fresh user → org. After tuning the API for
+  // parallel signups (numReplicas=2, UV_THREADPOOL_SIZE=16, pg pool=20),
+  // 4 concurrent workers should run cleanly.
+  workers: process.env.CI ? 2 : 4,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   timeout: 60_000,
   expect: { timeout: 10_000 },
