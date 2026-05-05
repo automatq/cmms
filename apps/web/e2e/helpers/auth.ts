@@ -15,13 +15,8 @@ export const AUTH_TOKEN_KEY = 'maintek_auth_token'
 function authBaseURL(_webBaseURL: string): string {
   // /api/auth/* lives on the API service. Hardcoded here because the web
   // app reads NEXT_PUBLIC_API_URL at build time, not runtime — we can't
-  // ask the page for it. The API doesn't have a custom domain yet, so it
-  // still serves from its Railway-generated URL even though the web is at
-  // maintek.app.
-  return (
-    process.env.E2E_API_BASE_URL ||
-    'https://cmms-api-production-9cd6.up.railway.app'
-  )
+  // ask the page for it.
+  return process.env.E2E_API_BASE_URL || 'https://api.maintek.app'
 }
 
 /** Sign up a brand-new user via the /sign-up form. */

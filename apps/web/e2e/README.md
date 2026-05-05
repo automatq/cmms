@@ -19,9 +19,8 @@ the browser binary.
 ## Target environment
 
 Tests hit whatever URL is in `E2E_BASE_URL` (defaults to
-`https://maintek.app`). The API still serves from its Railway-generated
-URL (`https://cmms-api-production-9cd6.up.railway.app`) since the API
-doesn't have a custom domain yet; override either with `E2E_BASE_URL` /
+`https://maintek.app`). The corresponding API URL defaults to
+`https://api.maintek.app`. Override either with `E2E_BASE_URL` /
 `E2E_API_BASE_URL` if you point the suite at a different stack.
 
 ```bash
