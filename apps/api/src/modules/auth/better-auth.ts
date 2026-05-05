@@ -66,6 +66,56 @@ export const auth: any = betterAuth({
     },
   },
 
+  // Auto-restore the user's active org on every new session so returning
+  // sign-ins land on /dashboard instead of being bounced to
+  // /onboarding/create-org. Runs in the `after` hook (UPDATE) rather than
+  // `before` (INSERT) because Better Auth's create path doesn't always
+  // forward plugin-extended fields like `activeOrganizationId` from the
+  // before-hook merge.
+  databaseHooks: {
+    session: {
+      create: {
+        after: async (session: any) => {
+          try {
+            const userId = session?.userId;
+            const sessionId = session?.id;
+            if (!userId || !sessionId) return;
+
+            const result = await pool.query<{ organization_id: string }>(
+              `SELECT organization_id
+                 FROM members
+                WHERE user_id = $1
+                ORDER BY
+                  CASE role
+                    WHEN 'owner' THEN 0
+                    WHEN 'admin' THEN 1
+                    ELSE 2
+                  END,
+                  created_at ASC
+                LIMIT 1`,
+              [userId],
+            );
+
+            if (result.rows[0]) {
+              await pool.query(
+                `UPDATE sessions SET active_organization_id = $1 WHERE id = $2`,
+                [result.rows[0].organization_id, sessionId],
+              );
+              polarLogger.log(
+                `[session-hook] active_org=${result.rows[0].organization_id} for user=${userId} session=${sessionId}`,
+              );
+            }
+          } catch (err) {
+            polarLogger.error(
+              `[session-hook] failed: ${(err as Error).message}`,
+              (err as Error).stack,
+            );
+          }
+        },
+      },
+    },
+  },
+
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // set to true once SMTP is verified
