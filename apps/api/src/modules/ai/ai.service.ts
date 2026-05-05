@@ -120,7 +120,7 @@ export class AiService {
       context = {
         messages: [{
           role: 'system',
-          content: 'You are a Nexly AI assistant helping with maintenance management.',
+          content: 'You are a MainTek AI assistant helping with maintenance management.',
         }],
         lastUsed: new Date(),
       };
@@ -304,7 +304,7 @@ Provide step-by-step troubleshooting guide with safety precautions.`;
   async processNaturalLanguageQuery(query: string): Promise<string> {
     return this.callAi(
       query,
-      'You are a Nexly assistant. Answer maintenance-related questions concisely.',
+      'You are a MainTek assistant. Answer maintenance-related questions concisely.',
       0.6,
     );
   }

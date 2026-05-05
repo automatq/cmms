@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Nexly",
-    "slug": "nexly",
+    "name": "MainTek",
+    "slug": "maintek",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nexly.app",
+      "bundleIdentifier": "com.maintek.app",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan QR codes and take photos of equipment."
       }
@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2563eb"
       },
-      "package": "com.nexly.app",
+      "package": "com.maintek.app",
       "permissions": [
         "android.permission.CAMERA"
       ]
@@ -40,7 +40,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Nexly to access your camera for QR code scanning."
+          "cameraPermission": "Allow MainTek to access your camera for QR code scanning."
         }
       ],
       [
@@ -51,7 +51,7 @@
         }
       ]
     ],
-    "scheme": "nexly",
+    "scheme": "maintek",
     "extra": {
       "eas": {
         "projectId": "your-project-id"

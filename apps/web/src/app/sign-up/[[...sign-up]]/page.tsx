@@ -44,7 +44,7 @@ export default function SignUpPage() {
           <div className="mx-auto h-12 w-12 rounded-2xl bg-primary flex items-center justify-center">
             <Wrench className="h-6 w-6 text-primary-foreground" />
           </div>
-          <CardTitle>Create your Nexly account</CardTitle>
+          <CardTitle>Create your MainTek account</CardTitle>
           <CardDescription>Start managing maintenance in minutes.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

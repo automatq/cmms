@@ -1,5 +1,5 @@
 /**
- * Shared color theme definitions for the Nexly suite.
+ * Shared color theme definitions for the MainTek suite.
  *
  * Each theme defines HSL values (without the "hsl()" wrapper) for every
  * design-token used in the web Tailwind config and the mobile style system.

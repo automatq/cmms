@@ -1325,7 +1325,7 @@ function BillingTab() {
                 <CardContent className="space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <span className="text-2xl font-bold">Nexly</span>
+                            <span className="text-2xl font-bold">MainTek</span>
                             <Badge className={`ml-3 ${statusColors[status] || 'bg-gray-500/10 text-gray-700'}`}>
                                 {status}
                             </Badge>

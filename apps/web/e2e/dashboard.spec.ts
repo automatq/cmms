@@ -35,7 +35,7 @@ test.describe('Dashboard shell', () => {
     const account = newAccount('trial')
     await signUpAndCreateOrg(page, account)
 
-    // First-time users land on a "Welcome to Nexly" onboarding wizard
+    // First-time users land on a "Welcome to MainTek" onboarding wizard
     // that mounts a moment after dashboard load. Wait for it to render,
     // then click "Skip setup" and wait for it to unmount.
     const skipBtn = page.getByRole('button', { name: /skip setup/i })

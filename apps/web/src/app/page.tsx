@@ -22,7 +22,7 @@ export default function HomePage() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Wrench className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg">Nexly</span>
+            <span className="font-bold text-lg">MainTek</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <Link href="/features" className="text-muted-foreground hover:text-foreground">Features</Link>
@@ -108,7 +108,7 @@ export default function HomePage() {
           <div>
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Built for the field</h2>
             <p className="text-muted-foreground mb-6">
-              Most CMMS tools were designed for office desks. Nexly was built mobile-first because the
+              Most CMMS tools were designed for office desks. MainTek was built mobile-first because the
               people doing the work are on the floor — wrench in one hand, phone in the other.
             </p>
             <ul className="space-y-3">
@@ -149,7 +149,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Wrench className="h-4 w-4" />
-            <span>© {new Date().getFullYear()} Nexly</span>
+            <span>© {new Date().getFullYear()} MainTek</span>
           </div>
           <div className="flex items-center gap-6">
             <Link href="/features" className="hover:text-foreground">Features</Link>

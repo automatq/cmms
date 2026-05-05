@@ -12,8 +12,8 @@ import { ErrorBoundary } from '@/components/error-boundary'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Nexly - Maintenance Management',
-  description: 'Nexly — intelligent maintenance management platform',
+  title: 'MainTek - Maintenance Management',
+  description: 'MainTek — intelligent maintenance management platform',
 }
 
 export default function RootLayout({

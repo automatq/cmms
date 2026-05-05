@@ -101,7 +101,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* Version */}
-      <Text style={styles.version}>Nexly v1.0.0</Text>
+      <Text style={styles.version}>MainTek v1.0.0</Text>
 
       {/* Theme Picker Modal */}
       <Modal

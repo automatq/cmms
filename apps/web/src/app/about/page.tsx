@@ -11,7 +11,7 @@ export default function AboutPage() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Wrench className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg">Nexly</span>
+            <span className="font-bold text-lg">MainTek</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <Link href="/features" className="text-muted-foreground hover:text-foreground">Features</Link>
@@ -34,24 +34,24 @@ export default function AboutPage() {
         <h1 className="text-4xl md:text-5xl font-bold mb-6">Built by maintenance people, for maintenance people.</h1>
         <div className="prose prose-lg dark:prose-invert">
           <p className="text-muted-foreground text-lg leading-relaxed">
-            Nexly was started because every CMMS we used got in the way. Form-heavy. Desktop-first. Locked
+            MainTek was started because every CMMS we used got in the way. Form-heavy. Desktop-first. Locked
             behind sales calls. Priced per user, so management hesitated to roll it out to the full team —
             which meant the people actually doing the work never used it.
           </p>
           <p className="text-muted-foreground text-lg leading-relaxed mt-4">
-            We built Nexly to fix that. One transparent price. Mobile-first. QR scanning so a tech can start
+            We built MainTek to fix that. One transparent price. Mobile-first. QR scanning so a tech can start
             a work order in two seconds. AI to help diagnose failures based on your own asset history.
           </p>
           <p className="text-muted-foreground text-lg leading-relaxed mt-4">
             We're a small team based in North America. We're shipping fast and we listen — if you're testing
-            Nexly and have feedback, please <Link href="/contact" className="text-primary underline">tell us</Link>.
+            MainTek and have feedback, please <Link href="/contact" className="text-primary underline">tell us</Link>.
           </p>
         </div>
 
         <div className="mt-12">
           <Button size="lg" asChild>
             <Link href="/sign-up">
-              Try Nexly free for 14 days
+              Try MainTek free for 14 days
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>

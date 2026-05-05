@@ -162,8 +162,8 @@ async function bootstrap() {
   // Swagger Documentation (disabled in production)
   if (nodeEnv !== 'production') {
     const config = new DocumentBuilder()
-      .setTitle('Nexly API')
-      .setDescription('Nexly Maintenance Management API')
+      .setTitle('MainTek API')
+      .setDescription('MainTek Maintenance Management API')
       .setVersion('1.0')
       .addBearerAuth(
         {
@@ -198,7 +198,7 @@ async function bootstrap() {
   const port = configService.get('PORT', 4000);
   await app.listen(port, '::');
 
-  logger.log(`Nexly API running on port ${port}`);
+  logger.log(`MainTek API running on port ${port}`);
   if (nodeEnv !== 'production') {
     logger.log(`Swagger docs: http://localhost:${port}/api/docs`);
   }

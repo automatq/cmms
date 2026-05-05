@@ -4,8 +4,8 @@ import { Logger } from '@nestjs/common';
 const logger = new Logger('EmailSender');
 const resend = new Resend(process.env.RESEND_API_KEY || '');
 
-const FROM = process.env.EMAIL_FROM || 'Nexly <noreply@nexly.local>';
-const APP_NAME = 'Nexly';
+const FROM = process.env.EMAIL_FROM || 'MainTek <noreply@maintek.app>';
+const APP_NAME = 'MainTek';
 
 async function send(to: string, subject: string, html: string): Promise<void> {
   if (!process.env.RESEND_API_KEY) {

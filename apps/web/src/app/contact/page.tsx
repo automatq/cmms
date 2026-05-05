@@ -19,7 +19,7 @@ export default function ContactPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     // No API yet — open user's mail client with prefilled body.
-    const subject = encodeURIComponent(`Nexly inquiry from ${name || email}`)
+    const subject = encodeURIComponent(`MainTek inquiry from ${name || email}`)
     const body = encodeURIComponent(`From: ${name} <${email}>\n\n${message}`)
     window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`
     setSubmitted(true)
@@ -33,7 +33,7 @@ export default function ContactPage() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Wrench className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg">Nexly</span>
+            <span className="font-bold text-lg">MainTek</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <Link href="/features" className="text-muted-foreground hover:text-foreground">Features</Link>

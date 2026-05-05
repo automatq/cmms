@@ -89,7 +89,7 @@ export function Sidebar() {
           {/* Logo */}
           <div className="flex items-center gap-2 px-6 py-5 border-b">
             <Wrench className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold">Nexly</span>
+            <span className="text-xl font-bold">MainTek</span>
           </div>
 
           {/* Quick Actions */}

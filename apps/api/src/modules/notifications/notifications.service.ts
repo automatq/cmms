@@ -181,7 +181,7 @@ export class NotificationsService {
     }
 
     const from = this.configService.get('EMAIL_FROM') ||
-      this.configService.get('SMTP_FROM') || 'noreply@nexly.local';
+      this.configService.get('SMTP_FROM') || 'noreply@maintek.app';
 
     try {
       if (this.emailProvider === 'ses' && this.sesClient) {

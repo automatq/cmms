@@ -45,7 +45,7 @@ export default function SignInPage() {
           <div className="mx-auto h-12 w-12 rounded-2xl bg-primary flex items-center justify-center">
             <Wrench className="h-6 w-6 text-primary-foreground" />
           </div>
-          <CardTitle>Sign in to Nexly</CardTitle>
+          <CardTitle>Sign in to MainTek</CardTitle>
           <CardDescription>Enter your email and password to continue</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

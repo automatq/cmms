@@ -31,7 +31,7 @@ export default function SignInScreen() {
         <View style={styles.iconContainer}>
           <Ionicons name="construct" size={48} color="#fff" />
         </View>
-        <Text style={styles.title}>Nexly</Text>
+        <Text style={styles.title}>MainTek</Text>
         <Text style={styles.subtitle}>Maintenance Management</Text>
       </View>
 

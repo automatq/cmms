@@ -90,7 +90,7 @@ export default function FeaturesPage() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Wrench className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="font-bold text-lg">Nexly</span>
+            <span className="font-bold text-lg">MainTek</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <Link href="/features" className="text-foreground font-medium">Features</Link>
@@ -113,7 +113,7 @@ export default function FeaturesPage() {
         <div className="text-center mb-12 max-w-3xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">Every feature your team needs</h1>
           <p className="text-lg text-muted-foreground">
-            From day-one work orders to AI-powered failure prediction, Nexly covers the full maintenance lifecycle.
+            From day-one work orders to AI-powered failure prediction, MainTek covers the full maintenance lifecycle.
           </p>
         </div>
 

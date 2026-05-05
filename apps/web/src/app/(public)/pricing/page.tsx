@@ -31,7 +31,7 @@ export default function PricingPage() {
       <div className="max-w-md mx-auto">
         <Card className="border-primary shadow-lg">
           <CardHeader className="text-center pb-2">
-            <CardTitle className="text-3xl">Nexly</CardTitle>
+            <CardTitle className="text-3xl">MainTek</CardTitle>
             <div className="mt-4">
               <span className="text-5xl font-bold">$269</span>
               <span className="text-muted-foreground"> CAD/month</span>
