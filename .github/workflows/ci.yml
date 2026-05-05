@@ -49,8 +49,8 @@ jobs:
 
       - name: Typecheck API
         if: matrix.app == 'api'
-        run: npx --workspace=@nexly/api tsc --noEmit
+        run: npx --workspace=@maintek/api tsc --noEmit
 
       - name: Typecheck Web
         if: matrix.app == 'web'
-        run: npm run typecheck --workspace=@nexly/web
+        run: npm run typecheck --workspace=@maintek/web

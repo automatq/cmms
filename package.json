@@ -1,5 +1,5 @@
 {
-  "name": "nexly",
+  "name": "maintek",
   "version": "1.0.0",
   "private": true,
   "engines": {
@@ -11,11 +11,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "npm run dev --workspace=@nexly/api",
-    "dev:web": "npm run dev --workspace=@nexly/web",
-    "dev:mobile": "npm run start --workspace=@nexly/mobile",
-    "build:api": "npm run build --workspace=@nexly/api",
-    "build:web": "npm run build --workspace=@nexly/web",
+    "dev:api": "npm run dev --workspace=@maintek/api",
+    "dev:web": "npm run dev --workspace=@maintek/web",
+    "dev:mobile": "npm run start --workspace=@maintek/mobile",
+    "build:api": "npm run build --workspace=@maintek/api",
+    "build:web": "npm run build --workspace=@maintek/web",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
