@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: ${{ matrix.app }} - ${{ matrix.task }}
+  typecheck:
+    name: ${{ matrix.app }} - typecheck
     runs-on: ubuntu-latest
 
     strategy:
@@ -20,9 +20,7 @@ jobs:
       matrix:
         include:
           - app: api
-            task: typecheck
           - app: web
-            task: typecheck
 
     steps:
       - name: Checkout repository
@@ -54,3 +52,40 @@ jobs:
       - name: Typecheck Web
         if: matrix.app == 'web'
         run: npm run typecheck --workspace=@maintek/web
+
+  e2e-marketing:
+    # Smoke-test the public marketing pages against production after every push.
+    # Cheap (~3s, no signups), runs in parallel with typecheck. Use to catch
+    # rebrand regressions, broken links, or 500s on the unauthenticated surface.
+    name: e2e marketing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-node-modules
+        with:
+          path: |
+            node_modules
+            apps/web/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browser
+        run: npx --workspace=@maintek/web playwright install --with-deps chromium
+
+      - name: Run marketing smoke tests
+        working-directory: apps/web
+        run: npx playwright test marketing --reporter=list

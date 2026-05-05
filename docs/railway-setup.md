@@ -7,8 +7,34 @@
 | cmms-api | `apps/api` | `Dockerfile` | 4000 | `/api/v1/health` |
 | cmms-worker | `apps/api` | `Dockerfile.worker` | — | — |
 | cmms-web | `apps/web` | `Dockerfile` | 3000 | `/` |
+| maintek-minio | `infrastructure/minio` | `Dockerfile` | 9000 / 9001 | — |
 | Postgres | — | Railway plugin | 5432 | — |
 | Redis | — | Railway plugin | 6379 | — |
+
+### maintek-minio (manual one-shot deploy)
+
+MinIO is **not** wired to git auto-deploy. The `Dockerfile` lives at
+`infrastructure/minio/Dockerfile` and just baked the right CMD on top of
+`quay.io/minio/minio:latest` (the upstream image's CMD is just `["minio"]`
+which exits with help text; Railway ignores `startCommand` for image-based
+services, so we ship a wrapper).
+
+To deploy or update MinIO:
+
+```bash
+railway up infrastructure/minio --path-as-root --service maintek-minio --ci
+# or, no-change restart:
+railway redeploy --service maintek-minio --yes
+```
+
+Required env vars on the service:
+- `MINIO_ROOT_USER` — root username
+- `MINIO_ROOT_PASSWORD` — root password (long random)
+
+Required volume: persistent volume mounted at `/data`.
+
+The cmms-api and cmms-worker services reach MinIO at
+`maintek-minio.railway.internal:9000` over Railway's private network.
 
 ## Environment Variables
 

@@ -11,9 +11,27 @@ import { ErrorBoundary } from '@/components/error-boundary'
 
 const inter = Inter({ subsets: ['latin'] })
 
+const SITE_URL = 'https://maintek.app'
+const SITE_NAME = 'MainTek'
+const TITLE = 'MainTek - Maintenance Management'
+const DESCRIPTION = 'MainTek — intelligent maintenance management platform'
+
 export const metadata: Metadata = {
-  title: 'MainTek - Maintenance Management',
-  description: 'MainTek — intelligent maintenance management platform',
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 }
 
 export default function RootLayout({

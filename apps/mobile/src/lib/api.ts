@@ -1,9 +1,13 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { offlineQueue } from './offline-queue';
 import { isOfflineSupportedMutation } from './query-client';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ||
+  'http://localhost:4000/api/v1';
 
 class ApiClient {
   private client: AxiosInstance;
