@@ -19,8 +19,8 @@ the browser binary.
 ## Target environment
 
 Tests hit whatever URL is in `E2E_BASE_URL` (defaults to
-`https://maintek-web-production.up.railway.app`). The corresponding API URL
-is auto-derived (`maintek-web` → `maintek-api-production`); override with
+`https://cmms-web-production.up.railway.app`). The corresponding API URL
+is auto-derived (`cmms-web` → `cmms-api-production-9cd6`); override with
 `E2E_API_BASE_URL` if you point the suite at a different stack.
 
 ```bash

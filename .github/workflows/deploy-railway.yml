@@ -22,13 +22,13 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - service: maintek-api
+          - service: cmms-api
             src: apps/api
             config: railway.json
-          - service: maintek-worker
+          - service: cmms-worker
             src: apps/api
             config: railway.worker.json
-          - service: maintek-web
+          - service: cmms-web
             src: apps/web
             config: railway.json
 
