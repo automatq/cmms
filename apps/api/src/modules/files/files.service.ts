@@ -20,6 +20,12 @@ import { Readable } from 'stream';
 @Injectable()
 export class FilesService {
   private readonly s3: S3Client;
+  // Separate client used only for generating presigned URLs against a
+  // browser-reachable host. On Railway the API talks to MinIO over the
+  // private network (maintek-minio.railway.internal), but presigned URLs
+  // need a public origin like https://maintek-minio-production.up.railway.app
+  // so <img src> in the browser resolves.
+  private readonly s3UrlSigner: S3Client;
   private readonly bucket: string;
   private readonly logger = new Logger(FilesService.name);
   private readonly ready: Promise<void>;
@@ -32,6 +38,7 @@ export class FilesService {
       this.s3 = new S3Client({
         region: this.configService.get<string>('AWS_REGION', 'us-east-1'),
       });
+      this.s3UrlSigner = this.s3;
     } else {
       // MinIO (S3-compatible) for local development
       const endpoint = this.configService.get<string>('MINIO_ENDPOINT', 'minio');
@@ -45,15 +52,32 @@ export class FilesService {
         this.configService.get<string>('MINIO_SECRET_KEY') ||
         this.configService.get<string>('MINIO_ROOT_PASSWORD', '');
 
+      const credentials = { accessKeyId, secretAccessKey };
+      const internalEndpoint = `${protocol}://${endpoint}:${port}`;
+
       this.s3 = new S3Client({
         region: 'us-east-1',
-        endpoint: `${protocol}://${endpoint}:${port}`,
+        endpoint: internalEndpoint,
         forcePathStyle: true,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
+        credentials,
       });
+
+      // MINIO_PUBLIC_ENDPOINT is the browser-reachable origin (full URL
+      // including scheme). Falls back to the internal endpoint, which is
+      // correct for local docker-compose where minio:9000 is reachable from
+      // the host via port-forwarding.
+      const publicEndpoint =
+        this.configService.get<string>('MINIO_PUBLIC_ENDPOINT') || internalEndpoint;
+
+      this.s3UrlSigner =
+        publicEndpoint === internalEndpoint
+          ? this.s3
+          : new S3Client({
+              region: 'us-east-1',
+              endpoint: publicEndpoint,
+              forcePathStyle: true,
+              credentials,
+            });
     }
 
     this.bucket = this.configService.get<string>('STORAGE_BUCKET',
@@ -135,7 +159,7 @@ export class FilesService {
         Bucket: this.bucket,
         Key: key,
       });
-      return await getSignedUrl(this.s3, command, { expiresIn: expirySeconds });
+      return await getSignedUrl(this.s3UrlSigner, command, { expiresIn: expirySeconds });
     } catch (error) {
       this.logger.error('Signed URL error:', error);
       throw new InternalServerErrorException('Failed to generate download URL');
