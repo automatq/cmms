@@ -53,6 +53,79 @@ jobs:
         if: matrix.app == 'web'
         run: npm run typecheck --workspace=@maintek/web
 
+  lint:
+    name: ${{ matrix.app }} - lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api
+          - app: web
+          - app: mobile
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-node-modules
+        with:
+          path: |
+            node_modules
+            apps/api/node_modules
+            apps/web/node_modules
+            apps/mobile/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --legacy-peer-deps
+
+      # Lint gates merges on errors only — existing warnings are tracked but
+      # don't block. Remove the warning escape hatch (drop the comment + add
+      # --max-warnings=0) once the warning count drops to zero.
+      - name: Lint API
+        if: matrix.app == 'api'
+        working-directory: apps/api
+        run: npx eslint "src/**/*.ts"
+
+      - name: Lint Web
+        if: matrix.app == 'web'
+        working-directory: apps/web
+        run: npx eslint "src/**/*.{ts,tsx}"
+
+      - name: Lint Mobile
+        if: matrix.app == 'mobile'
+        working-directory: apps/mobile
+        run: npx eslint "app/**/*.{ts,tsx}" "src/**/*.{ts,tsx}"
+
+  audit:
+    # Surfaces high/critical CVEs in production dependencies.
+    # Currently informational (continue-on-error) because there are pre-existing
+    # critical CVEs in next 14.1, expo-router 3.4, and handlebars that need
+    # dependency upgrades. Remove `continue-on-error: true` once the baseline
+    # is clean to make this a hard gate.
+    name: npm audit (prod deps)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run npm audit
+        run: npm audit --omit=dev --audit-level=high
+
   e2e-marketing:
     # Smoke-test the public marketing pages against production after every push.
     # Cheap (~3s, no signups), runs in parallel with typecheck. Use to catch

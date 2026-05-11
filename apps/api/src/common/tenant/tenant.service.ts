@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Tenant, TenantStatus, PlanTier } from '../../modules/users/entities/tenant.entity';
 
@@ -61,7 +61,28 @@ export class TenantService {
     @InjectRepository(Tenant)
     private readonly tenantRepository: Repository<Tenant>,
     private readonly configService: ConfigService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
+
+  private async writeAudit(
+    actorUserId: string,
+    actorRole: string,
+    action: string,
+    targetType: string,
+    targetId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.dataSource.query(
+        `INSERT INTO audit_log (actor_user_id, actor_role, action, target_type, target_id, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [actorUserId, actorRole, action, targetType, targetId, JSON.stringify(metadata)],
+      );
+    } catch (err) {
+      // Audit write failure must not break the underlying operation.
+      this.logger.error(`audit_log insert failed: ${(err as Error).message}`);
+    }
+  }
 
   async findById(id: string): Promise<Tenant> {
     const tenant = await this.tenantRepository.findOne({ where: { id } });
@@ -118,17 +139,41 @@ export class TenantService {
     return this.tenantRepository.find({ order: { createdAt: 'DESC' } });
   }
 
-  async updatePlan(tenantId: string, plan: PlanTier): Promise<Tenant> {
+  async updatePlan(
+    tenantId: string,
+    plan: PlanTier,
+    actor?: { userId: string; role: string },
+  ): Promise<Tenant> {
     const tenant = await this.findById(tenantId);
+    const previousPlan = tenant.plan;
     tenant.plan = plan;
     tenant.modules = PLAN_LIMITS[plan].modules;
-    return this.tenantRepository.save(tenant);
+    const saved = await this.tenantRepository.save(tenant);
+    if (actor) {
+      await this.writeAudit(actor.userId, actor.role, 'tenant.plan_change', 'tenant', tenantId, {
+        from: previousPlan,
+        to: plan,
+      });
+    }
+    return saved;
   }
 
-  async updateStatus(tenantId: string, status: TenantStatus): Promise<Tenant> {
+  async updateStatus(
+    tenantId: string,
+    status: TenantStatus,
+    actor?: { userId: string; role: string },
+  ): Promise<Tenant> {
     const tenant = await this.findById(tenantId);
+    const previousStatus = tenant.status;
     tenant.status = status;
-    return this.tenantRepository.save(tenant);
+    const saved = await this.tenantRepository.save(tenant);
+    if (actor) {
+      await this.writeAudit(actor.userId, actor.role, `tenant.${status}`, 'tenant', tenantId, {
+        from: previousStatus,
+        to: status,
+      });
+    }
+    return saved;
   }
 
   async updatePolarCustomerId(tenantId: string, polarCustomerId: string): Promise<void> {

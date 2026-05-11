@@ -16,7 +16,8 @@
     "migration:generate": "npm run typeorm -- migration:generate -d src/config/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/config/data-source.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/config/data-source.ts",
-    "seed": "ts-node -r tsconfig-paths/register src/database/seed.ts"
+    "seed": "ts-node -r tsconfig-paths/register src/database/seed.ts",
+    "promote-superadmin": "ts-node -r tsconfig-paths/register src/scripts/promote-superadmin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1000.0",
@@ -38,6 +39,7 @@
     "@nestjs/websockets": "^10.4.22",
     "@polar-sh/better-auth": "^1.8.3",
     "@polar-sh/sdk": "^0.46.7",
+    "@sentry/node": "^8.55.2",
     "@socket.io/redis-adapter": "^8.3.0",
     "axios": "^1.6.0",
     "better-auth": "^1.6.9",
@@ -66,7 +68,8 @@
     "rxjs": "^7.8.2",
     "socket.io": "^4.8.3",
     "typeorm": "^0.3.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

@@ -30,8 +30,14 @@ export class CustomValidationPipe implements PipeTransform {
     return object;
   }
 
-  private toValidate(metatype: Function): boolean {
-    const types: Function[] = [String, Boolean, Number, Array, Object];
+  private toValidate(metatype: new (...args: unknown[]) => unknown): boolean {
+    const types: Array<new (...args: unknown[]) => unknown> = [
+      String as unknown as new (...args: unknown[]) => unknown,
+      Boolean as unknown as new (...args: unknown[]) => unknown,
+      Number as unknown as new (...args: unknown[]) => unknown,
+      Array as unknown as new (...args: unknown[]) => unknown,
+      Object as unknown as new (...args: unknown[]) => unknown,
+    ];
     return !types.includes(metatype);
   }
 }

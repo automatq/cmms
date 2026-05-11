@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
-import { organization, bearer } from 'better-auth/plugins';
+import { organization, bearer, admin } from 'better-auth/plugins';
+import { adminAc, userAc } from 'better-auth/plugins/admin/access';
 import { expo } from '@better-auth/expo';
 import { polar, checkout, portal, webhooks } from '@polar-sh/better-auth';
 import { Polar } from '@polar-sh/sdk';
@@ -148,6 +149,14 @@ export const auth: any = betterAuth({
           },
         }
       : {}),
+    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+      ? {
+          github: {
+            clientId: process.env.GITHUB_CLIENT_ID,
+            clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          },
+        }
+      : {}),
     ...(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET
       ? {
           apple: {
@@ -176,6 +185,12 @@ export const auth: any = betterAuth({
       avatarUrl: { type: 'string', required: false, fieldName: 'avatar_url' },
       status: { type: 'string', defaultValue: 'active', fieldName: 'status' },
       lastLoginAt: { type: 'date', required: false, fieldName: 'last_login_at' },
+      // Better Auth admin plugin — platform-wide role distinct from per-org members.role.
+      // NULL for normal customers, 'superadmin' for MainTek HQ operators.
+      role: { type: 'string', required: false, fieldName: 'role' },
+      banned: { type: 'boolean', required: false, defaultValue: false, fieldName: 'banned' },
+      banReason: { type: 'string', required: false, fieldName: 'ban_reason' },
+      banExpires: { type: 'date', required: false, fieldName: 'ban_expires' },
     },
   },
 
@@ -188,6 +203,7 @@ export const auth: any = betterAuth({
       updatedAt: 'updated_at',
       ipAddress: 'ip_address',
       userAgent: 'user_agent',
+      impersonatedBy: 'impersonated_by',
     },
   },
 
@@ -219,6 +235,18 @@ export const auth: any = betterAuth({
   plugins: [
     bearer(),
     expo(),
+    admin({
+      // Define our own role name 'superadmin' as an alias for the plugin's built-in
+      // admin role — the value 'admin' is already overloaded by per-org membership.
+      // We re-use the built-in adminAc/userAc access controls (no custom statements).
+      roles: {
+        superadmin: adminAc,
+        user: userAc,
+      },
+      // Only users whose `role` is in this list can call /api/auth/admin/* endpoints
+      // (list-users, set-role, ban-user, impersonate-user, etc.).
+      adminRoles: ['superadmin'],
+    }),
     organization({
       schema: {
         organization: {

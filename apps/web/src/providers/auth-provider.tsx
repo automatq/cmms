@@ -12,6 +12,10 @@ interface User {
   username: string
   roles: string[]
   permissions: string[]
+  // Platform-wide role (distinct from per-org membership). 'superadmin' grants
+  // access to /dashboard/admin/*. null for normal customers.
+  systemRole: 'superadmin' | null
+  banned: boolean
 }
 
 interface AuthContextType {
@@ -19,6 +23,7 @@ interface AuthContextType {
   isLoading: boolean
   user: User | null
   activeOrgId: string | null
+  impersonatedBy: string | null
   token: string | null
   login: () => void
   logout: () => void
@@ -29,6 +34,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   user: null,
   activeOrgId: null,
+  impersonatedBy: null,
   token: null,
   login: () => {},
   logout: () => {},
@@ -57,6 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const sessionUser = session?.user as any
   const activeOrgId = (session?.session as any)?.activeOrganizationId ?? null
+  const impersonatedBy = (session?.session as any)?.impersonatedBy ?? null
+
+  const systemRole: 'superadmin' | null =
+    sessionUser?.role === 'superadmin' ? 'superadmin' : null
 
   const user: User | null = sessionUser
     ? {
@@ -65,8 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         firstName: sessionUser.firstName || sessionUser.name?.split(' ')[0] || '',
         lastName: sessionUser.lastName || sessionUser.name?.split(' ').slice(1).join(' ') || '',
         username: sessionUser.username || sessionUser.email,
-        roles: ['admin'],
+        roles: systemRole ? ['superadmin'] : ['admin'],
         permissions: ['*'],
+        systemRole,
+        banned: !!sessionUser.banned,
       }
     : null
 
@@ -77,6 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading: isPending,
         user,
         activeOrgId,
+        impersonatedBy,
         token: null,
         login,
         logout,

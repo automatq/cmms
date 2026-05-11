@@ -43,7 +43,7 @@ export function TrialBanner() {
         </span>
       </div>
       {canManageBilling && (
-        <Button size="sm" variant="outline" onClick={() => api.startPolarCheckout()} className="bg-white">
+        <Button size="sm" variant="outline" onClick={() => api.startPolarCheckout()} className="bg-white text-amber-900 border-amber-300 hover:bg-amber-100 hover:text-amber-900">
           <CreditCard className="mr-1.5 h-3.5 w-3.5" />
           Add payment method
         </Button>

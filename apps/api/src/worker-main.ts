@@ -1,3 +1,6 @@
+import { initSentry } from './common/sentry/sentry.init';
+initSentry();
+
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module';

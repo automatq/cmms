@@ -16,6 +16,8 @@ import {
 import { TenantService } from './tenant.service';
 import { Public } from '../../modules/auth/decorators/public.decorator';
 import { Permissions } from '../../modules/auth/decorators/permissions.decorator';
+import { CurrentUser } from '../../modules/auth/decorators/current-user.decorator';
+import { RequestUser } from '../interfaces/request-user.interface';
 import { PlanTier, TenantStatus } from '../../modules/users/entities/tenant.entity';
 
 @ApiTags('Tenants')
@@ -57,8 +59,12 @@ export class TenantController {
   async updatePlan(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('plan') plan: PlanTier,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.tenantService.updatePlan(id, plan);
+    return this.tenantService.updatePlan(id, plan, {
+      userId: user.userId,
+      role: user.systemRole || user.roles[0] || 'unknown',
+    });
   }
 
   @Patch(':id/status')
@@ -68,7 +74,11 @@ export class TenantController {
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: TenantStatus,
+    @CurrentUser() user: RequestUser,
   ) {
-    return this.tenantService.updateStatus(id, status);
+    return this.tenantService.updateStatus(id, status, {
+      userId: user.userId,
+      role: user.systemRole || user.roles[0] || 'unknown',
+    });
   }
 }
