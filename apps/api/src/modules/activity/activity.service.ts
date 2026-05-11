@@ -174,7 +174,7 @@ export class ActivityService {
       isNewWorkOrder = true;
     }
 
-    if (workOrder.status === WorkOrderStatus.DRAFT) {
+    if (workOrder.status === WorkOrderStatus.REQUESTED) {
       workOrder = await this.workOrdersService.updateStatus(
         workOrder.id,
         WorkOrderStatus.OPEN,

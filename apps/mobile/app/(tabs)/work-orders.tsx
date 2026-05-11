@@ -6,12 +6,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 
 const statusColors: Record<string, { bg: string; text: string }> = {
+  requested: { bg: '#f1f5f9', text: '#64748b' },
+  pending_approval: { bg: '#f3e8ff', text: '#9333ea' },
   open: { bg: '#dbeafe', text: '#1d4ed8' },
   in_progress: { bg: '#fef3c7', text: '#d97706' },
+  on_hold: { bg: '#ffedd5', text: '#ea580c' },
   completed: { bg: '#dcfce7', text: '#16a34a' },
-  on_hold: { bg: '#f3e8ff', text: '#9333ea' },
-  draft: { bg: '#f1f5f9', text: '#64748b' },
-  closed: { bg: '#f1f5f9', text: '#64748b' },
+  cancelled: { bg: '#fee2e2', text: '#dc2626' },
 };
 
 const priorityColors: Record<string, { bg: string; text: string }> = {
@@ -47,7 +48,7 @@ export default function WorkOrdersScreen() {
   const workOrders = data?.data || [];
 
   const renderWorkOrder = ({ item }: { item: any }) => {
-    const statusStyle = statusColors[item.status] || statusColors.draft;
+    const statusStyle = statusColors[item.status] || statusColors.requested;
     const priorityStyle = priorityColors[item.priority] || priorityColors.medium;
 
     return (

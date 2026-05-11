@@ -258,10 +258,13 @@ export default function WorkOrderDetailPage() {
 
     const getStatusColor = (status: string) => {
         switch (status) {
+            case 'requested': return 'bg-slate-500/10 text-slate-600'
+            case 'pending_approval': return 'bg-purple-500/10 text-purple-600'
             case 'open': return 'bg-blue-500/10 text-blue-600'
             case 'in_progress': return 'bg-amber-500/10 text-amber-600'
             case 'completed': return 'bg-emerald-500/10 text-emerald-600'
             case 'on_hold': return 'bg-slate-500/10 text-slate-600'
+            case 'cancelled': return 'bg-rose-500/10 text-rose-600'
             default: return 'bg-muted text-muted-foreground'
         }
     }
@@ -363,12 +366,15 @@ export default function WorkOrderDetailPage() {
                             value={wo.status}
                             onChange={handleStatusChange}
                             disabled={statusUpdating}
-                            className={`h-9 w-[140px] font-medium ${getStatusColor(wo.status)} border-transparent focus:ring-0`}
+                            className={`h-9 w-[160px] font-medium ${getStatusColor(wo.status)} border-transparent focus:ring-0`}
                         >
+                            <option value="requested">Requested</option>
+                            <option value="pending_approval">Pending Approval</option>
                             <option value="open">Open</option>
                             <option value="in_progress">In Progress</option>
                             <option value="on_hold">On Hold</option>
                             <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
                         </Select>
                     </div>
                 </div>

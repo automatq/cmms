@@ -39,13 +39,13 @@ import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 
 // Valid status transitions
 const STATUS_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
-  [WorkOrderStatus.DRAFT]: [WorkOrderStatus.OPEN, WorkOrderStatus.PENDING_APPROVAL],
-  [WorkOrderStatus.PENDING_APPROVAL]: [WorkOrderStatus.OPEN, WorkOrderStatus.DRAFT],
-  [WorkOrderStatus.OPEN]: [WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD],
-  [WorkOrderStatus.IN_PROGRESS]: [WorkOrderStatus.ON_HOLD, WorkOrderStatus.COMPLETED],
-  [WorkOrderStatus.ON_HOLD]: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS],
-  [WorkOrderStatus.COMPLETED]: [WorkOrderStatus.CLOSED, WorkOrderStatus.IN_PROGRESS],
-  [WorkOrderStatus.CLOSED]: [],
+  [WorkOrderStatus.REQUESTED]: [WorkOrderStatus.OPEN, WorkOrderStatus.PENDING_APPROVAL, WorkOrderStatus.CANCELLED],
+  [WorkOrderStatus.PENDING_APPROVAL]: [WorkOrderStatus.OPEN, WorkOrderStatus.REQUESTED, WorkOrderStatus.CANCELLED],
+  [WorkOrderStatus.OPEN]: [WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD, WorkOrderStatus.CANCELLED],
+  [WorkOrderStatus.IN_PROGRESS]: [WorkOrderStatus.ON_HOLD, WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED],
+  [WorkOrderStatus.ON_HOLD]: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.CANCELLED],
+  [WorkOrderStatus.COMPLETED]: [WorkOrderStatus.IN_PROGRESS],
+  [WorkOrderStatus.CANCELLED]: [],
 };
 
 @Injectable()
@@ -90,7 +90,7 @@ export class WorkOrdersService {
       woNumber,
       tenantId,
       createdById: userId,
-      status: WorkOrderStatus.DRAFT,
+      status: WorkOrderStatus.REQUESTED,
     });
 
     const savedWo = await this.workOrderRepository.save(workOrder);
@@ -292,6 +292,7 @@ export class WorkOrdersService {
 
     if (status === WorkOrderStatus.COMPLETED) {
       workOrder.actualEnd = new Date();
+      workOrder.completedAt = new Date();
       // Calculate actual hours if we have start time
       if (workOrder.actualStart) {
         const durationMs = workOrder.actualEnd.getTime() - workOrder.actualStart.getTime();
@@ -333,8 +334,22 @@ export class WorkOrdersService {
       }
     }
 
-    if (status === WorkOrderStatus.CLOSED) {
-      workOrder.closedAt = new Date();
+    if (status === WorkOrderStatus.CANCELLED) {
+      const reservedParts = (workOrder.parts || []).filter((p) => p.reserved);
+      for (const part of reservedParts) {
+        if (!part.storeroomId) continue;
+        try {
+          await this.inventoryService.releaseReservation(
+            { partId: part.partId, storeroomId: part.storeroomId, workOrderId: id, qty: part.qtyUsed },
+            userId,
+            tenantId,
+          );
+          part.reserved = false;
+          await this.partRepository.save(part);
+        } catch (error) {
+          this.logger.error(`Failed to release reservation for part ${part.partId}:`, error);
+        }
+      }
     }
 
     const savedWo = await this.workOrderRepository.save(workOrder);
@@ -344,7 +359,9 @@ export class WorkOrdersService {
 
     // Trigger webhooks
     try {
-      const event = status === WorkOrderStatus.COMPLETED ? 'wo.completed' : 'wo.status_changed';
+      let event = 'wo.status_changed';
+      if (status === WorkOrderStatus.COMPLETED) event = 'wo.completed';
+      else if (status === WorkOrderStatus.CANCELLED) event = 'wo.cancelled';
       await this.webhooksService.trigger(event, {
         id: savedWo.id,
         woNumber: savedWo.woNumber,
