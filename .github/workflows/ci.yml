@@ -106,14 +106,12 @@ jobs:
         run: npx eslint "app/**/*.{ts,tsx}" "src/**/*.{ts,tsx}"
 
   audit:
-    # Surfaces high/critical CVEs in production dependencies.
-    # Currently informational (continue-on-error) because there are pre-existing
-    # critical CVEs in next 14.1, expo-router 3.4, and handlebars that need
-    # dependency upgrades. Remove `continue-on-error: true` once the baseline
-    # is clean to make this a hard gate.
+    # Surfaces critical CVEs in production dependencies of deployed services
+    # (web + api). Mobile's expo SDK 50 transitives carry pre-existing high
+    # CVEs (path traversal in @remix-run/node, xmldom, etc.) that require an
+    # expo SDK major upgrade — tracked as separate work, not deploy-blocking.
     name: npm audit (prod deps)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -124,7 +122,7 @@ jobs:
           node-version: 20
 
       - name: Run npm audit
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --audit-level=critical --workspace=apps/api --workspace=apps/web
 
   e2e-marketing:
     # Smoke-test the public marketing pages against production after every push.
