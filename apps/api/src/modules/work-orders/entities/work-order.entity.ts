@@ -26,13 +26,13 @@ export enum WorkOrderType {
 }
 
 export enum WorkOrderStatus {
-  DRAFT = 'draft',
+  REQUESTED = 'requested',
   PENDING_APPROVAL = 'pending_approval',
   OPEN = 'open',
   IN_PROGRESS = 'in_progress',
   ON_HOLD = 'on_hold',
   COMPLETED = 'completed',
-  CLOSED = 'closed',
+  CANCELLED = 'cancelled',
 }
 
 export enum Priority {
@@ -71,7 +71,7 @@ export class WorkOrder extends TenantAwareEntity {
   @Column({ type: 'enum', enum: Priority, default: Priority.MEDIUM })
   priority: Priority;
 
-  @Column({ type: 'enum', enum: WorkOrderStatus, default: WorkOrderStatus.OPEN })
+  @Column({ type: 'enum', enum: WorkOrderStatus, default: WorkOrderStatus.REQUESTED })
   status: WorkOrderStatus;
 
   @Column({ nullable: true, name: 'asset_id' })
@@ -175,9 +175,6 @@ export class WorkOrder extends TenantAwareEntity {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
-
-  @Column({ type: 'timestamptz', nullable: true, name: 'closed_at' })
-  closedAt: Date;
 
   @Column({ type: 'timestamptz', nullable: true, name: 'completed_at' })
   completedAt: Date;

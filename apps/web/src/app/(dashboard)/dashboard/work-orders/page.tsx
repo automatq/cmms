@@ -12,12 +12,13 @@ import { Plus, Search, ClipboardList, AlertCircle, Clock, CheckCircle } from 'lu
 import { useState } from 'react'
 
 const statusColors: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-700',
+  requested: 'bg-gray-100 text-gray-700',
+  pending_approval: 'bg-purple-100 text-purple-700',
   open: 'bg-blue-100 text-blue-700',
   in_progress: 'bg-amber-100 text-amber-700',
   on_hold: 'bg-purple-100 text-purple-700',
   completed: 'bg-green-100 text-green-700',
-  closed: 'bg-gray-100 text-gray-700',
+  cancelled: 'bg-rose-100 text-rose-700',
 }
 
 const priorityColors: Record<string, string> = {

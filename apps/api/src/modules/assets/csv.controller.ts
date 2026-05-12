@@ -13,9 +13,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { format, parse } from 'fast-csv';
-import { Readable } from 'stream';
-import { Asset } from './entities/asset.entity';
+import { format } from 'fast-csv';
+import { Asset, AssetStatus } from './entities/asset.entity';
 import { Location } from './entities/location.entity';
 import { AssetCategory } from './entities/asset-category.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -23,6 +22,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { parseSpreadsheet } from '../imports/spreadsheet-parser';
 
 @ApiTags('Assets CSV')
 @ApiBearerAuth()
@@ -89,60 +89,50 @@ export class AssetCsvController {
       throw new BadRequestException('No file uploaded');
     }
 
-    const rows: any[] = [];
+    const { rows } = parseSpreadsheet(file.buffer, file.originalname);
     const errors: { row: number; message: string }[] = [];
 
-    // Look up locations and categories for name resolution
     const locations = await this.locationRepository.find({ where: { tenantId: user.tenantId } });
     const categories = await this.categoryRepository.find({ where: { tenantId: user.tenantId } });
     const locationMap = new Map(locations.map((l) => [l.name.toLowerCase(), l.id]));
     const categoryMap = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
 
-    return new Promise((resolve, reject) => {
-      const stream = Readable.from(file.buffer);
-      stream
-        .pipe(parse({ headers: true, trim: true }))
-        .on('data', (row) => rows.push(row))
-        .on('error', (error) => reject(new BadRequestException(`CSV parse error: ${error.message}`)))
-        .on('end', async () => {
-          let imported = 0;
+    let imported = 0;
 
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            const rowNum = i + 2; // 1-indexed + header
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
 
-            if (!row.name) {
-              errors.push({ row: rowNum, message: 'Name is required' });
-              continue;
-            }
+      if (!row.name) {
+        errors.push({ row: rowNum, message: 'Name is required' });
+        continue;
+      }
 
-            try {
-              const asset = this.assetRepository.create({
-                tenantId: user.tenantId,
-                assetNumber: row.assetNumber || `IMPORT-${Date.now()}-${i}`,
-                name: row.name,
-                status: row.status || 'active',
-                manufacturer: row.manufacturer || undefined,
-                model: row.model || undefined,
-                serialNumber: row.serialNumber || undefined,
-                purchaseDate: row.purchaseDate ? new Date(row.purchaseDate) : undefined,
-                purchaseCost: row.purchaseCost ? parseFloat(row.purchaseCost) : undefined,
-                warrantyExpiry: row.warrantyExpiry ? new Date(row.warrantyExpiry) : undefined,
-                isCritical: row.isCritical?.toLowerCase() === 'yes',
-                locationId: row.location ? locationMap.get(row.location.toLowerCase()) : undefined,
-                categoryId: row.category ? categoryMap.get(row.category.toLowerCase()) : undefined,
-              });
-
-              await this.assetRepository.save(asset);
-              imported++;
-            } catch (error) {
-              errors.push({ row: rowNum, message: (error as Error).message });
-            }
-          }
-
-          resolve({ imported, errors, total: rows.length });
+      try {
+        const asset = this.assetRepository.create({
+          tenantId: user.tenantId,
+          assetNumber: row.assetNumber || `IMPORT-${Date.now()}-${i}`,
+          name: row.name,
+          status: (row.status as AssetStatus) || AssetStatus.ACTIVE,
+          manufacturer: row.manufacturer || undefined,
+          model: row.model || undefined,
+          serialNumber: row.serialNumber || undefined,
+          purchaseDate: row.purchaseDate ? new Date(row.purchaseDate) : undefined,
+          purchaseCost: row.purchaseCost ? parseFloat(row.purchaseCost) : undefined,
+          warrantyExpiry: row.warrantyExpiry ? new Date(row.warrantyExpiry) : undefined,
+          isCritical: row.isCritical?.toLowerCase() === 'yes',
+          locationId: row.location ? locationMap.get(row.location.toLowerCase()) : undefined,
+          categoryId: row.category ? categoryMap.get(row.category.toLowerCase()) : undefined,
         });
-    });
+
+        await this.assetRepository.save(asset);
+        imported++;
+      } catch (error) {
+        errors.push({ row: rowNum, message: (error as Error).message });
+      }
+    }
+
+    return { imported, errors, total: rows.length };
   }
 }
 
@@ -193,41 +183,32 @@ export class LocationCsvController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
 
-    const rows: any[] = [];
+    const { rows } = parseSpreadsheet(file.buffer, file.originalname);
     const errors: { row: number; message: string }[] = [];
 
-    return new Promise((resolve, reject) => {
-      const stream = Readable.from(file.buffer);
-      stream
-        .pipe(parse({ headers: true, trim: true }))
-        .on('data', (row) => rows.push(row))
-        .on('error', (error) => reject(new BadRequestException(`CSV parse error: ${error.message}`)))
-        .on('end', async () => {
-          let imported = 0;
+    let imported = 0;
 
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            if (!row.name) {
-              errors.push({ row: i + 2, message: 'Name is required' });
-              continue;
-            }
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row.name) {
+        errors.push({ row: i + 2, message: 'Name is required' });
+        continue;
+      }
 
-            try {
-              const location = this.locationRepository.create({
-                tenantId: user.tenantId,
-                name: row.name,
-                description: row.description || undefined,
-                address: row.address || undefined,
-              });
-              await this.locationRepository.save(location);
-              imported++;
-            } catch (error) {
-              errors.push({ row: i + 2, message: (error as Error).message });
-            }
-          }
-
-          resolve({ imported, errors, total: rows.length });
+      try {
+        const location = this.locationRepository.create({
+          tenantId: user.tenantId,
+          name: row.name,
+          description: row.description || undefined,
+          address: row.address || undefined,
         });
-    });
+        await this.locationRepository.save(location);
+        imported++;
+      } catch (error) {
+        errors.push({ row: i + 2, message: (error as Error).message });
+      }
+    }
+
+    return { imported, errors, total: rows.length };
   }
 }

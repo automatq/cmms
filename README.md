@@ -124,6 +124,28 @@ make migrate
 - **API:** http://localhost:4000/api/v1
 - **API docs (Swagger):** http://localhost:4000/api/docs
 
+### 6. Promote a superadmin (optional)
+
+The MainTek HQ admin console at `/dashboard/admin/tenants` lets operators
+manage customer organizations, change plans, suspend tenants, and
+impersonate users for support. It is hidden behind a `superadmin` role
+that is not granted to anyone by default.
+
+To promote yourself (after you've signed up via the normal flow):
+
+```bash
+EMAIL=you@example.com npm run promote-superadmin --workspace=@maintek/api
+```
+
+To revoke:
+
+```bash
+EMAIL=you@example.com REVOKE=true npm run promote-superadmin --workspace=@maintek/api
+```
+
+All superadmin actions are logged to the `audit_log` table. Treat the
+role as you would a database root account.
+
 ---
 
 ## Development

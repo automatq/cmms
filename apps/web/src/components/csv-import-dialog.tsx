@@ -68,7 +68,7 @@ export function CsvImportDialog({ open, onOpenChange, title, onImport, onSuccess
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Upload a CSV file to import records in bulk.</DialogDescription>
+          <DialogDescription>Upload a CSV or Excel file to import records in bulk.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -88,7 +88,7 @@ export function CsvImportDialog({ open, onOpenChange, title, onImport, onSuccess
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               className="hidden"
               onChange={handleFileChange}
             />

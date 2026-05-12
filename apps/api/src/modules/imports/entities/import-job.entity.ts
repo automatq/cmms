@@ -49,6 +49,9 @@ export class ImportJob extends TenantAwareEntity {
   @Column({ nullable: true, name: 'storage_key' })
   storageKey: string;
 
+  @Column({ nullable: true, name: 'original_filename' })
+  originalFilename: string;
+
   @Column({ nullable: true, name: 'uploaded_by' })
   uploadedBy: string;
 

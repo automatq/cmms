@@ -41,12 +41,13 @@ export default function WorkOrderDetailScreen() {
   const wo = data.data
 
   const statusColor: Record<string, string> = {
-    DRAFT: '#9ca3af',
-    OPEN: '#3b82f6',
-    IN_PROGRESS: '#f59e0b',
-    ON_HOLD: '#ef4444',
-    COMPLETED: '#22c55e',
-    CANCELLED: '#6b7280',
+    requested: '#9ca3af',
+    pending_approval: '#9333ea',
+    open: '#3b82f6',
+    in_progress: '#f59e0b',
+    on_hold: '#ea580c',
+    completed: '#22c55e',
+    cancelled: '#ef4444',
   }
 
   return (

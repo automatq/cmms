@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 import { FilesService } from '../files/files.service';
+import { parseSpreadsheet } from './spreadsheet-parser';
 
 @ApiTags('Imports')
 @RequireFeature('dataImport')
@@ -40,8 +41,7 @@ export class ImportsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: RequestUser,
   ) {
-    const csvContent = file.buffer.toString('utf-8');
-    return this.importsService.previewImport(type, csvContent, user.tenantId);
+    return this.importsService.previewImport(type, file.buffer, file.originalname, user.tenantId);
   }
 
   @Post(':type')
@@ -55,21 +55,20 @@ export class ImportsController {
   ) {
     const columnMapping = JSON.parse(columnMappingStr || '{}');
 
-    // Upload CSV to storage
     const storageKey = await this.filesService.uploadFile(
       file,
       `imports/${type}`,
       user.tenantId,
     );
 
-    const lines = file.buffer.toString('utf-8').split('\n').filter((l) => l.trim());
-    const totalRows = Math.max(0, lines.length - 1);
+    const { rows } = parseSpreadsheet(file.buffer, file.originalname);
 
     return this.importsService.startImport(
       type,
       storageKey,
+      file.originalname,
       columnMapping,
-      totalRows,
+      rows.length,
       user.userId,
       user.tenantId,
     );

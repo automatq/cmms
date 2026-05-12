@@ -1,3 +1,8 @@
+// Sentry must be initialized before NestFactory so its instrumentation
+// can wrap the HTTP server and outgoing requests.
+import { initSentry } from './common/sentry/sentry.init';
+initSentry();
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +14,7 @@ import { AppModule } from './app.module';
 import { JsonLoggerService } from './common/logger/json-logger.service';
 import { RequestLoggingInterceptor } from './common/logger/request-logging.interceptor';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
+import { SentryExceptionFilter } from './common/sentry/sentry.filter';
 import { auth } from './modules/auth/better-auth';
 
 function validateProductionEnv() {
@@ -38,6 +44,7 @@ async function bootstrap() {
   });
 
   app.useGlobalInterceptors(new RequestLoggingInterceptor());
+  app.useGlobalFilters(new SentryExceptionFilter());
 
   const logger = new Logger('Bootstrap');
   const configService = app.get(ConfigService);

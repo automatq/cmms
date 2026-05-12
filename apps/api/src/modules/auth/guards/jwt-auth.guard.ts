@@ -17,6 +17,8 @@ import { RequestUser } from '../../../common/interfaces/request-user.interface';
 import { PlanTier, TenantStatus } from '../../users/entities/tenant.entity';
 
 // All non-billing permissions used by the app.
+// `admin:tenants` is intentionally NOT in this list — it is platform-wide and only
+// granted via the superadmin path below (which sets permissions = ['*']).
 const ALL_NON_BILLING_PERMISSIONS = [
   'work_orders:read', 'work_orders:write', 'work_orders:write:own',
   'work_requests:write',
@@ -27,7 +29,6 @@ const ALL_NON_BILLING_PERMISSIONS = [
   'users:read', 'users:write',
   'settings:read', 'settings:write',
   'ai:read',
-  'admin:tenants',
 ];
 
 const BILLING_PERMISSIONS = ['billing:read', 'billing:write'];
@@ -109,12 +110,47 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Authentication required');
     }
 
-    const tenantId = (session.session as any).activeOrganizationId;
-    if (!tenantId) {
+    // Block banned users (Better Auth admin plugin sets this).
+    const userRow = session.user as any;
+    if (userRow.banned) {
+      const expires = userRow.banExpires ? new Date(userRow.banExpires) : null;
+      if (!expires || expires > new Date()) {
+        throw new UnauthorizedException('Account banned');
+      }
+    }
+
+    const activeOrgId: string | null =
+      (session.session as any).activeOrganizationId || null;
+    const impersonatedBy: string | null =
+      (session.session as any).impersonatedBy || null;
+    const isSuperadmin = userRow.role === 'superadmin';
+
+    // Superadmin bypass: platform-wide access, no org membership required.
+    // If they have an activeOrgId (e.g., via impersonation), use it so their
+    // tenant-scoped requests target that org. Otherwise fall back to '' which
+    // naturally returns zero rows from tenant_id filters — correct for an
+    // operator who hasn't opted into any tenant context.
+    if (isSuperadmin) {
+      const requestUser: RequestUser = {
+        userId: session.user.id,
+        tenantId: activeOrgId || '',
+        email: session.user.email,
+        plan: PlanTier.ENTERPRISE,
+        permissions: ['*'],
+        roles: ['superadmin'],
+        systemRole: 'superadmin',
+        impersonatedBy,
+      };
+      request.user = requestUser;
+      return true;
+    }
+
+    if (!activeOrgId) {
       throw new ForbiddenException(
         'No active organization. Create or join one before using this resource.',
       );
     }
+    const tenantId = activeOrgId;
 
     let role = 'member';
     try {
@@ -171,6 +207,8 @@ export class JwtAuthGuard implements CanActivate {
       plan: (org.plan as PlanTier) || PlanTier.FREE,
       permissions,
       roles: [role],
+      systemRole: null,
+      impersonatedBy,
     };
 
     request.user = requestUser;

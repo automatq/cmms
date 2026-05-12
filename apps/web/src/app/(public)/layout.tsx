@@ -30,6 +30,16 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         </div>
       </header>
       {children}
+      <footer className="border-t mt-16">
+        <div className="container mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-muted-foreground">
+          <p>&copy; {new Date().getFullYear()} MainTek. All rights reserved.</p>
+          <nav className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+            <Link href="/terms" className="hover:text-foreground">Terms</Link>
+            <Link href="/contact" className="hover:text-foreground">Contact</Link>
+          </nav>
+        </div>
+      </footer>
     </div>
   )
 }

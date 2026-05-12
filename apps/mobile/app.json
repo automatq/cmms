@@ -52,6 +52,9 @@
       ]
     ],
     "scheme": "maintek",
+    "experiments": {
+      "tsconfigPaths": true
+    },
     "extra": {
       "apiUrl": "https://api.maintek.app/api/v1",
       "eas": {

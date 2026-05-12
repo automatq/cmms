@@ -127,7 +127,7 @@ export class ReportsService {
       .select('wo.priority', 'priority')
       .addSelect('COUNT(*)', 'count')
       .where('wo.tenantId = :tenantId', { tenantId })
-      .andWhere('wo.status NOT IN (:...statuses)', { statuses: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED] })
+      .andWhere('wo.status NOT IN (:...statuses)', { statuses: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] })
       .groupBy('wo.priority')
       .getRawMany();
 

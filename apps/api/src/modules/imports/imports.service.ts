@@ -1,10 +1,11 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ImportJob, ImportType, ImportStatus } from './entities/import-job.entity';
 import { FilesService } from '../files/files.service';
+import { parseSpreadsheet } from './spreadsheet-parser';
 
 // Expected column names per import type
 const EXPECTED_COLUMNS: Record<ImportType, string[]> = {
@@ -29,8 +30,9 @@ export class ImportsService {
 
   async previewImport(
     type: ImportType,
-    csvContent: string,
-    tenantId: string,
+    fileBuffer: Buffer,
+    filename: string,
+    _tenantId: string,
   ): Promise<{
     headers: string[];
     availableFields: string[];
@@ -38,34 +40,22 @@ export class ImportsService {
     previewRows: Record<string, string>[];
     totalRows: number;
   }> {
-    const lines = csvContent.split('\n').filter((l) => l.trim());
-    if (lines.length < 2) {
-      throw new BadRequestException('CSV must have a header row and at least one data row');
-    }
-
-    const headers = this.parseCsvLine(lines[0]);
+    const { headers, rows } = parseSpreadsheet(fileBuffer, filename);
     const suggestedMapping = this.suggestColumnMapping(headers, type);
-    const previewRows = lines.slice(1, 11).map((line) => {
-      const values = this.parseCsvLine(line);
-      const row: Record<string, string> = {};
-      headers.forEach((h, i) => {
-        row[h] = values[i] || '';
-      });
-      return row;
-    });
 
     return {
       headers,
       availableFields: EXPECTED_COLUMNS[type],
       suggestedMapping,
-      previewRows,
-      totalRows: lines.length - 1,
+      previewRows: rows.slice(0, 10),
+      totalRows: rows.length,
     };
   }
 
   async startImport(
     type: ImportType,
     storageKey: string,
+    originalFilename: string,
     columnMapping: Record<string, string>,
     totalRows: number,
     userId: string,
@@ -74,6 +64,7 @@ export class ImportsService {
     const job = this.importJobRepo.create({
       type,
       storageKey,
+      originalFilename,
       columnMapping,
       totalRows,
       uploadedBy: userId,
@@ -122,35 +113,32 @@ export class ImportsService {
     await this.importJobRepo.save(job);
 
     try {
-      // Download CSV from storage
-      const csvBuffer = await this.filesService.getFileBuffer(storageKey);
-      const csvContent = csvBuffer.toString('utf-8');
-      const lines = csvContent.split('\n').filter((l) => l.trim());
+      const fileBuffer = await this.filesService.getFileBuffer(storageKey);
+      const filename = job.originalFilename || `${storageKey}.csv`;
+      const { headers, rows } = parseSpreadsheet(fileBuffer, filename);
 
-      if (lines.length < 2) {
+      if (rows.length === 0) {
         job.status = ImportStatus.FAILED;
-        job.errorDetails = [{ row: 0, errors: ['CSV is empty or has no data rows'] }];
+        job.errorDetails = [{ row: 0, errors: ['File is empty or has no data rows'] }];
         await this.importJobRepo.save(job);
         return;
       }
 
-      const headers = this.parseCsvLine(lines[0]);
       const errors: { row: number; errors: string[] }[] = [];
       let processedRows = 0;
       let errorRows = 0;
 
-      // Process in batches of 50
       const batchSize = 50;
-      for (let i = 1; i < lines.length; i += batchSize) {
-        const batch = lines.slice(i, i + batchSize);
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
         for (let j = 0; j < batch.length; j++) {
-          const rowNum = i + j;
-          const values = this.parseCsvLine(batch[j]);
+          const rowNum = i + j + 2; // header is row 1, data starts at row 2
+          const rawRow = batch[j];
           const row: Record<string, string> = {};
-          headers.forEach((h, idx) => {
+          headers.forEach((h) => {
             const mappedField = columnMapping[h];
             if (mappedField) {
-              row[mappedField] = values[idx] || '';
+              row[mappedField] = rawRow[h] || '';
             }
           });
 
@@ -169,7 +157,6 @@ export class ImportsService {
           }
         }
 
-        // Update progress
         job.processedRows = processedRows;
         job.errorRows = errorRows;
         await this.importJobRepo.save(job);
@@ -178,7 +165,7 @@ export class ImportsService {
       job.status = ImportStatus.COMPLETED;
       job.processedRows = processedRows;
       job.errorRows = errorRows;
-      job.errorDetails = errors.slice(0, 100); // Limit stored errors
+      job.errorDetails = errors.slice(0, 100);
       job.completedAt = new Date();
       await this.importJobRepo.save(job);
     } catch (error) {
@@ -288,36 +275,4 @@ export class ImportsService {
     return mapping;
   }
 
-  private parseCsvLine(line: string): string[] {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (inQuotes) {
-        if (ch === '"') {
-          if (i + 1 < line.length && line[i + 1] === '"') {
-            current += '"';
-            i++;
-          } else {
-            inQuotes = false;
-          }
-        } else {
-          current += ch;
-        }
-      } else {
-        if (ch === '"') {
-          inQuotes = true;
-        } else if (ch === ',') {
-          result.push(current.trim());
-          current = '';
-        } else {
-          current += ch;
-        }
-      }
-    }
-    result.push(current.trim());
-    return result;
-  }
 }

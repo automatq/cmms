@@ -48,7 +48,7 @@ export default function ImportsPage() {
       setColumnMapping(res.data.suggestedMapping || {})
       setStep('mapping')
     },
-    onError: () => toast.error('Failed to parse CSV file'),
+    onError: () => toast.error('Failed to parse file'),
   })
 
   const importMutation = useMutation({
@@ -99,7 +99,7 @@ export default function ImportsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Data Import"
-        description="Import assets, locations, parts, and work orders from CSV files"
+        description="Import assets, locations, parts, and work orders from CSV or Excel files"
       />
 
       <Card>
@@ -129,16 +129,16 @@ export default function ImportsPage() {
               >
                 <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
                 <p className="mt-4 text-sm font-medium">
-                  Click to upload a CSV file
+                  Click to upload a CSV or Excel file
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  CSV files only, max 10MB
+                  CSV, XLSX, or XLS, max 10MB
                 </p>
               </div>
               <input
                 ref={fileRef}
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 className="hidden"
                 onChange={handleFileSelect}
               />
@@ -149,7 +149,7 @@ export default function ImportsPage() {
             <div className="flex flex-col items-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="mt-4 text-sm text-muted-foreground">
-                Parsing CSV file...
+                Parsing file...
               </p>
             </div>
           )}
@@ -158,7 +158,7 @@ export default function ImportsPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  {preview.totalRows} rows found.  Map CSV columns to fields.
+                  {preview.totalRows} rows found.  Map file columns to fields.
                 </p>
                 <Button variant="outline" size="sm" onClick={resetWizard}>
                   Start Over
