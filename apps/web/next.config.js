@@ -28,6 +28,9 @@ const cspDirectives = [
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  // Lint runs as a dedicated CI job (`web - lint`); we don't need `next build`
+  // to re-run it and turn lint findings into build failures.
+  eslint: { ignoreDuringBuilds: true },
   experimental: {
     instrumentationHook: true,
   },
