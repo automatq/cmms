@@ -6,6 +6,7 @@ import {
   Body,
   UseInterceptors,
   UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
@@ -41,6 +42,9 @@ export class ImportsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: RequestUser,
   ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
     return this.importsService.previewImport(type, file.buffer, file.originalname, user.tenantId);
   }
 
@@ -53,6 +57,9 @@ export class ImportsController {
     @Body('columnMapping') columnMappingStr: string,
     @CurrentUser() user: RequestUser,
   ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
     const columnMapping = JSON.parse(columnMappingStr || '{}');
 
     const storageKey = await this.filesService.uploadFile(

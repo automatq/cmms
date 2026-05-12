@@ -48,7 +48,11 @@ export default function ImportsPage() {
       setColumnMapping(res.data.suggestedMapping || {})
       setStep('mapping')
     },
-    onError: () => toast.error('Failed to parse file'),
+    onError: (err: any) => {
+      const msg = err.response?.data?.message || err.message || 'Failed to parse file'
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg)
+      setStep('select')
+    },
   })
 
   const importMutation = useMutation({
@@ -58,7 +62,10 @@ export default function ImportsPage() {
       setStep('importing')
       queryClient.invalidateQueries({ queryKey: ['imports'] })
     },
-    onError: () => toast.error('Failed to start import'),
+    onError: (err: any) => {
+      const msg = err.response?.data?.message || err.message || 'Failed to start import'
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg)
+    },
   })
 
   const { data: importStatus } = useQuery({

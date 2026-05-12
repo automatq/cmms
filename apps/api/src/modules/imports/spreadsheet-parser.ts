@@ -7,6 +7,10 @@ export interface ParsedSpreadsheet {
 }
 
 export function parseSpreadsheet(buffer: Buffer, filename: string): ParsedSpreadsheet {
+  if (!buffer || buffer.length === 0) {
+    throw new BadRequestException('File is empty');
+  }
+
   const ext = (filename.split('.').pop() || '').toLowerCase();
   if (!['csv', 'xlsx', 'xls'].includes(ext)) {
     throw new BadRequestException(`Unsupported file type: .${ext}. Use CSV, XLSX, or XLS.`);
@@ -14,7 +18,7 @@ export function parseSpreadsheet(buffer: Buffer, filename: string): ParsedSpread
 
   let workbook: XLSX.WorkBook;
   try {
-    workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+    workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false, raw: false });
   } catch (err) {
     throw new BadRequestException(`Failed to parse file: ${(err as Error).message}`);
   }
