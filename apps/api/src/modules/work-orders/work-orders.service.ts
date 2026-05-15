@@ -111,7 +111,9 @@ export class WorkOrdersService {
         status: savedWo.status,
         assetId: savedWo.assetId,
       }, tenantId);
-    } catch {}
+    } catch (err) {
+      this.logger.warn(`webhook wo.created failed for ${savedWo.id}: ${(err as Error).message}`);
+    }
 
     return this.findOne(savedWo.id, tenantId);
   }
@@ -370,7 +372,9 @@ export class WorkOrdersService {
         newStatus: status,
         assetId: savedWo.assetId,
       }, tenantId);
-    } catch {}
+    } catch (err) {
+      this.logger.warn(`webhook ${event} failed for ${savedWo.id}: ${(err as Error).message}`);
+    }
 
     return this.findOne(id, tenantId);
   }
@@ -646,7 +650,9 @@ export class WorkOrdersService {
         priority: savedRequest.priority,
         status: savedRequest.status,
       }, tenantId);
-    } catch {}
+    } catch (err) {
+      this.logger.warn(`webhook request.submitted failed for ${savedRequest.id}: ${(err as Error).message}`);
+    }
 
     return savedRequest;
   }

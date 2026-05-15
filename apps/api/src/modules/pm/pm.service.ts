@@ -211,7 +211,9 @@ export class PmService {
         workOrderId: workOrder.id,
         assetId: plan.assetId,
       }, tenantId);
-    } catch {}
+    } catch (err) {
+      this.logger.warn(`webhook pm.triggered failed for plan ${plan.id}: ${(err as Error).message}`);
+    }
 
     return { woId: workOrder.id };
   }
@@ -298,7 +300,9 @@ export class PmService {
               workOrderId: workOrder.id,
               assetId: plan.assetId,
             }, tenantId);
-          } catch {}
+          } catch (err) {
+            this.logger.warn(`webhook pm.triggered failed for plan ${plan.id}: ${(err as Error).message}`);
+          }
 
           triggered++;
         } catch (error) {
