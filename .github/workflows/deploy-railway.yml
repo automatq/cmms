@@ -42,14 +42,15 @@ jobs:
       - name: Install Railway CLI
         run: npm i -g @railway/cli
 
-      # railway up --ci sometimes exits 1 even when the deploy completed and
-      # the healthcheck passed. Treat the CLI exit as advisory and rely on
-      # Railway's own status as the source of truth. If the CLI exits non-zero
-      # we just log it; a failed deploy will be visible in the Railway
-      # dashboard and surfaced by other monitoring.
+      # Let railway CLI's exit code fail the job. The previous `|| echo ...`
+      # masked real deploy failures (e.g. Railpack falling back when
+      # RAILWAY_CONFIG_FILE wasn't picked up, or build errors that turned
+      # the Railway dashboard red while CI stayed green). If we hit CLI
+      # false-positives again, prefer a follow-up status check over silently
+      # swallowing the exit code.
       - name: Deploy ${{ matrix.service }}
         working-directory: ${{ matrix.src }}
-        run: railway up --service ${{ matrix.service }} --ci || echo "::warning::railway CLI exited non-zero for ${{ matrix.service }}; check Railway dashboard for actual deploy status"
+        run: railway up --service ${{ matrix.service }} --ci
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_CONFIG_FILE: ${{ matrix.config }}
