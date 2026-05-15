@@ -71,6 +71,18 @@ export const auth: any = betterAuth({
     database: {
       generateId: () => randomUUID(),
     },
+    // Make Better Auth's cookie defaults explicit so security posture is
+    // intentional rather than implicit. Better Auth already picks safe
+    // defaults (secure+httpOnly+sameSite=lax in prod), but documenting
+    // them here means anyone touching auth sees them and changes are
+    // tracked in git rather than left to library defaults that could
+    // shift across upgrades.
+    useSecureCookies: process.env.NODE_ENV === 'production',
+    defaultCookieAttributes: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    },
   },
 
   // Auto-restore the user's active org on every new session so returning
