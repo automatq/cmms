@@ -65,6 +65,25 @@ async function bootstrap() {
     .map((o: string) => o.trim())
     .filter(Boolean);
 
+  // Resolve the Access-Control-Allow-Origin value for one request, shared
+  // by the inline Better Auth handler and the NestJS CORS middleware below.
+  // Never falls back to '*' in production — if the request origin isn't in
+  // the trusted list and the list is non-empty, we send the first trusted
+  // origin (browsers will block the request because the credential check
+  // fails, but we never advertise a wildcard).
+  function resolveAllowOrigin(requestOrigin: string | undefined): string {
+    if (corsOriginsList.length === 0) {
+      // Dev convenience only: no list configured → echo origin or '*'.
+      // Production path doesn't take this branch because we require
+      // CORS_ORIGINS via validateProductionEnv().
+      return requestOrigin || '*';
+    }
+    if (requestOrigin && corsOriginsList.includes(requestOrigin)) {
+      return requestOrigin;
+    }
+    return corsOriginsList[0];
+  }
+
   // Mount Better Auth handler at /api/auth/* BEFORE body parsers and global prefix.
   // Better Auth needs raw bodies; everything else (api/v1/*) gets JSON parsing.
   // We can't use nestjs-better-auth's auto-mounting because it uses Express-5 *splat
@@ -74,10 +93,7 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance();
   expressApp.all('/api/auth/*', async (req: any, res: any) => {
     const requestOrigin = req.headers.origin as string | undefined;
-    const allowedOrigin =
-      requestOrigin && (corsOriginsList.length === 0 || corsOriginsList.includes(requestOrigin))
-        ? requestOrigin
-        : (corsOriginsList[0] || '*');
+    const allowedOrigin = resolveAllowOrigin(requestOrigin);
 
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -140,7 +156,9 @@ async function bootstrap() {
   // Global prefix (Better Auth's /api/auth/* is already mounted above and bypasses this)
   app.setGlobalPrefix('api/v1');
 
-  // CORS - require explicit origin configuration in production
+  // CORS — require explicit origin configuration in production.
+  // (`isProduction` and `corsOriginsList` defined above; shared with the
+  // Better Auth handler so both code paths agree on what's allowed.)
   const nodeEnv = configService.get('NODE_ENV', 'development');
   app.enableCors({
     origin: corsOriginsList.length > 0
