@@ -61,7 +61,7 @@ class ApiClient {
   }
 
   // Assets
-  async getAssets(params?: Record<string, any>) {
+  async getAssets(params?: Record<string, unknown>) {
     return this.client.get('/assets', { params })
   }
 
@@ -85,7 +85,7 @@ class ApiClient {
     return this.client.post(`/assets/${assetId}/meters`, data)
   }
 
-  async getAssetMeters(assetId: string, params?: Record<string, any>) {
+  async getAssetMeters(assetId: string, params?: Record<string, unknown>) {
     return this.client.get(`/assets/${assetId}/meters`, { params })
   }
 
@@ -190,7 +190,7 @@ class ApiClient {
   }
 
   // Work Orders
-  async getWorkOrders(params?: Record<string, any>) {
+  async getWorkOrders(params?: Record<string, unknown>) {
     return this.client.get('/work-orders', { params })
   }
 
@@ -211,7 +211,7 @@ class ApiClient {
   }
 
   // Work Requests
-  async getWorkRequests(params?: Record<string, any>) {
+  async getWorkRequests(params?: Record<string, unknown>) {
     return this.client.get('/work-orders/requests', { params })
   }
 
@@ -224,7 +224,7 @@ class ApiClient {
   }
 
   // PM Plans
-  async getPmPlans(params?: Record<string, any>) {
+  async getPmPlans(params?: Record<string, unknown>) {
     return this.client.get('/pm', { params })
   }
 
@@ -257,7 +257,7 @@ class ApiClient {
   }
 
   // Inventory
-  async getParts(params?: Record<string, any>) {
+  async getParts(params?: Record<string, unknown>) {
     return this.client.get('/parts', { params })
   }
 
@@ -281,36 +281,36 @@ class ApiClient {
     return this.client.get('/suppliers')
   }
 
-  async getPurchaseOrders(params?: Record<string, any>) {
+  async getPurchaseOrders(params?: Record<string, unknown>) {
     return this.client.get('/purchase-orders', { params })
   }
 
   // Reports
-  async getDashboard(params?: Record<string, any>) {
+  async getDashboard(params?: Record<string, unknown>) {
     return this.client.get('/reports/dashboard', { params })
   }
 
-  async getWorkOrderReport(params: Record<string, any>) {
+  async getWorkOrderReport(params: Record<string, unknown>) {
     return this.client.get('/reports/work-orders', { params })
   }
 
-  async getAssetReport(params: Record<string, any>) {
+  async getAssetReport(params: Record<string, unknown>) {
     return this.client.get('/reports/assets', { params })
   }
 
-  async getPmComplianceReport(params: Record<string, any>) {
+  async getPmComplianceReport(params: Record<string, unknown>) {
     return this.client.get('/reports/pm-compliance', { params })
   }
 
-  async getInventoryReport(params: Record<string, any>) {
+  async getInventoryReport(params: Record<string, unknown>) {
     return this.client.get('/reports/inventory', { params })
   }
 
-  async getCostReport(params: Record<string, any>) {
+  async getCostReport(params: Record<string, unknown>) {
     return this.client.get('/reports/costs', { params })
   }
 
-  async getTechnicianPerformanceReport(params: Record<string, any>) {
+  async getTechnicianPerformanceReport(params: Record<string, unknown>) {
     return this.client.get('/reports/technician-performance', { params })
   }
 
@@ -433,7 +433,7 @@ class ApiClient {
   }
 
   // Checklist Templates
-  async getChecklistTemplates(params?: Record<string, any>) {
+  async getChecklistTemplates(params?: Record<string, unknown>) {
     return this.client.get('/checklist-templates', { params })
   }
 
@@ -467,7 +467,7 @@ class ApiClient {
   }
 
   // Users & Roles
-  async getUsers(params?: Record<string, any>) {
+  async getUsers(params?: Record<string, unknown>) {
     return this.client.get('/users', { params })
   }
 
@@ -569,7 +569,7 @@ class ApiClient {
     return this.client.post('/inventory/transfer', data)
   }
 
-  async getInventoryTransactions(params?: Record<string, any>) {
+  async getInventoryTransactions(params?: Record<string, unknown>) {
     return this.client.get('/inventory/transactions', { params })
   }
 
@@ -666,11 +666,11 @@ class ApiClient {
     return this.client.get(`/assets/${assetId}/downtime/active`)
   }
 
-  async getDowntimeMtbf(assetId: string, params?: Record<string, any>) {
+  async getDowntimeMtbf(assetId: string, params?: Record<string, unknown>) {
     return this.client.get(`/assets/${assetId}/downtime/mtbf`, { params })
   }
 
-  async getDowntimeMttr(assetId: string, params?: Record<string, any>) {
+  async getDowntimeMttr(assetId: string, params?: Record<string, unknown>) {
     return this.client.get(`/assets/${assetId}/downtime/mttr`, { params })
   }
 
@@ -792,7 +792,7 @@ class ApiClient {
   }
 
   // ==================== Report Export ====================
-  async exportReport(type: string, format: string, filters?: Record<string, any>) {
+  async exportReport(type: string, format: string, filters?: Record<string, unknown>) {
     return this.client.post(`/reports/${type}/export?format=${format}`, filters || {}, {
       responseType: format === 'csv' ? 'blob' : 'blob',
     })
@@ -845,7 +845,7 @@ class ApiClient {
   }
 
   // ==================== Downtime & Warranty Reports ====================
-  async getDowntimeReport(params?: Record<string, any>) {
+  async getDowntimeReport(params?: Record<string, unknown>) {
     return this.client.get('/reports/downtime', { params })
   }
 
