@@ -70,7 +70,7 @@ import { HealthController } from './health.controller';
             ...baseOptions,
             url: databaseUrl,
             ssl: databaseUrl.includes('sslmode=require') || sslEnabled
-              ? { rejectUnauthorized: false }
+              ? { rejectUnauthorized: config.get('DB_SSL_REJECT_UNAUTHORIZED', 'true') === 'true' }
               : false,
           };
         }

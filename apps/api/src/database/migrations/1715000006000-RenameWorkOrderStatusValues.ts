@@ -71,6 +71,18 @@ export class RenameWorkOrderStatusValues1715000006000 implements MigrationInterf
     `);
     await queryRunner.query(`DROP TYPE work_order_status_enum_old;`);
 
+    // Restore closed_at; best-effort populate from completed_at.
+    // Note: this is lossy — once up() merges closed_at into completed_at
+    // we can't distinguish "this completed_at was the original closed_at"
+    // from "this completed_at was set by post-migration app code on a
+    // genuine COMPLETED transition". Both end up restored to closed_at on
+    // rollback, which over-populates closed_at vs. the original schema.
+    // Acceptable for emergency rollback; not lossless.
     await queryRunner.query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;`);
+    await queryRunner.query(`
+      UPDATE work_orders
+         SET closed_at = completed_at
+       WHERE completed_at IS NOT NULL;
+    `);
   }
 }
