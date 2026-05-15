@@ -36,17 +36,7 @@ import { InventoryService } from '../inventory/inventory.service';
 import { DowntimeService } from '../assets/downtime.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
-
-// Valid status transitions
-const STATUS_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
-  [WorkOrderStatus.REQUESTED]: [WorkOrderStatus.OPEN, WorkOrderStatus.PENDING_APPROVAL, WorkOrderStatus.CANCELLED],
-  [WorkOrderStatus.PENDING_APPROVAL]: [WorkOrderStatus.OPEN, WorkOrderStatus.REQUESTED, WorkOrderStatus.CANCELLED],
-  [WorkOrderStatus.OPEN]: [WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD, WorkOrderStatus.CANCELLED],
-  [WorkOrderStatus.IN_PROGRESS]: [WorkOrderStatus.ON_HOLD, WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED],
-  [WorkOrderStatus.ON_HOLD]: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.CANCELLED],
-  [WorkOrderStatus.COMPLETED]: [WorkOrderStatus.IN_PROGRESS],
-  [WorkOrderStatus.CANCELLED]: [],
-};
+import { STATUS_TRANSITIONS } from './state-machine';
 
 @Injectable()
 export class WorkOrdersService {
