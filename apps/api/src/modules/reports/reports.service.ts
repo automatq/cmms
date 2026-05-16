@@ -40,7 +40,18 @@ interface LowStockPart {
   deficit: number;
 }
 
-export { KpiMetric, ChartDataPoint, LowStockPart };
+interface TechnicianPerformanceRow {
+  userId: string;
+  name: string;
+  workOrderCount: number;
+  totalDirectHours: number;
+  totalTravelHours: number;
+  totalWaitHours: number;
+  totalLaborCost: number;
+  wrenchTimePercent: number;
+}
+
+export { KpiMetric, ChartDataPoint, LowStockPart, TechnicianPerformanceRow };
 
 @Injectable()
 export class ReportsService {
@@ -727,9 +738,32 @@ export class ReportsService {
       .orderBy('period', 'ASC')
       .getRawMany();
 
+    // Labor cost: SUM(hours * hourly_rate) from wo_labor in range.
+    // Mirrors the existing wrenchTimeData query shape (line ~760) but
+    // multiplies hours by hourly_rate. NULL hourly_rate rows contribute 0.
+    const laborCostRow = await this.workOrderRepo.manager
+      .createQueryBuilder()
+      .select('SUM(labor.hours * COALESCE(labor.hourly_rate, 0))', 'totalLaborCost')
+      .from('wo_labor', 'labor')
+      .where('labor.tenant_id = :tenantId', { tenantId })
+      .andWhere('labor.logged_at BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .getRawOne();
+
+    // Parts cost: SUM(qty_used * unit_cost) from wo_parts JOINed to
+    // work_orders so we can filter by the parent WO's completedAt window.
+    // (wo_parts has no logged_at column of its own.)
+    const partsCostRow = await this.workOrderRepo.manager
+      .createQueryBuilder()
+      .select('SUM(wp.qty_used * COALESCE(wp.unit_cost, 0))', 'totalPartsCost')
+      .from('wo_parts', 'wp')
+      .innerJoin('work_orders', 'wo', 'wo.id = wp.wo_id')
+      .where('wo.tenant_id = :tenantId', { tenantId })
+      .andWhere('wo.completed_at BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .getRawOne();
+
     return {
-      totalLaborCost: 0, // Would need labor cost calculation
-      totalPartsCost: 0, // Would need parts cost calculation
+      totalLaborCost: parseFloat(laborCostRow?.totalLaborCost || '0'),
+      totalPartsCost: parseFloat(partsCostRow?.totalPartsCost || '0'),
       totalCost: parseFloat(costSummary?.totalCost || '0'),
       costByAsset: costByAsset.map((a) => ({
         assetId: a.assetId,
@@ -750,7 +784,7 @@ export class ReportsService {
   // ==================== TECHNICIAN PERFORMANCE ====================
 
   async getTechnicianPerformanceReport(query: WorkOrderReportQueryDto, tenantId: string): Promise<{
-    technicians: any[];
+    technicians: TechnicianPerformanceRow[];
     wrenchTimeSummary: { totalDirectHours: number; totalTravelHours: number; totalWaitHours: number; wrenchTimePercent: number };
   }> {
     const startDate = new Date(query.startDate);
@@ -772,8 +806,48 @@ export class ReportsService {
     const totalWait = parseFloat(wrenchTimeData?.totalWait || '0');
     const totalAll = totalDirect + totalTravel + totalWait;
 
+    // Per-technician breakdown. Groups wo_labor rows by user, joins users
+    // for display name, and counts distinct WOs each tech contributed to.
+    // Ordered by total hours desc so the busiest techs appear first.
+    const techRows = await this.workOrderRepo.manager
+      .createQueryBuilder()
+      .select('u.id', 'userId')
+      .addSelect('u.first_name', 'firstName')
+      .addSelect('u.last_name', 'lastName')
+      .addSelect('SUM(labor.hours)', 'totalDirectHours')
+      .addSelect('SUM(COALESCE(labor.travel_time, 0))', 'totalTravelHours')
+      .addSelect('SUM(COALESCE(labor.wait_time, 0))', 'totalWaitHours')
+      .addSelect('SUM(labor.hours * COALESCE(labor.hourly_rate, 0))', 'totalLaborCost')
+      .addSelect('COUNT(DISTINCT labor.wo_id)', 'workOrderCount')
+      .from('wo_labor', 'labor')
+      .innerJoin('users', 'u', 'u.id = labor.user_id')
+      .where('labor.tenant_id = :tenantId', { tenantId })
+      .andWhere('labor.logged_at BETWEEN :start AND :end', { start: startDate, end: endDate })
+      .groupBy('u.id')
+      .addGroupBy('u.first_name')
+      .addGroupBy('u.last_name')
+      .orderBy('SUM(labor.hours)', 'DESC')
+      .getRawMany();
+
+    const technicians: TechnicianPerformanceRow[] = techRows.map((r) => {
+      const direct = parseFloat(r.totalDirectHours || '0');
+      const travel = parseFloat(r.totalTravelHours || '0');
+      const wait = parseFloat(r.totalWaitHours || '0');
+      const all = direct + travel + wait;
+      return {
+        userId: r.userId,
+        name: [r.firstName, r.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
+        workOrderCount: parseInt(r.workOrderCount || '0', 10),
+        totalDirectHours: Math.round(direct * 10) / 10,
+        totalTravelHours: Math.round(travel * 10) / 10,
+        totalWaitHours: Math.round(wait * 10) / 10,
+        totalLaborCost: parseFloat(r.totalLaborCost || '0'),
+        wrenchTimePercent: all > 0 ? Math.round((direct / all) * 100) : 0,
+      };
+    });
+
     return {
-      technicians: [],
+      technicians,
       wrenchTimeSummary: {
         totalDirectHours: Math.round(totalDirect * 10) / 10,
         totalTravelHours: Math.round(totalTravel * 10) / 10,
