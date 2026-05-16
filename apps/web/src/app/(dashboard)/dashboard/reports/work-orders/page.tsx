@@ -12,15 +12,33 @@ import { format } from 'date-fns'
 import { ChartCard } from '../components/chart-card'
 import { OverviewBarChart, OverviewLineChart, OverviewPieChart } from '../components/reports-charts'
 import { DateRangePicker, defaultDateRange } from '../components/date-range-picker'
+import {
+    PeriodComparisonToggle,
+    DeltaIndicator,
+    previousPeriod,
+} from '../components/period-comparison'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkOrderReportPage() {
     const [dateRange, setDateRange] = useState(defaultDateRange(30))
+    const [compareEnabled, setCompareEnabled] = useState(false)
 
     const { data, isLoading } = useQuery({
         queryKey: ['reports', 'work-orders', dateRange],
         queryFn: () => api.getWorkOrderReport(dateRange).then(res => res.data),
     })
+
+    // Only fetch the prior period when the user explicitly opts in —
+    // saves a round trip on the default render. `enabled` gates the
+    // query; the queryKey still carries the date range so React Query
+    // refetches when the user changes the range while comparison is on.
+    const prevRange = previousPeriod(dateRange)
+    const { data: prevData } = useQuery({
+        queryKey: ['reports', 'work-orders', 'prev', prevRange],
+        queryFn: () => api.getWorkOrderReport(prevRange).then(res => res.data),
+        enabled: compareEnabled,
+    })
+    const prevSummary = compareEnabled ? prevData?.summary : undefined
 
     if (isLoading) {
         return (
@@ -66,6 +84,7 @@ export default function WorkOrderReportPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <DateRangePicker value={dateRange} onChange={setDateRange} />
+                    <PeriodComparisonToggle enabled={compareEnabled} onChange={setCompareEnabled} />
                     <ExportButton reportType="work-orders" filters={dateRange} />
                 </div>
             </div>
@@ -78,8 +97,11 @@ export default function WorkOrderReportPage() {
                         <BarChart3 className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary.total}</div>
-                        <p className="text-xs text-muted-foreground">In last 30 days</p>
+                        <div className="flex items-baseline gap-2">
+                            <div className="text-2xl font-bold">{summary.total}</div>
+                            <DeltaIndicator current={summary.total} previous={prevSummary?.total} />
+                        </div>
+                        <p className="text-xs text-muted-foreground">In selected period</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -88,7 +110,10 @@ export default function WorkOrderReportPage() {
                         <CheckCircle2 className="h-4 w-4 text-green-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary.completionRate}%</div>
+                        <div className="flex items-baseline gap-2">
+                            <div className="text-2xl font-bold">{summary.completionRate}%</div>
+                            <DeltaIndicator current={summary.completionRate} previous={prevSummary?.completionRate} />
+                        </div>
                         <p className="text-xs text-muted-foreground">{summary.completed} completed</p>
                     </CardContent>
                 </Card>
@@ -98,7 +123,11 @@ export default function WorkOrderReportPage() {
                         <Clock className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary.avgCompletionTime}h</div>
+                        <div className="flex items-baseline gap-2">
+                            <div className="text-2xl font-bold">{summary.avgCompletionTime}h</div>
+                            {/* Lower is better for "time to complete" — inverse=true so increases render red */}
+                            <DeltaIndicator current={summary.avgCompletionTime} previous={prevSummary?.avgCompletionTime} inverse />
+                        </div>
                         <p className="text-xs text-muted-foreground">Per work order</p>
                     </CardContent>
                 </Card>
@@ -108,7 +137,10 @@ export default function WorkOrderReportPage() {
                         <DollarSign className="h-4 w-4 text-amber-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">${summary.totalCost}</div>
+                        <div className="flex items-baseline gap-2">
+                            <div className="text-2xl font-bold">${summary.totalCost}</div>
+                            <DeltaIndicator current={summary.totalCost} previous={prevSummary?.totalCost} />
+                        </div>
                         <p className="text-xs text-muted-foreground">Estimated costs</p>
                     </CardContent>
                 </Card>
