@@ -114,10 +114,11 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     if (format === 'pdf') {
-      const html = await this.exportService.exportToPdf(type, filters || {}, user.tenantId);
-      res.setHeader('Content-Type', 'text/html');
-      res.setHeader('Content-Disposition', `attachment; filename="${type}-report.html"`);
-      return res.send(html);
+      const pdf = await this.exportService.exportToPdf(type, filters || {}, user.tenantId);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${type}-report.pdf"`);
+      res.setHeader('Content-Length', pdf.length.toString());
+      return res.end(pdf);
     }
 
     const csv = await this.exportService.exportToCsv(type, filters || {}, user.tenantId);

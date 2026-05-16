@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import PDFDocument from 'pdfkit';
 import { ReportsService } from './reports.service';
 import { ScheduledReport, ScheduledReportType, ReportFormat } from './entities/scheduled-report.entity';
 
@@ -48,40 +49,95 @@ export class ExportService {
 
   // ==================== PDF EXPORT ====================
 
-  async exportToPdf(reportType: string, filters: Record<string, any>, tenantId: string): Promise<string> {
+  /**
+   * Generate a real PDF (application/pdf, parseable by Acrobat/Preview)
+   * using pdfkit. Previously this returned an HTML string and the client
+   * had to print-to-PDF — see git history for the old implementation.
+   *
+   * Layout:
+   *   - Title header (report type + date range)
+   *   - Small "Generated at" line
+   *   - Table: column header row + body rows, auto-paginated
+   */
+  async exportToPdf(reportType: string, filters: Record<string, any>, tenantId: string): Promise<Buffer> {
     const data = await this.getReportData(reportType, filters, tenantId);
-    // Generate a simple HTML table and return it — actual PDF rendering
-    // would use puppeteer-core in production; for now return HTML that
-    // the client can print/save as PDF
-    return this.convertToHtmlTable(reportType, data);
+    return this.renderPdf(reportType, data, filters);
   }
 
-  private convertToHtmlTable(title: string, data: Record<string, any>[]): string {
-    if (!data.length) return '<html><body><p>No data</p></body></html>';
+  private renderPdf(reportType: string, data: Record<string, any>[], filters: Record<string, any>): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'LETTER', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
 
-    const headers = Object.keys(data[0]);
-    const headerRow = headers.map((h) => `<th style="border:1px solid #ccc;padding:8px;background:#f5f5f5">${this.formatHeader(h)}</th>`).join('');
-    const bodyRows = data
-      .map(
-        (row) =>
-          '<tr>' +
-          headers
-            .map((h) => `<td style="border:1px solid #ccc;padding:8px">${row[h] ?? ''}</td>`)
-            .join('') +
-          '</tr>',
-      )
-      .join('');
+      // Header
+      doc.fontSize(18).text(`${this.formatHeader(reportType)} Report`, { align: 'left' });
+      doc.moveDown(0.3);
+      doc.fontSize(10).fillColor('#666');
+      if (filters.startDate && filters.endDate) {
+        doc.text(`Period: ${filters.startDate} → ${filters.endDate}`);
+      }
+      doc.text(`Generated: ${new Date().toISOString()}`);
+      doc.moveDown(1);
+      doc.fillColor('black');
 
-    return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>${title} Report</title>
-<style>body{font-family:sans-serif;margin:20px}table{border-collapse:collapse;width:100%}h1{font-size:18px}</style>
-</head>
-<body>
-<h1>${this.formatHeader(title)} Report</h1>
-<p>Generated: ${new Date().toISOString()}</p>
-<table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table>
-</body></html>`;
+      if (!data.length) {
+        doc.fontSize(11).text('No data for the selected filters.', { align: 'center' });
+        doc.end();
+        return;
+      }
+
+      // Table — auto-size columns evenly across the page width
+      const headers = Object.keys(data[0]);
+      const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      const colWidth = pageWidth / headers.length;
+      const rowHeight = 18;
+
+      const drawHeaderRow = () => {
+        const y = doc.y;
+        doc.rect(doc.page.margins.left, y, pageWidth, rowHeight).fill('#f4f4f5');
+        doc.fillColor('#111').fontSize(9).font('Helvetica-Bold');
+        headers.forEach((h, i) => {
+          doc.text(this.formatHeader(h), doc.page.margins.left + i * colWidth + 4, y + 5, {
+            width: colWidth - 8,
+            ellipsis: true,
+          });
+        });
+        doc.font('Helvetica').fillColor('black');
+        doc.y = y + rowHeight;
+      };
+
+      const drawBodyRow = (row: Record<string, any>, zebra: boolean) => {
+        const y = doc.y;
+        if (zebra) {
+          doc.rect(doc.page.margins.left, y, pageWidth, rowHeight).fill('#fafafa');
+        }
+        doc.fillColor('black').fontSize(9);
+        headers.forEach((h, i) => {
+          const v = row[h];
+          const text = v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+          doc.text(text, doc.page.margins.left + i * colWidth + 4, y + 5, {
+            width: colWidth - 8,
+            ellipsis: true,
+          });
+        });
+        doc.y = y + rowHeight;
+      };
+
+      drawHeaderRow();
+      data.forEach((row, idx) => {
+        // Page break if next row wouldn't fit before the bottom margin.
+        if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+          doc.addPage();
+          drawHeaderRow();
+        }
+        drawBodyRow(row, idx % 2 === 1);
+      });
+
+      doc.end();
+    });
   }
 
   private formatHeader(key: string): string {

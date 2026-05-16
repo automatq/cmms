@@ -111,7 +111,8 @@ export class ReportExportProcessor extends WorkerHost implements OnModuleInit {
     try {
       const { reportId, reportType, filters, format, recipientEmails, tenantId } = data;
 
-      let content: string;
+      // CSV is text; PDF is now a real binary Buffer (was an HTML string).
+      let content: string | Buffer;
       if (format === 'csv') {
         content = await this.exportService.exportToCsv(reportType, filters || {}, tenantId);
       } else {
