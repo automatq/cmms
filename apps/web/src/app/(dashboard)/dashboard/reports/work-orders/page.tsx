@@ -18,7 +18,10 @@ import {
     previousPeriod,
 } from '../components/period-comparison'
 import { FilterChips, type FilterOption } from '../components/filter-chips'
+import { DrillDownSheet } from '../components/drill-down-sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
 
 export default function WorkOrderReportPage() {
     const [dateRange, setDateRange] = useState(defaultDateRange(30))
@@ -84,6 +87,39 @@ export default function WorkOrderReportPage() {
         enabled: compareEnabled,
     })
     const prevSummary = compareEnabled ? prevData?.summary : undefined
+
+    // Drill-down state — clicking a chart segment opens this sheet
+    // with the underlying WOs (uses the existing /work-orders list
+    // endpoint with the same filters + the chart's dimension).
+    const [drillOpen, setDrillOpen] = useState(false)
+    const [drillTitle, setDrillTitle] = useState('')
+    const [drillFilter, setDrillFilter] = useState<Record<string, unknown>>({})
+
+    const { data: drillRows, isLoading: drillLoading } = useQuery({
+        queryKey: ['reports', 'work-orders', 'drill', drillFilter],
+        queryFn: () => api.getWorkOrders(drillFilter).then((r) => {
+            const d = r.data as unknown
+            if (Array.isArray(d)) return d
+            if (d && typeof d === 'object' && 'data' in d && Array.isArray((d as { data: unknown[] }).data)) {
+                return (d as { data: unknown[] }).data
+            }
+            return []
+        }),
+        enabled: drillOpen,
+    })
+
+    function openDrill(field: 'type' | 'priority', value: string) {
+        setDrillTitle(`Work orders — ${field}: ${value}`)
+        setDrillFilter({
+            ...dateRange,
+            ...(locationIds.length ? { locationIds } : {}),
+            ...(categoryIds.length ? { categoryIds } : {}),
+            ...(technicianIds.length ? { technicianIds } : {}),
+            [field]: value,
+            limit: 100,
+        })
+        setDrillOpen(true)
+    }
 
     if (isLoading) {
         return (
@@ -209,13 +245,13 @@ export default function WorkOrderReportPage() {
                 </Card>
             </div>
 
-            {/* Charts */}
+            {/* Charts — byType and byPriority slices are clickable for drill-down. */}
             <div className="grid gap-6 md:grid-cols-2">
-                <ChartCard title="Work Orders by Type" description="Distribution of maintenance activities">
-                    <OverviewPieChart data={byType} />
+                <ChartCard title="Work Orders by Type" description="Distribution of maintenance activities · click to drill in">
+                    <OverviewPieChart data={byType} onSegmentClick={(d) => openDrill('type', d.label)} />
                 </ChartCard>
-                <ChartCard title="Work Orders by Priority" description="Task urgency distribution">
-                    <OverviewBarChart data={byPriority} />
+                <ChartCard title="Work Orders by Priority" description="Task urgency distribution · click to drill in">
+                    <OverviewBarChart data={byPriority} onSegmentClick={(d) => openDrill('priority', d.label)} />
                 </ChartCard>
                 <ChartCard title="Technician Performance" description="Work orders assigned per technician">
                     <OverviewBarChart data={byTechnician} />
@@ -224,6 +260,50 @@ export default function WorkOrderReportPage() {
                     <OverviewLineChart data={trend} />
                 </ChartCard>
             </div>
+
+            <DrillDownSheet
+                open={drillOpen}
+                onOpenChange={setDrillOpen}
+                title={drillTitle}
+                description="Underlying work orders matching the chart segment and current filters"
+            >
+                {drillLoading ? (
+                    <div className="space-y-2">
+                        {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+                    </div>
+                ) : !drillRows?.length ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">No work orders in this slice.</p>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>WO #</TableHead>
+                                <TableHead>Title</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Priority</TableHead>
+                                <TableHead>Created</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {(drillRows as Array<{ id: string; woNumber: string; title: string; status: string; priority: string; createdAt: string }>).map((wo) => (
+                                <TableRow key={wo.id}>
+                                    <TableCell className="font-mono text-xs">{wo.woNumber}</TableCell>
+                                    <TableCell>
+                                        <Link href={`/dashboard/work-orders/${wo.id}`} className="hover:underline">
+                                            {wo.title}
+                                        </Link>
+                                    </TableCell>
+                                    <TableCell><Badge variant="secondary">{wo.status?.replace(/_/g, ' ')}</Badge></TableCell>
+                                    <TableCell>{wo.priority}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                        {format(new Date(wo.createdAt), 'MMM d, yyyy')}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </DrillDownSheet>
         </div>
     )
 }
