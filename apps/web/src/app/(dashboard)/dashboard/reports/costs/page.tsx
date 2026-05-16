@@ -5,22 +5,18 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { ArrowLeft, DollarSign, TrendingUp, Wrench, Package } from 'lucide-react'
 import { ExportButton } from '@/components/reports/export-button'
 import Link from 'next/link'
-import { format, subDays } from 'date-fns'
+import { format } from 'date-fns'
 import { ChartCard } from '../components/chart-card'
 import { OverviewBarChart, OverviewLineChart, OverviewPieChart } from '../components/reports-charts'
+import { DateRangePicker, defaultDateRange } from '../components/date-range-picker'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/utils'
 
 export default function CostReportPage() {
-  const [dateRange, setDateRange] = useState({
-    startDate: format(subDays(new Date(), 90), 'yyyy-MM-dd'),
-    endDate: format(new Date(), 'yyyy-MM-dd'),
-  })
+  const [dateRange, setDateRange] = useState(defaultDateRange(90))
 
   const { data, isLoading } = useQuery({
     queryKey: ['reports', 'costs', dateRange],
@@ -63,24 +59,7 @@ export default function CostReportPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs">From</Label>
-            <Input
-              type="date"
-              value={dateRange.startDate}
-              onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
-              className="h-9"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">To</Label>
-            <Input
-              type="date"
-              value={dateRange.endDate}
-              onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
-              className="h-9"
-            />
-          </div>
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
           <ExportButton reportType="costs" filters={dateRange} />
         </div>
       </div>
