@@ -17,25 +17,70 @@ import {
     DeltaIndicator,
     previousPeriod,
 } from '../components/period-comparison'
+import { FilterChips, type FilterOption } from '../components/filter-chips'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkOrderReportPage() {
     const [dateRange, setDateRange] = useState(defaultDateRange(30))
     const [compareEnabled, setCompareEnabled] = useState(false)
+    const [locationIds, setLocationIds] = useState<string[]>([])
+    const [categoryIds, setCategoryIds] = useState<string[]>([])
+    const [technicianIds, setTechnicianIds] = useState<string[]>([])
+
+    // Filter option lookups. Each is fetched once and cached by React
+    // Query; the report itself refetches whenever the selected IDs change.
+    const { data: locations } = useQuery({
+        queryKey: ['locations'],
+        queryFn: () => api.getLocations().then((r) => r.data ?? []),
+    })
+    const { data: categories } = useQuery({
+        queryKey: ['categories'],
+        queryFn: () => api.getCategories().then((r) => r.data ?? []),
+    })
+    const { data: users } = useQuery({
+        queryKey: ['users', 'all'],
+        queryFn: () => api.getUsers({ limit: 200 }).then((r) => {
+            const d = r.data as unknown
+            // getUsers may return PaginatedResult<User> | User[] depending on backend; handle both.
+            if (Array.isArray(d)) return d
+            if (d && typeof d === 'object' && 'data' in d && Array.isArray((d as { data: unknown[] }).data)) {
+                return (d as { data: unknown[] }).data
+            }
+            return []
+        }),
+    })
+
+    const locationOptions: FilterOption[] = (Array.isArray(locations) ? locations : [])
+        .map((l: { id: string; name?: string }) => ({ id: l.id, label: l.name ?? '(unnamed)' }))
+    const categoryOptions: FilterOption[] = (Array.isArray(categories) ? categories : [])
+        .map((c: { id: string; name?: string }) => ({ id: c.id, label: c.name ?? '(unnamed)' }))
+    const technicianOptions: FilterOption[] = (Array.isArray(users) ? users : [])
+        .map((u: { id: string; firstName?: string; lastName?: string; email?: string }) => ({
+            id: u.id,
+            label: [u.firstName, u.lastName].filter(Boolean).join(' ').trim() || u.email || '(unknown)',
+        }))
+
+    // Build the params object the API client receives. Empty arrays are
+    // omitted so the server-side default ("no filter") kicks in.
+    const reportParams = {
+        ...dateRange,
+        ...(locationIds.length ? { locationIds } : {}),
+        ...(categoryIds.length ? { categoryIds } : {}),
+        ...(technicianIds.length ? { technicianIds } : {}),
+    }
 
     const { data, isLoading } = useQuery({
-        queryKey: ['reports', 'work-orders', dateRange],
-        queryFn: () => api.getWorkOrderReport(dateRange).then(res => res.data),
+        queryKey: ['reports', 'work-orders', reportParams],
+        queryFn: () => api.getWorkOrderReport(reportParams).then(res => res.data),
     })
 
     // Only fetch the prior period when the user explicitly opts in —
-    // saves a round trip on the default render. `enabled` gates the
-    // query; the queryKey still carries the date range so React Query
-    // refetches when the user changes the range while comparison is on.
+    // saves a round trip on the default render.
     const prevRange = previousPeriod(dateRange)
+    const prevReportParams = { ...prevRange, ...reportParams, ...prevRange }
     const { data: prevData } = useQuery({
-        queryKey: ['reports', 'work-orders', 'prev', prevRange],
-        queryFn: () => api.getWorkOrderReport(prevRange).then(res => res.data),
+        queryKey: ['reports', 'work-orders', 'prev', prevReportParams],
+        queryFn: () => api.getWorkOrderReport(prevReportParams).then(res => res.data),
         enabled: compareEnabled,
     })
     const prevSummary = compareEnabled ? prevData?.summary : undefined
@@ -82,10 +127,28 @@ export default function WorkOrderReportPage() {
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 justify-end">
                     <DateRangePicker value={dateRange} onChange={setDateRange} />
+                    <FilterChips
+                        label="Location"
+                        options={locationOptions}
+                        value={locationIds}
+                        onChange={setLocationIds}
+                    />
+                    <FilterChips
+                        label="Category"
+                        options={categoryOptions}
+                        value={categoryIds}
+                        onChange={setCategoryIds}
+                    />
+                    <FilterChips
+                        label="Technician"
+                        options={technicianOptions}
+                        value={technicianIds}
+                        onChange={setTechnicianIds}
+                    />
                     <PeriodComparisonToggle enabled={compareEnabled} onChange={setCompareEnabled} />
-                    <ExportButton reportType="work-orders" filters={dateRange} />
+                    <ExportButton reportType="work-orders" filters={reportParams} />
                 </div>
             </div>
 
