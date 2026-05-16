@@ -97,12 +97,28 @@ export default function WorkOrderDetailPage() {
             queryClient.setQueryData(['work-order', id], (old: any) => ({ ...old, status: newStatus }))
             return { previous }
         },
+        onError: (err: any, _newStatus, context) => {
+            // Roll back the optimistic badge immediately so the user doesn't
+            // see it flicker to the new status and then snap back.
+            if (context?.previous) {
+                queryClient.setQueryData(['work-order', id], context.previous)
+            }
+            const msg = err.response?.data?.message || err.message || 'Failed to update status'
+            toast.error(Array.isArray(msg) ? msg.join(', ') : msg)
+        },
         onSettled: () => {
             setStatusUpdating(false)
             queryClient.invalidateQueries({ queryKey: ['work-order', id] })
             queryClient.invalidateQueries({ queryKey: ['work-orders'] })
         }
     })
+
+    // Surface backend error messages instead of swallowing them behind a
+    // generic toast. Mirrors the pattern used in csv-import-dialog.tsx.
+    const errorToast = (fallback: string) => (err: any) => {
+        const msg = err.response?.data?.message || err.message || fallback
+        toast.error(Array.isArray(msg) ? msg.join(', ') : msg)
+    }
 
     // Labor mutations
     const addLaborMutation = useMutation({
@@ -113,7 +129,7 @@ export default function WorkOrderDetailPage() {
             setLaborForm({ userId: '', hours: '', hourlyRate: '', notes: '' })
             toast.success('Labor entry added')
         },
-        onError: () => toast.error('Failed to add labor entry'),
+        onError: errorToast('Failed to add labor entry'),
     })
 
     const removeLaborMutation = useMutation({
@@ -122,7 +138,7 @@ export default function WorkOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['work-order', id] })
             toast.success('Labor entry removed')
         },
-        onError: () => toast.error('Failed to remove labor entry'),
+        onError: errorToast('Failed to remove labor entry'),
     })
 
     // Part mutations
@@ -134,7 +150,7 @@ export default function WorkOrderDetailPage() {
             setPartForm({ partId: '', qtyUsed: '', unitCost: '', storeroomId: '' })
             toast.success('Part added')
         },
-        onError: () => toast.error('Failed to add part'),
+        onError: errorToast('Failed to add part'),
     })
 
     const removePartMutation = useMutation({
@@ -143,7 +159,7 @@ export default function WorkOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['work-order', id] })
             toast.success('Part removed')
         },
-        onError: () => toast.error('Failed to remove part'),
+        onError: errorToast('Failed to remove part'),
     })
 
     // Attachment mutations
@@ -153,7 +169,7 @@ export default function WorkOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['work-order', id] })
             toast.success('File uploaded')
         },
-        onError: () => toast.error('Failed to upload file'),
+        onError: errorToast('Failed to upload file'),
     })
 
     const removeAttachmentMutation = useMutation({
@@ -162,7 +178,7 @@ export default function WorkOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['work-order', id] })
             toast.success('Attachment removed')
         },
-        onError: () => toast.error('Failed to remove attachment'),
+        onError: errorToast('Failed to remove attachment'),
     })
 
     // Signature mutations
@@ -173,7 +189,7 @@ export default function WorkOrderDetailPage() {
             setShowSignatureDialog(false)
             toast.success('Signature saved')
         },
-        onError: () => toast.error('Failed to save signature'),
+        onError: errorToast('Failed to save signature'),
     })
 
     const wo = woData
@@ -191,7 +207,7 @@ export default function WorkOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['work-order', id] })
             toast.success('Checklist saved')
         },
-        onError: () => toast.error('Failed to save checklist'),
+        onError: errorToast('Failed to save checklist'),
     })
 
     // Initialize checklist from WO data
@@ -739,21 +755,79 @@ export default function WorkOrderDetailPage() {
                     <Card className="bg-primary/5 border-primary/20">
                         <CardContent className="p-5 space-y-3">
                             <h3 className="font-semibold text-primary mb-1">Quick Actions</h3>
+
+                            {/* Each button maps to a single valid transition per
+                                apps/api/src/modules/work-orders/state-machine.ts.
+                                Showing buttons for invalid transitions silently
+                                failed before (see this commit's PR description). */}
+
+                            {wo.status === 'requested' && (
+                                <Button className="w-full justify-start" onClick={() => updateMutation.mutate('open')}>
+                                    <CheckCircle2 className="h-4 w-4 mr-2" /> Open Work Order
+                                </Button>
+                            )}
+
+                            {wo.status === 'pending_approval' && (
+                                <Button className="w-full justify-start" onClick={() => updateMutation.mutate('open')}>
+                                    <CheckCircle2 className="h-4 w-4 mr-2" /> Approve & Open
+                                </Button>
+                            )}
+
                             {wo.status === 'open' && (
                                 <Button className="w-full justify-start" onClick={() => updateMutation.mutate('in_progress')}>
                                     <PlayCircle className="h-4 w-4 mr-2" /> Start Work
                                 </Button>
                             )}
+
                             {wo.status === 'in_progress' && (
-                                <Button variant="secondary" className="w-full justify-start" onClick={() => updateMutation.mutate('on_hold')}>
-                                    <PauseCircle className="h-4 w-4 mr-2" /> Put on Hold
+                                <>
+                                    <Button
+                                        variant="default"
+                                        className="w-full justify-start bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        onClick={() => setShowSignatureDialog(true)}
+                                    >
+                                        <CheckCircle2 className="h-4 w-4 mr-2" /> Mark Completed
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        className="w-full justify-start"
+                                        onClick={() => updateMutation.mutate('on_hold')}
+                                    >
+                                        <PauseCircle className="h-4 w-4 mr-2" /> Put on Hold
+                                    </Button>
+                                </>
+                            )}
+
+                            {wo.status === 'on_hold' && (
+                                <Button className="w-full justify-start" onClick={() => updateMutation.mutate('in_progress')}>
+                                    <PlayCircle className="h-4 w-4 mr-2" /> Resume Work
                                 </Button>
                             )}
-                            {wo.status !== 'completed' && (
-                                <Button variant="default" className="w-full justify-start bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowSignatureDialog(true)}>
-                                    <CheckCircle2 className="h-4 w-4 mr-2" /> Mark Completed
+
+                            {wo.status === 'completed' && (
+                                <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                    onClick={() => updateMutation.mutate('in_progress')}
+                                >
+                                    <PlayCircle className="h-4 w-4 mr-2" /> Reopen
                                 </Button>
                             )}
+
+                            {wo.status !== 'completed' && wo.status !== 'cancelled' && (
+                                <Button
+                                    variant="ghost"
+                                    className="w-full justify-start text-destructive hover:text-destructive"
+                                    onClick={() => {
+                                        if (confirm('Cancel this work order? Reserved inventory will be released.')) {
+                                            updateMutation.mutate('cancelled')
+                                        }
+                                    }}
+                                >
+                                    <Trash2 className="h-4 w-4 mr-2" /> Cancel Work Order
+                                </Button>
+                            )}
+
                             {wo.status === 'completed' && wo.completionSignature && signatureData?.signatureUrl && (
                                 <div className="space-y-2">
                                     <p className="text-sm font-medium text-muted-foreground">Completion Signature</p>
