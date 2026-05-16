@@ -5,22 +5,17 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { ArrowLeft, Monitor, Wrench, History, Activity } from 'lucide-react'
 import { ExportButton } from '@/components/reports/export-button'
 import Link from 'next/link'
-import { format, subDays } from 'date-fns'
 import { ChartCard } from '../components/chart-card'
 import { OverviewBarChart, OverviewPieChart } from '../components/reports-charts'
+import { DateRangePicker, defaultDateRange } from '../components/date-range-picker'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 export default function AssetReportPage() {
-    const [dateRange, setDateRange] = useState({
-        startDate: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
-        endDate: format(new Date(), 'yyyy-MM-dd'),
-    })
+    const [dateRange, setDateRange] = useState(defaultDateRange(30))
 
     const { data, isLoading } = useQuery({
         queryKey: ['reports', 'assets', dateRange],
@@ -70,14 +65,7 @@ export default function AssetReportPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="space-y-1">
-                        <Label className="text-xs">From</Label>
-                        <Input type="date" value={dateRange.startDate} onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })} className="h-9" />
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-xs">To</Label>
-                        <Input type="date" value={dateRange.endDate} onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })} className="h-9" />
-                    </div>
+                    <DateRangePicker value={dateRange} onChange={setDateRange} />
                     <ExportButton reportType="assets" filters={dateRange} />
                 </div>
             </div>
