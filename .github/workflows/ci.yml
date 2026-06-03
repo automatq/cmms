@@ -110,10 +110,12 @@ jobs:
         run: npx eslint "app/**/*.{ts,tsx}" "src/**/*.{ts,tsx}"
 
   audit:
-    # Surfaces critical CVEs in production dependencies of deployed services
-    # (web + api). Mobile's expo SDK 50 transitives carry pre-existing high
-    # CVEs (path traversal in @remix-run/node, xmldom, etc.) that require an
-    # expo SDK major upgrade — tracked as separate work, not deploy-blocking.
+    # Hard-gates HIGH + CRITICAL CVEs in production deps of the deployed
+    # services (web + api). The Next 15 / NestJS 11 / multer 2 / Sentry 10
+    # upgrades cleared all HIGH+CRITICAL, so the gate is now `high` (was
+    # `critical`). Mobile's expo SDK 50 transitives still carry high CVEs
+    # that need an expo major upgrade — out of scope here, hence the
+    # workspace scoping to api + web only.
     name: npm audit (prod deps)
     runs-on: ubuntu-latest
     steps:
@@ -126,7 +128,7 @@ jobs:
           node-version: 20
 
       - name: Run npm audit
-        run: npm audit --omit=dev --audit-level=critical --workspace=apps/api --workspace=apps/web
+        run: npm audit --omit=dev --audit-level=high --workspace=apps/api --workspace=apps/web
 
   e2e-marketing:
     # Smoke-test the public marketing pages against production after every push.
