@@ -24,5 +24,8 @@
   },
   "dependencies": {
     "@nestjs/graphql": "^13.4.0"
+  },
+  "overrides": {
+    "multer": "^2.1.1"
   }
 }
