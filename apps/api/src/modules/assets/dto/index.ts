@@ -5,3 +5,4 @@ export * from './location.dto';
 export * from './category.dto';
 export * from './meter.dto';
 export * from './document.dto';
+export * from './start-downtime.dto';

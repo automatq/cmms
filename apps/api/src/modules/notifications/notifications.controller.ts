@@ -15,6 +15,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
+import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
@@ -60,7 +61,7 @@ export class NotificationsController {
   @ApiResponse({ status: 201, description: 'Push token registered' })
   registerPushToken(
     @CurrentUser() user: RequestUser,
-    @Body() body: { token: string; platform: string },
+    @Body() body: RegisterPushTokenDto,
   ) {
     return this.notificationsService.registerPushToken(
       user.userId,

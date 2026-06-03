@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import PDFDocument from 'pdfkit';
@@ -205,8 +205,64 @@ export class ExportService {
           totalCost: a.totalCost,
         }));
       }
+      case 'technician-performance': {
+        const report = await this.reportsService.getTechnicianPerformanceReport(query as any, tenantId);
+        return report.technicians.map((t) => ({
+          name: t.name,
+          workOrderCount: t.workOrderCount,
+          totalDirectHours: t.totalDirectHours,
+          totalTravelHours: t.totalTravelHours,
+          totalWaitHours: t.totalWaitHours,
+          totalLaborCost: t.totalLaborCost,
+          wrenchTimePercent: `${t.wrenchTimePercent}%`,
+        }));
+      }
+      case 'warranties': {
+        const withinDays = Number(filters.withinDays) || 90;
+        const report = await this.reportsService.getWarrantyReport(withinDays, tenantId);
+        return [
+          ...report.expired.map((a) => ({
+            status: 'Expired',
+            assetName: a.name,
+            assetNumber: a.assetNumber,
+            warrantyExpiry: a.warrantyExpiry,
+          })),
+          ...report.expiringSoon.map((a) => ({
+            status: 'Expiring Soon',
+            assetName: a.name,
+            assetNumber: a.assetNumber,
+            warrantyExpiry: a.warrantyExpiry,
+          })),
+          ...report.active.map((a) => ({
+            status: 'Active',
+            assetName: a.name,
+            assetNumber: a.assetNumber,
+            warrantyExpiry: a.warrantyExpiry,
+          })),
+        ];
+      }
+      case 'backlog-aging': {
+        const report = await this.reportsService.getBacklogAgingReport(tenantId);
+        return report.buckets.map((b) => ({
+          bucket: b.label,
+          count: b.value,
+        }));
+      }
+      case 'oee': {
+        const report = await this.reportsService.getOeeReport(query as any, tenantId);
+        return report.assets.map((a) => ({
+          assetName: a.assetName,
+          assetNumber: a.assetNumber,
+          totalDowntimeHours: a.totalDowntimeHours,
+          downtimeEvents: a.downtimeEvents,
+          availability: a.availability,
+          performance: a.performance,
+          quality: a.quality,
+          oee: a.oee,
+        }));
+      }
       default:
-        return [];
+        throw new BadRequestException(`Unknown report type: ${reportType}`);
     }
   }
 

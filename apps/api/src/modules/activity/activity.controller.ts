@@ -12,6 +12,9 @@ import { ActivityService } from './activity.service';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { QuickStartByQrDto } from './dto/quick-start-by-qr.dto';
+import { CompleteActivityDto } from './dto/complete-activity.dto';
+import { AbandonActivityDto } from './dto/abandon-activity.dto';
 
 @ApiTags('Activity')
 @ApiBearerAuth()
@@ -33,7 +36,7 @@ export class ActivityController {
   @Permissions('work_orders:write')
   @ApiOperation({ summary: 'Quick-start work from a durable asset tag token' })
   quickStartByQr(
-    @Body() body: { token: string },
+    @Body() body: QuickStartByQrDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.activityService.quickStartByQr(body.token, user.userId, user.tenantId);
@@ -44,7 +47,7 @@ export class ActivityController {
   @ApiOperation({ summary: 'Complete an active work session' })
   complete(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { notes?: string },
+    @Body() body: CompleteActivityDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.activityService.completeActivity(
@@ -60,7 +63,7 @@ export class ActivityController {
   @ApiOperation({ summary: 'Abandon an active work session without closing the work order' })
   abandon(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { reason?: string },
+    @Body() body: AbandonActivityDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.activityService.abandonActivity(id, user.userId, user.tenantId, body.reason);

@@ -19,12 +19,22 @@ import { auth } from './modules/auth/better-auth';
 
 function validateProductionEnv() {
   const required = [
-    'DB_HOST', 'DB_PASSWORD', 'DB_USERNAME', 'DB_DATABASE',
     'BETTER_AUTH_SECRET', 'BETTER_AUTH_URL',
     'PUBLIC_WEB_URL',
     'CORS_ORIGINS',
   ];
   const missing = required.filter((key) => !process.env[key]);
+
+  // Database can be configured either via a single DATABASE_URL (e.g. Railway
+  // auto-injects this) or via the four discrete DB_* vars (Docker/self-hosted).
+  // Only fail if neither form is fully present.
+  const hasDatabaseUrl = !!process.env.DATABASE_URL;
+  const discreteDbVars = ['DB_HOST', 'DB_PASSWORD', 'DB_USERNAME', 'DB_DATABASE'];
+  const hasAllDiscreteDbVars = discreteDbVars.every((key) => !!process.env[key]);
+  if (!hasDatabaseUrl && !hasAllDiscreteDbVars) {
+    missing.push('DATABASE_URL (or all of DB_HOST, DB_PASSWORD, DB_USERNAME, DB_DATABASE)');
+  }
+
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }

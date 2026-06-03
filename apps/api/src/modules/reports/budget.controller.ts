@@ -21,6 +21,8 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { CreateBudgetDto } from './dto/create-budget.dto';
+import { UpdateBudgetDto } from './dto/update-budget.dto';
 
 @ApiTags('Budgets')
 @ApiBearerAuth()
@@ -66,14 +68,7 @@ export class BudgetController {
   @ApiOperation({ summary: 'Create a budget' })
   @ApiResponse({ status: 201, description: 'Budget created' })
   create(
-    @Body() dto: {
-      name: string;
-      periodStart: Date;
-      periodEnd: Date;
-      locationId?: string;
-      plannedAmount: number;
-      allocatedCategories?: Record<string, number>;
-    },
+    @Body() dto: CreateBudgetDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.budgetService.create(dto, user.tenantId);
@@ -85,14 +80,7 @@ export class BudgetController {
   @ApiResponse({ status: 200, description: 'Budget updated' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: Partial<{
-      name: string;
-      periodStart: Date;
-      periodEnd: Date;
-      locationId: string;
-      plannedAmount: number;
-      allocatedCategories: Record<string, number>;
-    }>,
+    @Body() dto: UpdateBudgetDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.budgetService.update(id, dto, user.tenantId);

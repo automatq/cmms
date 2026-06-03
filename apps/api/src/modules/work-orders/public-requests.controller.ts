@@ -16,6 +16,7 @@ import { Tenant } from '../users/entities/tenant.entity';
 import { Asset } from '../assets/entities/asset.entity';
 import { Public } from '../auth/decorators/public.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CreatePublicWorkRequestDto } from './dto/create-public-work-request.dto';
 
 @ApiTags('Public Requests')
 @Controller('public')
@@ -60,16 +61,7 @@ export class PublicRequestsController {
   @ApiResponse({ status: 201, description: 'Request submitted' })
   async submitRequest(
     @Param('tenantSlug') tenantSlug: string,
-    @Body() body: {
-      title: string;
-      description?: string;
-      priority?: string;
-      submitterName?: string;
-      submitterEmail?: string;
-      submitterPhone?: string;
-      assetId?: string;
-      locationId?: string;
-    },
+    @Body() body: CreatePublicWorkRequestDto,
   ) {
     const tenant = await this.tenantRepository.findOne({
       where: { slug: tenantSlug },

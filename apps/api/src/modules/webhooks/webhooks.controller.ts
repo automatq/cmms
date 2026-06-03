@@ -21,6 +21,8 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { CreateWebhookDto } from './dto/create-webhook.dto';
+import { UpdateWebhookDto } from './dto/update-webhook.dto';
 
 @ApiTags('Webhooks')
 @ApiBearerAuth()
@@ -48,7 +50,7 @@ export class WebhooksController {
   @ApiOperation({ summary: 'Create webhook subscription' })
   @ApiResponse({ status: 201, description: 'Webhook created' })
   create(
-    @Body() dto: { url: string; events: string[] },
+    @Body() dto: CreateWebhookDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.webhooksService.create(dto, user.tenantId);
@@ -59,7 +61,7 @@ export class WebhooksController {
   @ApiOperation({ summary: 'Update webhook subscription' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: Partial<{ url: string; events: string[]; isActive: boolean }>,
+    @Body() dto: UpdateWebhookDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.webhooksService.update(id, dto, user.tenantId);
