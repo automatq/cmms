@@ -173,28 +173,34 @@ export class JwtAuthGuard implements CanActivate {
       throw new ForbiddenException('Organization not found');
     }
 
+    // Billing enforcement is opt-in. While BILLING_ENFORCED !== 'true' (the
+    // default for the free-access launch) trials never expire-and-suspend and
+    // we never return 402 — every authenticated user keeps full access. Flip
+    // BILLING_ENFORCED=true (and wire Polar) when billing goes live.
     let status: string = org.status;
-    if (status === 'trial' && org.trial_ends_at && new Date(org.trial_ends_at) < new Date()) {
-      status = 'suspended';
-      // persist the new status
-      await getPool().query(
-        `UPDATE organizations SET status = 'suspended', updated_at = now() WHERE id = $1`,
-        [tenantId],
-      );
-    }
-
-    if (status === TenantStatus.SUSPENDED || status === TenantStatus.CANCELLED) {
-      // Allow billing endpoints through so users can reactivate.
-      const path: string = request.path || request.url || '';
-      const isBillingPath = path.includes('/billing/');
-      if (!isBillingPath) {
-        throw new HttpException(
-          {
-            message: 'Subscription inactive. Add a payment method to continue.',
-            status,
-          },
-          402,
+    if (process.env.BILLING_ENFORCED === 'true') {
+      if (status === 'trial' && org.trial_ends_at && new Date(org.trial_ends_at) < new Date()) {
+        status = 'suspended';
+        // persist the new status
+        await getPool().query(
+          `UPDATE organizations SET status = 'suspended', updated_at = now() WHERE id = $1`,
+          [tenantId],
         );
+      }
+
+      if (status === TenantStatus.SUSPENDED || status === TenantStatus.CANCELLED) {
+        // Allow billing endpoints through so users can reactivate.
+        const path: string = request.path || request.url || '';
+        const isBillingPath = path.includes('/billing/');
+        if (!isBillingPath) {
+          throw new HttpException(
+            {
+              message: 'Subscription inactive. Add a payment method to continue.',
+              status,
+            },
+            402,
+          );
+        }
       }
     }
 

@@ -16,6 +16,14 @@ export class FeatureGateGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Plan-based feature gating is opt-in. While BILLING_ENFORCED !== 'true'
+    // (the default for the free-access launch) every feature is available to
+    // every tenant — no plan checks, no 403s. Flip BILLING_ENFORCED=true to
+    // re-enable per-plan gating once billing is live.
+    if (process.env.BILLING_ENFORCED !== 'true') {
+      return true;
+    }
+
     const requiredFeature = this.reflector.getAllAndOverride<string>(
       FEATURE_KEY,
       [context.getHandler(), context.getClass()],
