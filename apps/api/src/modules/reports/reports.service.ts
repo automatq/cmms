@@ -209,6 +209,24 @@ export class ReportsService {
     if (query.priority) qb.andWhere('wo.priority = :priority', { priority: query.priority });
     if (query.assetId) qb.andWhere('wo.assetId = :assetId', { assetId: query.assetId });
 
+    // Multi-select filters from the report UI's filter chips. Each list
+    // is optional and ANDed; an empty array short-circuits to "no filter".
+    if (query.locationIds?.length) {
+      qb.andWhere('wo.locationId IN (:...locationIds)', { locationIds: query.locationIds });
+    }
+    if (query.categoryIds?.length) {
+      // WOs don't have category directly — filter through the WO's asset.
+      qb.leftJoin('wo.asset', 'a').andWhere('a.categoryId IN (:...categoryIds)', { categoryIds: query.categoryIds });
+    }
+    if (query.technicianIds?.length) {
+      // Technicians are on wo_labor; restrict to WOs that have at least
+      // one labor row for one of the selected techs in the date window.
+      qb.andWhere(
+        'EXISTS (SELECT 1 FROM wo_labor wl WHERE wl.wo_id = wo.id AND wl.user_id IN (:...technicianIds))',
+        { technicianIds: query.technicianIds },
+      );
+    }
+
     // Summary stats
     const totalCount = await qb.getCount();
     const completedCount = await qb.clone()
@@ -224,23 +242,18 @@ export class ReportsService {
       .select('SUM(wo.actualCost)', 'total')
       .getRawOne();
 
-    // By Type
-    const byType = await this.workOrderRepo
-      .createQueryBuilder('wo')
+    // By Type — clone the base qb so filter chips also restrict the
+    // breakdowns (otherwise totals and charts diverge when filtered).
+    const byType = await qb.clone()
       .select('wo.type', 'type')
       .addSelect('COUNT(*)', 'count')
-      .where('wo.tenantId = :tenantId', { tenantId })
-      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('wo.type')
       .getRawMany();
 
-    // By Priority
-    const byPriority = await this.workOrderRepo
-      .createQueryBuilder('wo')
+    // By Priority — same clone-of-base-qb pattern
+    const byPriority = await qb.clone()
       .select('wo.priority', 'priority')
       .addSelect('COUNT(*)', 'count')
-      .where('wo.tenantId = :tenantId', { tenantId })
-      .andWhere('wo.createdAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('wo.priority')
       .getRawMany();
 

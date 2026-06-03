@@ -5,6 +5,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ExportService } from './export.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { sendScheduledReportEmail } from '../auth/email-sender';
 
 @Injectable()
 @Processor('report-export')
@@ -111,17 +112,34 @@ export class ReportExportProcessor extends WorkerHost implements OnModuleInit {
     try {
       const { reportId, reportType, filters, format, recipientEmails, tenantId } = data;
 
-      let content: string;
+      // CSV is text; PDF is now a real binary Buffer (was an HTML string).
+      let content: string | Buffer;
+      let filename: string;
       if (format === 'csv') {
         content = await this.exportService.exportToCsv(reportType, filters || {}, tenantId);
+        filename = `${reportType}-report-${new Date().toISOString().slice(0, 10)}.csv`;
       } else {
         content = await this.exportService.exportToPdf(reportType, filters || {}, tenantId);
+        filename = `${reportType}-report-${new Date().toISOString().slice(0, 10)}.pdf`;
       }
 
-      // In production, this would email the report to recipientEmails
-      // For now, log success and mark as run
+      // Email the report to every recipient (one email with the
+      // attachment, all addresses on the To: line — keeps the audit
+      // trail unified). Sender helper no-ops cleanly if Resend isn't
+      // configured.
+      if (recipientEmails.length) {
+        await sendScheduledReportEmail(recipientEmails, this.titleCase(reportType), {
+          filename,
+          content,
+        });
+      } else {
+        this.logger.warn(
+          `Scheduled report ${reportId} has no recipients — generated but not sent`,
+        );
+      }
+
       this.logger.log(
-        `Scheduled report ${reportId} generated (${format}, ${content.length} chars) for ${recipientEmails.join(', ')}`,
+        `Scheduled report ${reportId} dispatched (${format}, ${content.length} bytes) to ${recipientEmails.length} recipient(s)`,
       );
 
       await this.exportService.markAsRun(reportId);
@@ -129,6 +147,12 @@ export class ReportExportProcessor extends WorkerHost implements OnModuleInit {
       this.logger.error(`Failed to run scheduled report ${data.reportId}: ${(error as Error).message}`);
       throw error;
     }
+  }
+
+  private titleCase(s: string): string {
+    return s
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   @OnWorkerEvent('completed')
