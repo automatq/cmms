@@ -87,11 +87,14 @@ async function bootstrap() {
   // Mount Better Auth handler at /api/auth/* BEFORE body parsers and global prefix.
   // Better Auth needs raw bodies; everything else (api/v1/*) gets JSON parsing.
   // We can't use nestjs-better-auth's auto-mounting because it uses Express-5 *splat
-  // syntax that doesn't match in Express 4 (which Nest 10's platform-express ships).
+  // syntax. NestJS 11 ships Express 5 (path-to-regexp v8), where a bare '*'
+  // is invalid — wildcards must be named: '/api/auth/*splat' matches every
+  // sub-path (sign-in, sign-out, admin/*, etc). The handler reads req.url
+  // directly, so the captured param name is irrelevant; it only needs to match.
   // We also handle CORS inline here because NestJS's app.enableCors() runs after
   // these routes are matched (the Express router matches by registration order).
   const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.all('/api/auth/*', async (req: any, res: any) => {
+  expressApp.all('/api/auth/*splat', async (req: any, res: any) => {
     const requestOrigin = req.headers.origin as string | undefined;
     const allowedOrigin = resolveAllowOrigin(requestOrigin);
 
