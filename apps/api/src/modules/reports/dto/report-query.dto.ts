@@ -1,5 +1,18 @@
-import { IsOptional, IsDateString, IsUUID, IsEnum, IsString, IsNumber, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsDateString, IsUUID, IsEnum, IsString, IsNumber, Min, IsArray } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+
+/**
+ * Multi-select query params can arrive in two forms over HTTP:
+ *   ?locationIds=a&locationIds=b   (array)
+ *   ?locationIds=a,b               (comma-separated string)
+ * Normalize both into a string[].
+ */
+function csvOrArray(value: unknown): string[] | undefined {
+  if (value == null || value === '') return undefined;
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value === 'string') return value.split(',').map((s) => s.trim()).filter(Boolean);
+  return undefined;
+}
 
 export enum ReportPeriod {
   DAY = 'day',
@@ -44,6 +57,27 @@ export class ReportQueryDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  // Multi-select counterparts of the singular IDs above. Accept either
+  // `?locationIds=a&locationIds=b` or `?locationIds=a,b`. When present
+  // they take precedence over the singular IDs in the service layer.
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  @Transform(({ value }) => csvOrArray(value))
+  locationIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  @Transform(({ value }) => csvOrArray(value))
+  categoryIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  @Transform(({ value }) => csvOrArray(value))
+  technicianIds?: string[];
 
   @IsOptional()
   @IsEnum(ReportFormat)

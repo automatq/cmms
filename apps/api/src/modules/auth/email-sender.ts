@@ -63,3 +63,69 @@ export async function sendInvitationEmail(
      <p>This invitation expires in 48 hours.</p>`,
   );
 }
+
+interface AttachmentSpec {
+  filename: string
+  /** PDF Buffer or CSV string — Resend accepts both. */
+  content: Buffer | string
+}
+
+/**
+ * Send a scheduled-report email with the report attached. Used by
+ * `report-export.processor.ts` once the report has been generated.
+ * Falls back to a no-op log line if RESEND_API_KEY isn't configured,
+ * matching the behavior of the other helpers in this file.
+ */
+export async function sendScheduledReportEmail(
+  to: string | string[],
+  reportTitle: string,
+  attachment: AttachmentSpec,
+): Promise<void> {
+  const recipients = Array.isArray(to) ? to : [to]
+  if (!recipients.length) return
+
+  if (!process.env.RESEND_API_KEY) {
+    logger.warn(
+      `No RESEND_API_KEY set; skipping scheduled report "${reportTitle}" to ${recipients.join(', ')}`,
+    )
+    return
+  }
+
+  const subject = `Your ${APP_NAME} ${reportTitle} report`
+  const html = `<p>Your scheduled <strong>${reportTitle}</strong> report is attached.</p>
+    <p>Generated at ${new Date().toLocaleString()}.</p>
+    <p style="color:#666;font-size:12px">You're receiving this because a scheduled report
+    delivery in ${APP_NAME} included this email address. Manage scheduled reports from
+    your dashboard.</p>`
+
+  // Resend expects base64-encoded content for binary attachments; pass
+  // a Buffer directly when we have one (Resend SDK accepts it). For CSV
+  // (string) we pass through unchanged.
+  try {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: recipients,
+      subject,
+      html,
+      attachments: [
+        {
+          filename: attachment.filename,
+          content: attachment.content,
+        },
+      ],
+    })
+    if (result.error) {
+      logger.error(
+        `Resend rejected scheduled report "${reportTitle}" to ${recipients.join(', ')}: ${result.error.name}: ${result.error.message}`,
+      )
+      return
+    }
+    logger.log(
+      `Scheduled report emailed: id=${result.data?.id} to=${recipients.join(', ')} title="${reportTitle}"`,
+    )
+  } catch (err: any) {
+    logger.error(
+      `Resend threw on scheduled report "${reportTitle}" to ${recipients.join(', ')}: ${err?.message || err}`,
+    )
+  }
+}

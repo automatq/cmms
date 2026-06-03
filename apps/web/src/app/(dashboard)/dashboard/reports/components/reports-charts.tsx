@@ -24,7 +24,17 @@ interface ChartData {
     category?: string
 }
 
-export function OverviewBarChart({ data }: { data: ChartData[] }) {
+/**
+ * When a chart accepts an `onSegmentClick` prop the segment becomes
+ * interactive — clicking emits the clicked datum so a parent page can
+ * open a drill-down panel showing the underlying records.
+ */
+interface InteractiveChartProps {
+    data: ChartData[]
+    onSegmentClick?: (datum: ChartData) => void
+}
+
+export function OverviewBarChart({ data, onSegmentClick }: InteractiveChartProps) {
     return (
         <ResponsiveContainer width="100%" height={350}>
             <BarChart data={data}>
@@ -47,13 +57,19 @@ export function OverviewBarChart({ data }: { data: ChartData[] }) {
                     contentStyle={{ backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #e2e8f0" }}
                     cursor={{ fill: "rgba(0,0,0,0.05)" }}
                 />
-                <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar
+                    dataKey="value"
+                    fill="#3b82f6"
+                    radius={[4, 4, 0, 0]}
+                    cursor={onSegmentClick ? "pointer" : undefined}
+                    onClick={onSegmentClick ? (d: ChartData) => onSegmentClick(d) : undefined}
+                />
             </BarChart>
         </ResponsiveContainer>
     )
 }
 
-export function OverviewLineChart({ data }: { data: ChartData[] }) {
+export function OverviewLineChart({ data }: InteractiveChartProps) {
     return (
         <ResponsiveContainer width="100%" height={350}>
             <LineChart data={data}>
@@ -88,7 +104,7 @@ export function OverviewLineChart({ data }: { data: ChartData[] }) {
     )
 }
 
-export function OverviewPieChart({ data }: { data: ChartData[] }) {
+export function OverviewPieChart({ data, onSegmentClick }: InteractiveChartProps) {
     return (
         <ResponsiveContainer width="100%" height={350}>
             <PieChart>
@@ -102,6 +118,8 @@ export function OverviewPieChart({ data }: { data: ChartData[] }) {
                     dataKey="value"
                     nameKey="label"
                     label
+                    cursor={onSegmentClick ? "pointer" : undefined}
+                    onClick={onSegmentClick ? (d: ChartData) => onSegmentClick(d) : undefined}
                 >
                     {data.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -114,7 +132,7 @@ export function OverviewPieChart({ data }: { data: ChartData[] }) {
     )
 }
 
-export function StackedBarChart({ data }: { data: ChartData[] }) {
+export function StackedBarChart({ data }: InteractiveChartProps) {
     // Group by label and category
     const categories = Array.from(new Set(data.map(d => d.category).filter(Boolean))) as string[]
     const chartData = data.reduce((acc: any[], curr) => {
