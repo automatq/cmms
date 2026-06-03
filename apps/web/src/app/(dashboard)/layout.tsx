@@ -5,7 +5,6 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
 import { Progress } from '@/components/ui/progress'
-import { TrialBanner } from '@/components/trial-banner'
 import { ImpersonationBanner } from '@/components/admin/impersonation-banner'
 import { useAuth } from '@/providers/auth-provider'
 
@@ -50,7 +49,6 @@ export default function DashboardLayout({
       <div className="lg:pl-64">
         <Header />
         <main className="p-6 space-y-6">
-          {!isSuperadmin && <TrialBanner />}
           {children}
         </main>
       </div>

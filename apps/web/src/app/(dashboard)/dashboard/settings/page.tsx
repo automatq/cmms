@@ -1282,82 +1282,19 @@ function RolesTab() {
 }
 
 function BillingTab() {
-    const { data: org, isLoading } = useQuery({
-        queryKey: ['organization'],
-        queryFn: async () => {
-            const res = await api.getOrganization()
-            return res.data
-        },
-    })
-
-    const statusColors: Record<string, string> = {
-        active: 'bg-green-500/10 text-green-700 border-green-500/20',
-        trial: 'bg-blue-500/10 text-blue-700 border-blue-500/20',
-        suspended: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
-        cancelled: 'bg-red-500/10 text-red-700 border-red-500/20',
-    }
-
-    if (isLoading) {
-        return (
-            <TabsContent value="billing" className="space-y-6">
-                <Card><CardHeader><Skeleton className="h-6 w-48" /></CardHeader>
-                    <CardContent><Skeleton className="h-32 w-full" /></CardContent>
-                </Card>
-            </TabsContent>
-        )
-    }
-
-    const status: string = org?.status || 'trial'
-    const isOnPaidPlan = status === 'active'
-    const trialEndsAt = org?.trialEndsAt ? new Date(org.trialEndsAt) : null
-    const daysLeft = trialEndsAt
-        ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-        : 0
-
     return (
         <TabsContent value="billing" className="space-y-6">
-            {/* Current Plan */}
+            {/* Plan — Maintek is currently free; no payment required. */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Subscription</CardTitle>
-                    <CardDescription>$269 CAD/month. Cancel anytime.</CardDescription>
+                    <CardTitle>Plan</CardTitle>
+                    <CardDescription>Maintek is free to use — every feature is included, no payment required.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <span className="text-2xl font-bold">MainTek</span>
-                            <Badge className={`ml-3 ${statusColors[status] || 'bg-gray-500/10 text-gray-700'}`}>
-                                {status}
-                            </Badge>
-                        </div>
-                        {isOnPaidPlan ? (
-                            <Button variant="outline" onClick={() => api.openPolarPortal()}>
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Manage subscription
-                            </Button>
-                        ) : (
-                            <Button onClick={() => api.startPolarCheckout()}>
-                                Add payment method
-                            </Button>
-                        )}
+                <CardContent>
+                    <div className="flex items-center gap-3">
+                        <span className="text-2xl font-bold">Maintek</span>
+                        <Badge className="bg-green-500/10 text-green-700 border-green-500/20">Free</Badge>
                     </div>
-                    {status === 'trial' && trialEndsAt && (
-                        <p className="text-sm text-muted-foreground">
-                            {daysLeft > 0
-                                ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left in your trial. Add a payment method to keep access.`
-                                : 'Your trial has ended. Add a payment method to reactivate.'}
-                        </p>
-                    )}
-                    {status === 'suspended' && (
-                        <p className="text-sm text-amber-700 dark:text-amber-300">
-                            Your subscription is suspended. Add a payment method to restore access.
-                        </p>
-                    )}
-                    {status === 'cancelled' && (
-                        <p className="text-sm text-muted-foreground">
-                            Your subscription was cancelled. You can resubscribe any time.
-                        </p>
-                    )}
                 </CardContent>
             </Card>
 
