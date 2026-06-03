@@ -2,9 +2,6 @@ import axios, { AxiosError, AxiosInstance } from 'axios'
 import axiosRetry from 'axios-retry'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1'
-// Polar checkout/portal endpoints live under /api/auth (Better Auth path),
-// not /api/v1. Strip the /api/v1 suffix to get the API origin.
-const POLAR_AUTH_BASE = `${API_URL.replace(/\/api\/v1\/?$/, '')}/api/auth`
 
 class ApiClient {
   private client: AxiosInstance
@@ -42,15 +39,7 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       (error: AxiosError) => {
-        // 402 means the org's trial expired or subscription is cancelled.
-        // Redirect to a "reactivate" page (unless we're already there or in
-        // billing endpoints, which the API allows through for reactivation).
-        if (error.response?.status === 402 && typeof window !== 'undefined') {
-          const path = window.location.pathname
-          if (!path.startsWith('/reactivate') && !path.startsWith('/auth/')) {
-            window.location.href = '/reactivate'
-          }
-        }
+        // Payment gateway removed — no 402/reactivate handling.
         return Promise.reject(error)
       }
     )
@@ -618,18 +607,6 @@ class ApiClient {
 
   async cancelPurchaseOrder(id: string) {
     return this.client.post(`/purchase-orders/${id}/cancel`)
-  }
-
-  // Billing — Polar.sh hosted checkout & customer portal.
-  // The Polar Better Auth plugin exposes these endpoints under /api/auth/*.
-  startPolarCheckout() {
-    if (typeof window === 'undefined') return
-    window.location.href = `${POLAR_AUTH_BASE}/checkout/pro`
-  }
-
-  openPolarPortal() {
-    if (typeof window === 'undefined') return
-    window.location.href = `${POLAR_AUTH_BASE}/portal`
   }
 
   // Activity

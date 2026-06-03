@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/dashboard', '/api', '/onboarding', '/sign-in', '/sign-up', '/reactivate'],
+        disallow: ['/dashboard', '/api', '/onboarding', '/sign-in', '/sign-up'],
       },
     ],
     sitemap: 'https://maintek.app/sitemap.xml',
