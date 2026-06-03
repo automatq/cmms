@@ -17,6 +17,8 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { CreateServiceContractDto } from './dto/create-service-contract.dto';
+import { UpdateServiceContractDto } from './dto/update-service-contract.dto';
 
 @ApiTags('Service Contracts')
 @ApiBearerAuth()
@@ -53,7 +55,7 @@ export class ServiceContractsController {
   @Permissions('inventory:write')
   @ApiOperation({ summary: 'Create service contract' })
   @ApiResponse({ status: 201, description: 'Contract created' })
-  create(@Body() dto: any, @CurrentUser() user: RequestUser) {
+  create(@Body() dto: CreateServiceContractDto, @CurrentUser() user: RequestUser) {
     return this.contractsService.create(dto, user.tenantId);
   }
 
@@ -62,7 +64,7 @@ export class ServiceContractsController {
   @ApiOperation({ summary: 'Update service contract' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: any,
+    @Body() dto: UpdateServiceContractDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.contractsService.update(id, dto, user.tenantId);

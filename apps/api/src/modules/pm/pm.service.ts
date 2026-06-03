@@ -304,6 +304,16 @@ export class PmService {
             this.logger.warn(`webhook pm.triggered failed for plan ${plan.id}: ${(err as Error).message}`);
           }
 
+          try {
+            await this.notificationsService.onPmDue(
+              { id: plan.id, name: plan.name, assetId: plan.assetId },
+              plan.assignedTo ?? [],
+              tenantId,
+            );
+          } catch (err) {
+            this.logger.warn(`notification onPmDue failed for plan ${plan.id}: ${(err as Error).message}`);
+          }
+
           triggered++;
         } catch (error) {
           this.logger.error(`Failed to trigger PM ${plan.id}:`, error);

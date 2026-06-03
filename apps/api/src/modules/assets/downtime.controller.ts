@@ -21,6 +21,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { StartDowntimeDto } from './dto/start-downtime.dto';
 
 @ApiTags('Downtime')
 @ApiBearerAuth()
@@ -35,7 +36,7 @@ export class DowntimeController {
   @ApiResponse({ status: 201, description: 'Downtime started' })
   startDowntime(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { reason?: string; workOrderId?: string },
+    @Body() body: StartDowntimeDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.downtimeService.startDowntime(

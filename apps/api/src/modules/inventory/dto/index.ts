@@ -15,3 +15,5 @@ export * from './create-purchase-order.dto';
 export * from './update-purchase-order.dto';
 export * from './po-query.dto';
 export * from './receive-po.dto';
+export * from './create-service-contract.dto';
+export * from './update-service-contract.dto';

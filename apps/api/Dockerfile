@@ -15,6 +15,8 @@ COPY --from=builder --chown=appuser:appgroup /app/dist ./dist
 COPY --from=builder --chown=appuser:appgroup /app/package*.json ./
 RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
 
+ENV NODE_ENV=production
+
 USER appuser
 
 EXPOSE 4000

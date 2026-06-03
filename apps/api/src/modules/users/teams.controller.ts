@@ -21,6 +21,9 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { CreateTeamDto } from './dto/create-team.dto';
+import { UpdateTeamDto } from './dto/update-team.dto';
+import { AddTeamMemberDto } from './dto/add-team-member.dto';
 
 @ApiTags('Teams')
 @ApiBearerAuth()
@@ -50,7 +53,7 @@ export class TeamsController {
   @ApiOperation({ summary: 'Create a team' })
   @ApiResponse({ status: 201, description: 'Team created' })
   create(
-    @Body() dto: { name: string; description?: string; leaderId?: string },
+    @Body() dto: CreateTeamDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.teamsService.create(dto, user.tenantId);
@@ -62,7 +65,7 @@ export class TeamsController {
   @ApiResponse({ status: 200, description: 'Team updated' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: { name?: string; description?: string; leaderId?: string },
+    @Body() dto: UpdateTeamDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.teamsService.update(id, dto, user.tenantId);
@@ -82,7 +85,7 @@ export class TeamsController {
   @ApiResponse({ status: 200, description: 'Member added' })
   addMember(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { userId: string },
+    @Body() body: AddTeamMemberDto,
     @CurrentUser() user: RequestUser,
   ) {
     return this.teamsService.addMember(id, body.userId, user.tenantId);
