@@ -53,9 +53,20 @@ jobs:
       # the Railway dashboard red while CI stayed green). If we hit CLI
       # false-positives again, prefer a follow-up status check over silently
       # swallowing the exit code.
+      # The Railway CLI (v4) does NOT honor RAILWAY_CONFIG_FILE for `up` — it
+      # always reads ./railway.json from the upload root. So for any service
+      # whose config isn't named railway.json (the worker uses
+      # railway.worker.json: Dockerfile.worker, `node dist/worker-main`, 1
+      # replica), stage that file as railway.json in this throwaway runner
+      # checkout before deploying. Without this the worker built the API image
+      # and crashed running dist/main.js ("Missing required environment
+      # variables: CORS_ORIGINS").
       - name: Deploy ${{ matrix.service }}
         working-directory: ${{ matrix.src }}
-        run: railway up --service ${{ matrix.service }} --ci
+        run: |
+          if [ "${{ matrix.config }}" != "railway.json" ]; then
+            cp "${{ matrix.config }}" railway.json
+          fi
+          railway up --service ${{ matrix.service }} --ci
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_CONFIG_FILE: ${{ matrix.config }}
