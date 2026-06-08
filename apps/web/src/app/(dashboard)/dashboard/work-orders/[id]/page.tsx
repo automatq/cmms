@@ -20,13 +20,25 @@ import {
 } from '@/components/ui/dialog'
 import Link from 'next/link'
 import {
-  ArrowLeft, Clock, Wrench, MapPin, Target, CheckCircle2, FileText,
-  Settings2, PlayCircle, PauseCircle, Plus, Trash2, Upload, Download,
+  ArrowLeft, Clock, Wrench, MapPin, Target, FileText,
+  Settings2, Plus, Trash2, Upload, Download,
   DollarSign, Paperclip, ClipboardCheck, Users, File as FileIcon,
 } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import { getWorkOrderStatusMeta, getWorkOrderPriorityMeta } from '@/lib/status'
+import { getWorkOrderStatusMeta, getWorkOrderPriorityMeta, type WorkOrderStatus } from '@/lib/status'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { StatusTransitionControl } from '@/components/work-orders/status-transition-control'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { SignaturePad } from '@/components/work-orders/signature-pad'
@@ -51,6 +63,7 @@ export default function WorkOrderDetailPage() {
     const [showLaborDialog, setShowLaborDialog] = useState(false)
     const [showPartDialog, setShowPartDialog] = useState(false)
     const [showSignatureDialog, setShowSignatureDialog] = useState(false)
+    const [showCancelDialog, setShowCancelDialog] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Labor form state
@@ -263,12 +276,18 @@ export default function WorkOrderDetailPage() {
         )
     }
 
-    // Visuals are centralized in lib/status.ts (single source of truth across the app).
-    const getPriorityColor = (priority: string) => getWorkOrderPriorityMeta(priority).badgeClass
-    const getStatusColor = (status: string) => getWorkOrderStatusMeta(status).badgeClass
-
-    const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        updateMutation.mutate(e.target.value)
+    // Route a chosen transition: completion captures a signature, cancellation
+    // confirms first; everything else applies directly.
+    const onSelectStatus = (target: WorkOrderStatus) => {
+        if (target === 'completed') {
+            setShowSignatureDialog(true)
+            return
+        }
+        if (target === 'cancelled') {
+            setShowCancelDialog(true)
+            return
+        }
+        updateMutation.mutate(target)
     }
 
     const handleAddLabor = (e: React.FormEvent) => {
@@ -337,9 +356,8 @@ export default function WorkOrderDetailPage() {
                     <div>
                         <div className="flex flex-wrap items-center gap-3 mb-2">
                             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{wo.title}</h1>
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide border ${getPriorityColor(wo.priority)}`}>
-                                {wo.priority} Priority
-                            </span>
+                            <StatusBadge meta={getWorkOrderStatusMeta(wo.status)} icon uppercase />
+                            <StatusBadge meta={getWorkOrderPriorityMeta(wo.priority)} uppercase />
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                             <span className="font-mono bg-muted/50 px-2 py-0.5 rounded">{wo.woNumber}</span>
@@ -354,26 +372,6 @@ export default function WorkOrderDetailPage() {
                                 </Link>
                             )}
                         </div>
-                    </div>
-                </div>
-
-                <div className="flex flex-col items-end gap-2">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-muted-foreground">Status:</span>
-                        <Select
-                            value={wo.status}
-                            onChange={handleStatusChange}
-                            disabled={statusUpdating}
-                            className={`h-9 w-[160px] font-medium ${getStatusColor(wo.status)} border-transparent focus:ring-0`}
-                        >
-                            <option value="requested">Requested</option>
-                            <option value="pending_approval">Pending Approval</option>
-                            <option value="open">Open</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="on_hold">On Hold</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                        </Select>
                     </div>
                 </div>
             </div>
@@ -736,79 +734,17 @@ export default function WorkOrderDetailPage() {
 
                     <Card className="bg-primary/5 border-primary/20">
                         <CardContent className="p-5 space-y-3">
-                            <h3 className="font-semibold text-primary mb-1">Quick Actions</h3>
+                            <h3 className="font-semibold text-primary mb-1">Status</h3>
 
-                            {/* Each button maps to a single valid transition per
-                                apps/api/src/modules/work-orders/state-machine.ts.
-                                Showing buttons for invalid transitions silently
-                                failed before (see this commit's PR description). */}
-
-                            {wo.status === 'requested' && (
-                                <Button className="w-full justify-start" onClick={() => updateMutation.mutate('open')}>
-                                    <CheckCircle2 className="h-4 w-4 mr-2" /> Open Work Order
-                                </Button>
-                            )}
-
-                            {wo.status === 'pending_approval' && (
-                                <Button className="w-full justify-start" onClick={() => updateMutation.mutate('open')}>
-                                    <CheckCircle2 className="h-4 w-4 mr-2" /> Approve & Open
-                                </Button>
-                            )}
-
-                            {wo.status === 'open' && (
-                                <Button className="w-full justify-start" onClick={() => updateMutation.mutate('in_progress')}>
-                                    <PlayCircle className="h-4 w-4 mr-2" /> Start Work
-                                </Button>
-                            )}
-
-                            {wo.status === 'in_progress' && (
-                                <>
-                                    <Button
-                                        variant="default"
-                                        className="w-full justify-start bg-emerald-600 hover:bg-emerald-700 text-white"
-                                        onClick={() => setShowSignatureDialog(true)}
-                                    >
-                                        <CheckCircle2 className="h-4 w-4 mr-2" /> Mark Completed
-                                    </Button>
-                                    <Button
-                                        variant="secondary"
-                                        className="w-full justify-start"
-                                        onClick={() => updateMutation.mutate('on_hold')}
-                                    >
-                                        <PauseCircle className="h-4 w-4 mr-2" /> Put on Hold
-                                    </Button>
-                                </>
-                            )}
-
-                            {wo.status === 'on_hold' && (
-                                <Button className="w-full justify-start" onClick={() => updateMutation.mutate('in_progress')}>
-                                    <PlayCircle className="h-4 w-4 mr-2" /> Resume Work
-                                </Button>
-                            )}
-
-                            {wo.status === 'completed' && (
-                                <Button
-                                    variant="outline"
-                                    className="w-full justify-start"
-                                    onClick={() => updateMutation.mutate('in_progress')}
-                                >
-                                    <PlayCircle className="h-4 w-4 mr-2" /> Reopen
-                                </Button>
-                            )}
-
-                            {wo.status !== 'completed' && wo.status !== 'cancelled' && (
-                                <Button
-                                    variant="ghost"
-                                    className="w-full justify-start text-destructive hover:text-destructive"
-                                    onClick={() => {
-                                        if (confirm('Cancel this work order? Reserved inventory will be released.')) {
-                                            updateMutation.mutate('cancelled')
-                                        }
-                                    }}
-                                >
-                                    <Trash2 className="h-4 w-4 mr-2" /> Cancel Work Order
-                                </Button>
-                            )}
+                            {/* Single transition control — renders only valid next
+                                states per apps/api/.../state-machine.ts (mirrored in
+                                lib/status.ts). Completion routes through the signature
+                                dialog; cancel through a confirm dialog. */}
+                            <StatusTransitionControl
+                                status={wo.status}
+                                disabled={statusUpdating}
+                                onSelect={onSelectStatus}
+                            />
 
                             {wo.status === 'completed' && wo.completionSignature && signatureData?.signatureUrl && (
                                 <div className="space-y-2">
@@ -953,6 +889,27 @@ export default function WorkOrderDetailPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Cancel confirmation */}
+            <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Cancel this work order?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Reserved inventory will be released. This can be reopened later if needed.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Keep work order</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => updateMutation.mutate('cancelled')}
+                        >
+                            Cancel work order
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
