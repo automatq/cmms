@@ -5,7 +5,8 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { getWorkOrderStatusMeta } from '@/lib/status'
 import Link from 'next/link'
 import {
   ArrowLeft, Edit, CalendarClock, Settings, ClipboardCheck, History, Calendar,
@@ -17,16 +18,6 @@ import { useState } from 'react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-
-const WO_STATUS_COLORS: Record<string, string> = {
-  requested: 'bg-gray-100 text-gray-700',
-  pending_approval: 'bg-purple-100 text-purple-700',
-  open: 'bg-blue-100 text-blue-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  on_hold: 'bg-orange-100 text-orange-700',
-  completed: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
-}
 
 export default function PMDetailPage() {
   const params = useParams()
@@ -369,9 +360,7 @@ export default function PMDetailPage() {
                           <p className="text-sm font-medium">{wo.title || wo.woNumber || 'Work Order'}</p>
                           <p className="text-xs text-muted-foreground">{formatDate(wo.createdAt || item.triggeredAt)}</p>
                         </div>
-                        <Badge className={WO_STATUS_COLORS[wo.status] || 'bg-gray-100 text-gray-700'}>
-                          {wo.status?.replace('_', ' ') || 'generated'}
-                        </Badge>
+                        <StatusBadge meta={getWorkOrderStatusMeta(wo.status)} dot />
                       </Link>
                     )
                   })}

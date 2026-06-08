@@ -9,11 +9,13 @@ import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { Plus, Search, Package, MapPin, Tag, Image as ImageIcon, GitBranch, LayoutGrid, ChevronRight, ChevronDown, Download, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAuth } from '@/providers/auth-provider'
+import { getAssetStatusMeta } from '@/lib/status'
+import { cn } from '@/lib/utils'
 
 export default function AssetsPage() {
   const queryClient = useQueryClient()
@@ -261,12 +263,11 @@ export default function AssetsPage() {
 
                       {/* Status Badge */}
                       <div className="absolute top-3 right-3">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm backdrop-blur-md ${asset.status === 'active' ? 'bg-green-500/90 text-white' :
-                          asset.status === 'under_repair' ? 'bg-amber-500/90 text-white' :
-                            asset.status === 'retired' ? 'bg-red-500/90 text-white' :
-                              'bg-gray-500/90 text-white'
-                          }`}>
-                          {asset.status.replace('_', ' ')}
+                        <span className={cn(
+                          'px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase shadow-sm backdrop-blur-md',
+                          getAssetStatusMeta(asset.status).overlayClass,
+                        )}>
+                          {getAssetStatusMeta(asset.status).label}
                         </span>
                       </div>
                     </div>
@@ -400,9 +401,7 @@ function AssetTreeNode({ node, depth }: { node: any; depth: number }) {
           )}
         </Link>
         {node.status && (
-          <Badge variant={node.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
-            {node.status.replace('_', ' ')}
-          </Badge>
+          <StatusBadge meta={getAssetStatusMeta(node.status)} className="shrink-0" dot />
         )}
         {hasChildren && (
           <span className="text-xs text-muted-foreground">{children.length}</span>

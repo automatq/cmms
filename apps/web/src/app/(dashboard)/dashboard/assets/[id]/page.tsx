@@ -23,6 +23,8 @@ import { formatCurrency, formatTimeAgo, formatDate } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/providers/auth-provider'
 import { AssetQrCard } from '@/components/assets/asset-qr-card'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { getWorkOrderStatusMeta, getAssetStatusMeta } from '@/lib/status'
 
 export default function AssetDetailPage() {
   const params = useParams()
@@ -123,16 +125,6 @@ export default function AssetDetailPage() {
   const meters = Array.isArray(metersData) ? metersData : Array.isArray(metersData?.data) ? metersData.data : []
   const documents = Array.isArray(asset?.documents) ? asset.documents : []
 
-  const WO_STATUS_COLORS: Record<string, string> = {
-    requested: 'bg-gray-100 text-gray-700',
-    pending_approval: 'bg-purple-100 text-purple-700',
-    open: 'bg-blue-100 text-blue-700',
-    in_progress: 'bg-amber-100 text-amber-700',
-    on_hold: 'bg-orange-100 text-orange-700',
-    completed: 'bg-green-100 text-green-700',
-    cancelled: 'bg-red-100 text-red-700',
-  }
-
   if (assetLoading) {
     return (
       <div className="space-y-6">
@@ -185,13 +177,7 @@ export default function AssetDetailPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-bold">{asset.name}</h1>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wider ${asset.status === 'active' || asset.status === 'operational' ? 'bg-green-500/10 text-green-600' :
-                asset.status === 'under_repair' || asset.status === 'needs_repair' ? 'bg-amber-500/10 text-amber-600' :
-                  asset.status === 'retired' || asset.status === 'out_of_service' ? 'bg-red-500/10 text-red-600' :
-                    'bg-gray-500/10 text-gray-600'
-                }`}>
-                {asset.status?.replace('_', ' ')}
-              </span>
+              <StatusBadge meta={getAssetStatusMeta(asset.status)} icon uppercase />
               {asset.isCritical && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wider bg-destructive/10 text-destructive">
                   Critical
@@ -452,9 +438,7 @@ export default function AssetDetailPage() {
                     >
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium truncate flex-1">{wo.title}</p>
-                        <Badge className={`ml-2 ${WO_STATUS_COLORS[wo.status] || 'bg-gray-100 text-gray-700'}`}>
-                          {wo.status?.replace('_', ' ')}
-                        </Badge>
+                        <StatusBadge meta={getWorkOrderStatusMeta(wo.status)} className="ml-2" dot />
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         {wo.woNumber && `${wo.woNumber} · `}{formatTimeAgo(new Date(wo.createdAt))}

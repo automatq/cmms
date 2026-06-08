@@ -15,8 +15,7 @@ import {
     XAxis,
     YAxis,
 } from "recharts"
-
-const COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"]
+import { useChartTheme } from "@/hooks/use-chart-theme"
 
 interface ChartData {
     label: string
@@ -34,32 +33,39 @@ interface InteractiveChartProps {
     onSegmentClick?: (datum: ChartData) => void
 }
 
+function useTooltipStyles() {
+    const t = useChartTheme()
+    return {
+        contentStyle: {
+            backgroundColor: t.tooltipBg,
+            borderRadius: "8px",
+            border: `1px solid ${t.tooltipBorder}`,
+            color: t.tooltipText,
+        },
+        labelStyle: { color: t.tooltipText },
+        itemStyle: { color: t.tooltipText },
+    }
+}
+
 export function OverviewBarChart({ data, onSegmentClick }: InteractiveChartProps) {
+    const theme = useChartTheme()
+    const tooltip = useTooltipStyles()
     return (
         <ResponsiveContainer width="100%" height={350}>
             <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                    dataKey="label"
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                <XAxis dataKey="label" stroke={theme.axis} fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis
-                    stroke="#888888"
+                    stroke={theme.axis}
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value: number) => `${value}`}
                 />
-                <Tooltip
-                    contentStyle={{ backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #e2e8f0" }}
-                    cursor={{ fill: "rgba(0,0,0,0.05)" }}
-                />
+                <Tooltip {...tooltip} cursor={{ fill: theme.cursor, opacity: 0.5 }} />
                 <Bar
                     dataKey="value"
-                    fill="#3b82f6"
+                    fill={theme.colors[0]}
                     radius={[4, 4, 0, 0]}
                     cursor={onSegmentClick ? "pointer" : undefined}
                     onClick={onSegmentClick ? (d: ChartData) => onSegmentClick(d) : undefined}
@@ -70,33 +76,27 @@ export function OverviewBarChart({ data, onSegmentClick }: InteractiveChartProps
 }
 
 export function OverviewLineChart({ data }: InteractiveChartProps) {
+    const theme = useChartTheme()
+    const tooltip = useTooltipStyles()
     return (
         <ResponsiveContainer width="100%" height={350}>
             <LineChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                    dataKey="label"
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                <XAxis dataKey="label" stroke={theme.axis} fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis
-                    stroke="#888888"
+                    stroke={theme.axis}
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value: number) => `${value}`}
                 />
-                <Tooltip
-                    contentStyle={{ backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #e2e8f0" }}
-                />
+                <Tooltip {...tooltip} />
                 <Line
                     type="monotone"
                     dataKey="value"
-                    stroke="#3b82f6"
+                    stroke={theme.colors[0]}
                     strokeWidth={2}
-                    dot={{ fill: "#3b82f6" }}
+                    dot={{ fill: theme.colors[0] }}
                     activeDot={{ r: 6 }}
                 />
             </LineChart>
@@ -105,6 +105,8 @@ export function OverviewLineChart({ data }: InteractiveChartProps) {
 }
 
 export function OverviewPieChart({ data, onSegmentClick }: InteractiveChartProps) {
+    const theme = useChartTheme()
+    const tooltip = useTooltipStyles()
     return (
         <ResponsiveContainer width="100%" height={350}>
             <PieChart>
@@ -122,10 +124,10 @@ export function OverviewPieChart({ data, onSegmentClick }: InteractiveChartProps
                     onClick={onSegmentClick ? (d: ChartData) => onSegmentClick(d) : undefined}
                 >
                     {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell key={`cell-${index}`} fill={theme.colors[index % theme.colors.length]} />
                     ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip {...tooltip} />
                 <Legend verticalAlign="bottom" height={36} />
             </PieChart>
         </ResponsiveContainer>
@@ -133,6 +135,8 @@ export function OverviewPieChart({ data, onSegmentClick }: InteractiveChartProps
 }
 
 export function StackedBarChart({ data }: InteractiveChartProps) {
+    const theme = useChartTheme()
+    const tooltip = useTooltipStyles()
     // Group by label and category
     const categories = Array.from(new Set(data.map(d => d.category).filter(Boolean))) as string[]
     const chartData = data.reduce((acc: any[], curr) => {
@@ -150,24 +154,13 @@ export function StackedBarChart({ data }: InteractiveChartProps) {
     return (
         <ResponsiveContainer width="100%" height={350}>
             <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                    dataKey="label"
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                />
-                <YAxis
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.grid} />
+                <XAxis dataKey="label" stroke={theme.axis} fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke={theme.axis} fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip {...tooltip} cursor={{ fill: theme.cursor, opacity: 0.5 }} />
                 <Legend />
                 {categories.map((cat, index) => (
-                    <Bar key={cat} dataKey={cat} stackId="a" fill={COLORS[index % COLORS.length]} />
+                    <Bar key={cat} dataKey={cat} stackId="a" fill={theme.colors[index % theme.colors.length]} />
                 ))}
             </BarChart>
         </ResponsiveContainer>

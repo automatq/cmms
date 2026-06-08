@@ -8,25 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { PageHeader } from '@/components/ui/page-header'
-import { Plus, Search, ClipboardList, AlertCircle, Clock, CheckCircle } from 'lucide-react'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { getWorkOrderStatusMeta, getWorkOrderPriorityMeta } from '@/lib/status'
+import { cn } from '@/lib/utils'
+import { Plus, Search, ClipboardList } from 'lucide-react'
 import { useState } from 'react'
-
-const statusColors: Record<string, string> = {
-  requested: 'bg-gray-100 text-gray-700',
-  pending_approval: 'bg-purple-100 text-purple-700',
-  open: 'bg-blue-100 text-blue-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  on_hold: 'bg-purple-100 text-purple-700',
-  completed: 'bg-green-100 text-green-700',
-  cancelled: 'bg-rose-100 text-rose-700',
-}
-
-const priorityColors: Record<string, string> = {
-  critical: 'bg-red-100 text-red-700',
-  high: 'bg-orange-100 text-orange-700',
-  medium: 'bg-yellow-100 text-yellow-700',
-  low: 'bg-green-100 text-green-700',
-}
 
 export default function WorkOrdersPage() {
   const [search, setSearch] = useState('')
@@ -133,44 +119,36 @@ export default function WorkOrdersPage() {
       ) : (
         <>
           <div className="space-y-3">
-            {workOrders.map((wo: any) => (
-              <Link key={wo.id} href={`/dashboard/work-orders/${wo.id}`} className="block">
-                <Card className="hover:border-primary/50 hover:shadow-md transition-all cursor-pointer">
-                  <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 ${wo.status === 'completed' ? 'bg-green-500/10' :
-                      wo.status === 'in_progress' ? 'bg-amber-500/10' :
-                        wo.status === 'open' ? 'bg-blue-500/10' : 'bg-gray-100 dark:bg-gray-800'
-                      }`}>
-                      {wo.status === 'completed' ? (
-                        <CheckCircle className="h-6 w-6 text-green-500" />
-                      ) : wo.status === 'in_progress' ? (
-                        <Clock className="h-6 w-6 text-amber-500" />
-                      ) : (
-                        <AlertCircle className="h-6 w-6 text-blue-500" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                        <span className="text-sm font-semibold text-muted-foreground">
-                          {wo.woNumber}
-                        </span>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${statusColors[wo.status] || ''}`}>
-                          {wo.status.replace('_', ' ')}
-                        </span>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${priorityColors[wo.priority] || ''}`}>
-                          {wo.priority}
-                        </span>
+            {workOrders.map((wo: any) => {
+              const statusMeta = getWorkOrderStatusMeta(wo.status)
+              const priorityMeta = getWorkOrderPriorityMeta(wo.priority)
+              const StatusIcon = statusMeta.icon
+              return (
+                <Link key={wo.id} href={`/dashboard/work-orders/${wo.id}`} className="block">
+                  <Card className="hover:border-primary/50 hover:shadow-md transition-all cursor-pointer">
+                    <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                      <div className={cn('h-12 w-12 rounded-xl flex items-center justify-center shrink-0', statusMeta.tileClass)}>
+                        <StatusIcon className={cn('h-6 w-6', statusMeta.iconClass)} />
                       </div>
-                      <h3 className="font-semibold text-lg truncate leading-tight">{wo.title}</h3>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
-                        {wo.asset && <span><span className="font-medium">Asset:</span> {wo.asset.name}</span>}
-                        <span><span className="font-medium">Type:</span> {wo.type}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                          <span className="text-sm font-semibold text-muted-foreground">
+                            {wo.woNumber}
+                          </span>
+                          <StatusBadge meta={statusMeta} uppercase />
+                          <StatusBadge meta={priorityMeta} uppercase />
+                        </div>
+                        <h3 className="font-semibold text-lg truncate leading-tight">{wo.title}</h3>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+                          {wo.asset && <span><span className="font-medium">Asset:</span> {wo.asset.name}</span>}
+                          <span><span className="font-medium">Type:</span> {wo.type}</span>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
           </div>
 
           {/* Pagination */}
