@@ -63,6 +63,13 @@ const config: Config = {
 				md: 'calc(var(--radius) - 2px)',
 				sm: 'calc(var(--radius) - 4px)'
 			},
+			// Additive soft-elevation tokens (new keys — Tailwind's default
+			// shadow-sm/md/lg are untouched). Opt in via shadow-soft*.
+			boxShadow: {
+				soft: '0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06)',
+				'soft-md': '0 2px 8px -2px rgb(0 0 0 / 0.08), 0 4px 16px -4px rgb(0 0 0 / 0.06)',
+				'soft-lg': '0 8px 30px -6px rgb(0 0 0 / 0.12)',
+			},
 			keyframes: {
 				'accordion-down': {
 					from: {
@@ -84,12 +91,16 @@ const config: Config = {
 					'0%': { transform: 'translateX(-100%) scaleX(0.2)' },
 					'50%': { transform: 'translateX(0) scaleX(0.5)' },
 					'100%': { transform: 'translateX(100%) scaleX(0.2)' },
-				}
+				},
+				shimmer: {
+					'100%': { transform: 'translateX(100%)' },
+				},
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
 				'indeterminate-progress': 'indeterminate-progress 1.5s infinite linear',
+				shimmer: 'shimmer 1.8s infinite',
 			}
 		}
 	},

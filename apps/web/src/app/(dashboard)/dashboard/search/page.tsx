@@ -6,26 +6,11 @@ import { api } from '@/lib/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { getWorkOrderStatusMeta, getAssetStatusMeta } from '@/lib/status'
 import Link from 'next/link'
 import { Search, Box, Wrench, Package } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
-
-const WO_STATUS_COLORS: Record<string, string> = {
-  requested: 'bg-gray-100 text-gray-700',
-  pending_approval: 'bg-purple-100 text-purple-700',
-  open: 'bg-blue-100 text-blue-700',
-  in_progress: 'bg-amber-100 text-amber-700',
-  on_hold: 'bg-orange-100 text-orange-700',
-  completed: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
-}
-
-const ASSET_STATUS_COLORS: Record<string, string> = {
-  operational: 'bg-green-100 text-green-700',
-  needs_repair: 'bg-amber-100 text-amber-700',
-  out_of_service: 'bg-red-100 text-red-700',
-  retired: 'bg-gray-100 text-gray-700',
-}
 
 export default function SearchPage() {
   const searchParams = useSearchParams()
@@ -119,9 +104,7 @@ export default function SearchPage() {
                         {asset.assetNumber && `#${asset.assetNumber} · `}{asset.location?.name || ''}
                       </p>
                     </div>
-                    <Badge className={ASSET_STATUS_COLORS[asset.status] || ''}>
-                      {asset.status?.replace('_', ' ')}
-                    </Badge>
+                    <StatusBadge meta={getAssetStatusMeta(asset.status)} dot />
                   </Link>
                 ))}
               </div>
@@ -148,9 +131,7 @@ export default function SearchPage() {
                         {wo.woNumber && `${wo.woNumber} · `}{wo.asset?.name || ''}{wo.dueDate ? ` · Due: ${formatDate(wo.dueDate)}` : ''}
                       </p>
                     </div>
-                    <Badge className={WO_STATUS_COLORS[wo.status] || ''}>
-                      {wo.status?.replace('_', ' ')}
-                    </Badge>
+                    <StatusBadge meta={getWorkOrderStatusMeta(wo.status)} dot />
                   </Link>
                 ))}
               </div>

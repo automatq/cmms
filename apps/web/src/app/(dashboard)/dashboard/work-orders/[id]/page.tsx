@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
 import { formatDate, formatCurrency } from '@/lib/utils'
+import { getWorkOrderStatusMeta, getWorkOrderPriorityMeta } from '@/lib/status'
 import { useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { SignaturePad } from '@/components/work-orders/signature-pad'
@@ -262,28 +263,9 @@ export default function WorkOrderDetailPage() {
         )
     }
 
-    const getPriorityColor = (priority: string) => {
-        switch (priority) {
-            case 'emergency': return 'bg-destructive/10 text-destructive border-destructive/20'
-            case 'high': return 'bg-orange-500/10 text-orange-600 border-orange-500/20'
-            case 'medium': return 'bg-blue-500/10 text-blue-600 border-blue-500/20'
-            case 'low': return 'bg-slate-500/10 text-slate-600 border-slate-500/20'
-            default: return 'bg-muted text-muted-foreground'
-        }
-    }
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'requested': return 'bg-slate-500/10 text-slate-600'
-            case 'pending_approval': return 'bg-purple-500/10 text-purple-600'
-            case 'open': return 'bg-blue-500/10 text-blue-600'
-            case 'in_progress': return 'bg-amber-500/10 text-amber-600'
-            case 'completed': return 'bg-emerald-500/10 text-emerald-600'
-            case 'on_hold': return 'bg-slate-500/10 text-slate-600'
-            case 'cancelled': return 'bg-rose-500/10 text-rose-600'
-            default: return 'bg-muted text-muted-foreground'
-        }
-    }
+    // Visuals are centralized in lib/status.ts (single source of truth across the app).
+    const getPriorityColor = (priority: string) => getWorkOrderPriorityMeta(priority).badgeClass
+    const getStatusColor = (status: string) => getWorkOrderStatusMeta(status).badgeClass
 
     const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         updateMutation.mutate(e.target.value)
