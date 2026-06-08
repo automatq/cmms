@@ -6,6 +6,8 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
 import { Progress } from '@/components/ui/progress'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { CommandPalette } from '@/components/command-palette'
+import { Breadcrumbs } from '@/components/layout/breadcrumbs'
 import { ImpersonationBanner } from '@/components/admin/impersonation-banner'
 import { useAuth } from '@/providers/auth-provider'
 
@@ -45,12 +47,14 @@ export default function DashboardLayout({
 
   return (
     <TooltipProvider delayDuration={200}>
+      <CommandPalette />
       <div className="min-h-screen bg-background">
         <ImpersonationBanner />
         <Sidebar />
         <div className="lg:pl-64">
           <Header />
           <main className="p-6 space-y-6">
+            <Breadcrumbs />
             {children}
           </main>
         </div>

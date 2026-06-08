@@ -6,58 +6,19 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/providers/auth-provider'
 import { Button } from '@/components/ui/button'
 import {
-  LayoutDashboard,
-  Package,
-  ClipboardList,
-  Calendar,
-  Warehouse,
-  BarChart3,
   Settings,
   LogOut,
   Menu,
   X,
   Wrench,
-  Sparkles,
-  Inbox,
   Shield,
   QrCode,
-  Users,
-  Webhook,
-  DollarSign,
-  FileText,
-  Clock,
-  FileUp,
-  CalendarClock,
+  Command as CommandIcon,
 } from 'lucide-react'
 import { useState } from 'react'
 import { QrScannerDialog } from '@/components/dashboard/qr-scanner-dialog'
-
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Assets', href: '/dashboard/assets', icon: Package },
-  { name: 'Work Orders', href: '/dashboard/work-orders', icon: ClipboardList },
-  { name: 'Work Requests', href: '/dashboard/work-requests', icon: Inbox },
-  { name: 'PM Plans', href: '/dashboard/pm', icon: Calendar },
-  { name: 'Calendar', href: '/dashboard/calendar', icon: CalendarClock },
-  { name: 'Inventory', href: '/dashboard/inventory', icon: Warehouse },
-  { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
-  { name: 'Data Import', href: '/dashboard/imports', icon: FileUp },
-  { name: 'AI Assistant', href: '/dashboard/ai', icon: Sparkles },
-]
-
-const settingsSubNav = [
-  { name: 'Members', href: '/dashboard/settings/members', icon: Users },
-  { name: 'Teams', href: '/dashboard/settings/teams', icon: Users },
-  { name: 'Webhooks', href: '/dashboard/settings/webhooks', icon: Webhook },
-  { name: 'Scheduled Reports', href: '/dashboard/settings/scheduled-reports', icon: CalendarClock },
-]
-
-const reportSubNav = [
-  { name: 'Downtime', href: '/dashboard/reports/downtime', icon: Clock },
-  { name: 'Warranties', href: '/dashboard/reports/warranties', icon: Shield },
-  { name: 'Budgets', href: '/dashboard/reports/budgets', icon: DollarSign },
-  { name: 'Contracts', href: '/dashboard/inventory/contracts', icon: FileText },
-]
+import { openCommandPalette } from '@/components/command-palette'
+import { primaryNav, settingsSubNav, reportSubNav } from '@/lib/nav'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -93,7 +54,18 @@ export function Sidebar() {
           </div>
 
           {/* Quick Actions */}
-          <div className="px-4 pt-4">
+          <div className="px-4 pt-4 space-y-2">
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              className="flex w-full items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <CommandIcon className="h-4 w-4" />
+              <span>Search…</span>
+              <kbd className="ml-auto hidden items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-[10px] text-muted-foreground sm:inline-flex">
+                ⌘K
+              </kbd>
+            </button>
             <Button
               variant="outline"
               className="w-full justify-start gap-2 border-dashed text-muted-foreground hover:text-primary hover:border-primary"
@@ -106,21 +78,25 @@ export function Sidebar() {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
+            {primaryNav.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+              const Icon = item.icon
               return (
                 <Link
                   key={item.name}
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                    'relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
-                  <item.icon className="h-5 w-5" />
+                  {isActive && (
+                    <span className="absolute -left-4 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary" />
+                  )}
+                  <Icon className="h-5 w-5" />
                   {item.name}
                 </Link>
               )
