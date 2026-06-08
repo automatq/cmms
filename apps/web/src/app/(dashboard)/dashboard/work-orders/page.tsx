@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { WorkOrdersTable } from '@/components/work-orders/work-orders-table'
+import { WorkOrdersBoard } from '@/components/work-orders/work-orders-board'
 import {
   getWorkOrderStatusMeta,
   getWorkOrderPriorityMeta,
@@ -20,30 +21,41 @@ import {
   WO_PRIORITY_META,
 } from '@/lib/status'
 import { cn } from '@/lib/utils'
-import { Plus, Search, ClipboardList, Rows3, Table as TableIcon } from 'lucide-react'
+import { Plus, Search, ClipboardList, Rows3, Table as TableIcon, Columns3 } from 'lucide-react'
 import { useState } from 'react'
 
 const STATUS_OPTIONS = WO_STATUS_ORDER.map((s) => ({ value: s, label: WO_STATUS_META[s].label }))
 const PRIORITY_OPTIONS = WO_PRIORITY_ORDER.map((p) => ({ value: p, label: WO_PRIORITY_META[p].label }))
 
-type View = 'list' | 'table'
+type View = 'list' | 'table' | 'board'
+
+const VIEW_TABS: { value: View; label: string; icon: typeof Rows3 }[] = [
+  { value: 'board', label: 'Board', icon: Columns3 },
+  { value: 'list', label: 'List', icon: Rows3 },
+  { value: 'table', label: 'Table', icon: TableIcon },
+]
 
 export default function WorkOrdersPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [priorityFilter, setPriorityFilter] = useState<string[]>([])
-  const [view, setView] = useState<View>('list')
+  const [view, setView] = useState<View>('board')
   const [page, setPage] = useState(1)
 
+  // The board groups everything into lanes, so it needs a wider window than the
+  // paginated list/table.
+  const isBoard = view === 'board'
+  const limit = isBoard ? 200 : 20
+
   const { data, isLoading } = useQuery({
-    queryKey: ['work-orders', search, statusFilter, priorityFilter, page],
+    queryKey: ['work-orders', search, statusFilter, priorityFilter, isBoard ? 'board' : page, limit],
     queryFn: async () => {
       const res = await api.getWorkOrders({
         search: search || undefined,
         status: statusFilter.length ? statusFilter : undefined,
         priority: priorityFilter.length ? priorityFilter : undefined,
-        page,
-        limit: 20,
+        page: isBoard ? 1 : page,
+        limit,
       })
       return res.data
     },
@@ -103,26 +115,24 @@ export default function WorkOrdersPage() {
 
         {/* View toggle */}
         <div className="ml-auto inline-flex rounded-md border bg-muted/40 p-0.5">
-          <button
-            type="button"
-            onClick={() => setView('list')}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm font-medium transition-colors',
-              view === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Rows3 className="h-4 w-4" /> List
-          </button>
-          <button
-            type="button"
-            onClick={() => setView('table')}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm font-medium transition-colors',
-              view === 'table' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <TableIcon className="h-4 w-4" /> Table
-          </button>
+          {VIEW_TABS.map((tab) => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setView(tab.value)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm font-medium transition-colors',
+                  view === tab.value
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Icon className="h-4 w-4" /> {tab.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -149,6 +159,8 @@ export default function WorkOrdersPage() {
             </Button>
           </CardContent>
         </Card>
+      ) : view === 'board' ? (
+        <WorkOrdersBoard workOrders={workOrders} />
       ) : view === 'table' ? (
         <WorkOrdersTable data={workOrders} />
       ) : (
@@ -185,7 +197,7 @@ export default function WorkOrdersPage() {
       )}
 
       {/* Pagination */}
-      {total > 20 && (
+      {!isBoard && total > 20 && (
         <div className="flex items-center justify-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
             Previous
