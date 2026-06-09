@@ -625,6 +625,10 @@ class ApiClient {
     return this.client.get('/activity/active')
   }
 
+  async getWorkOrderActivities(workOrderId: string) {
+    return this.client.get(`/activity/work-order/${workOrderId}`)
+  }
+
   async quickStartWorkOrder(assetId: string) {
     return this.client.post(`/activity/quick-start/${assetId}`)
   }

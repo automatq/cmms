@@ -76,6 +76,16 @@ export class ActivityController {
     return this.activityService.getActiveActivities(user.tenantId);
   }
 
+  @Get('work-order/:workOrderId')
+  @Permissions('work_orders:read')
+  @ApiOperation({ summary: 'Time log: tech work sessions for a work order' })
+  byWorkOrder(
+    @Param('workOrderId', ParseUUIDPipe) workOrderId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.activityService.getActivitiesForWorkOrder(workOrderId, user.tenantId);
+  }
+
   @Get('my-active')
   @Permissions('work_orders:read')
   @ApiOperation({ summary: 'Get my current active session' })
