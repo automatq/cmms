@@ -33,6 +33,7 @@ import { AssigneeControl } from '@/components/work-orders/assignee-control'
 import { celebrate } from '@/lib/confetti'
 import { CommentsSection } from '@/components/work-orders/comments-section'
 import { TimeLogSection } from '@/components/work-orders/time-log-section'
+import { WorkOrderAiInsights } from '@/components/ai/work-order-ai-insights'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -737,6 +738,8 @@ export default function WorkOrderDetailPage() {
                             <AssigneeControl workOrderId={id} assignedTo={wo.assignedTo} />
                         </CardContent>
                     </Card>
+
+                    <WorkOrderAiInsights workOrderId={id} assetId={wo.assetId ?? wo.asset?.id} />
 
                     {(totalLaborCost > 0 || totalPartsCost > 0) && (
                         <Card>
