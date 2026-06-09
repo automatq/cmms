@@ -95,6 +95,13 @@ export class WorkOrder extends TenantAwareEntity {
   @JoinColumn({ name: 'created_by_id' })
   createdBy: User;
 
+  @Column({ type: 'uuid', nullable: true, name: 'assigned_to_id' })
+  assignedToId: string;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'assigned_to_id' })
+  assignedTo: User;
+
   @Column({ type: 'timestamptz', nullable: true, name: 'scheduled_start' })
   scheduledStart: Date;
 

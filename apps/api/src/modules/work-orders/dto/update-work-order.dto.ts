@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsDateString,
   IsObject,
+  ValidateIf,
 } from 'class-validator';
 import { WorkOrderType, Priority, WorkOrderStatus, HoldReason } from '../entities/work-order.entity';
 
@@ -40,6 +41,13 @@ export class UpdateWorkOrderDto {
   @IsOptional()
   @IsUUID()
   locationId?: string;
+
+  @ApiPropertyOptional({ description: 'User id to assign the work order to; null to unassign' })
+  @IsOptional()
+  // Allow null/'' (unassign); only validate as UUID when a value is present.
+  @ValidateIf((o) => o.assignedToId !== null && o.assignedToId !== '')
+  @IsUUID()
+  assignedToId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

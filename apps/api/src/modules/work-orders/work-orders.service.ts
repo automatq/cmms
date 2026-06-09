@@ -190,6 +190,7 @@ export class WorkOrdersService {
         'asset',
         'location',
         'createdBy',
+        'assignedTo',
         'labor',
         'labor.user',
         'parts',
@@ -207,12 +208,26 @@ export class WorkOrdersService {
 
   async update(id: string, dto: UpdateWorkOrderDto, userId: string, tenantId: string): Promise<WorkOrder> {
     const workOrder = await this.findOne(id, tenantId);
+    const prevAssignee = workOrder.assignedToId || null;
 
     Object.assign(workOrder, dto);
+    // Treat empty string as an explicit unassign.
+    if (dto.assignedToId === '') workOrder.assignedToId = null as unknown as string;
 
     await this.workOrderRepository.save(workOrder);
+    const updated = await this.findOne(id, tenantId);
 
-    return this.findOne(id, tenantId);
+    // Notify the newly-assigned technician (not when self-assigning).
+    const newAssignee = updated.assignedToId || null;
+    if (newAssignee && newAssignee !== prevAssignee && newAssignee !== userId) {
+      await this.notificationsService.onWorkOrderAssigned(
+        { id: updated.id, woNumber: updated.woNumber, title: updated.title },
+        newAssignee,
+        tenantId,
+      );
+    }
+
+    return updated;
   }
 
   async delete(id: string, tenantId: string): Promise<void> {
