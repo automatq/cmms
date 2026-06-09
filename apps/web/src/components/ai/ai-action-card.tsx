@@ -56,7 +56,9 @@ export function AiActionCard({
   const active = actions.find((a) => a.key === activeKey) ?? null
 
   const mutation = useMutation({
-    mutationFn: (action: AiAction) => action.run(input.trim() || undefined),
+    // Only input-bearing actions consume the textarea value; others must never
+    // receive it (a stale value would land in the wrong API param, e.g. daysAhead).
+    mutationFn: (action: AiAction) => action.run(action.input ? input.trim() || undefined : undefined),
     onMutate: () => {
       setResult(null)
       setUnavailable(false)
@@ -66,6 +68,7 @@ export function AiActionCard({
     onError: (err: unknown) => {
       const status = (err as { response?: { status?: number } })?.response?.status
       if (status === 503) setUnavailable(true)
+      else if (status === 403) setErrorMsg("You don't have permission to use AI features. Ask an admin for access.")
       else setErrorMsg(extractError(err))
     },
   })
@@ -75,6 +78,8 @@ export function AiActionCard({
     setResult(null)
     setUnavailable(false)
     setErrorMsg(null)
+    // Switching to a no-input action clears any leftover troubleshoot text.
+    if (!action.input) setInput('')
     // Required-input actions wait for the user to type and submit.
     if (action.input?.required) return
     mutation.mutate(action)

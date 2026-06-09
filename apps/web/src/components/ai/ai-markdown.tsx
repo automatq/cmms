@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react'
+import { createElement, Fragment, type ReactNode } from 'react'
 
 /**
  * Minimal, dependency-free renderer for the lightly-formatted markdown the AI
@@ -35,7 +35,7 @@ export function AiMarkdown({ content }: { content: string }) {
   }
   const flushList = () => {
     if (list) {
-      const items = list.items.map((it, i) => <li key={i}>{renderInline(it, `li${key}-${i}`)}</li>)
+      const items = list.items.map((it, i) => <li key={`li${key}-${i}`}>{renderInline(it, `li${key}-${i}`)}</li>)
       blocks.push(
         list.ordered ? (
           <ol key={`b${key++}`} className="list-decimal space-y-1 pl-5">
@@ -63,11 +63,10 @@ export function AiMarkdown({ content }: { content: string }) {
     if (heading) {
       flushPara()
       flushList()
-      const cls = heading[1].length === 1 ? 'text-base font-semibold' : 'text-sm font-semibold'
+      const level = heading[1].length
+      const cls = level === 1 ? 'text-base font-semibold' : 'text-sm font-semibold'
       blocks.push(
-        <p key={`b${key++}`} className={cls}>
-          {renderInline(heading[2], `h${key}`)}
-        </p>,
+        createElement(`h${level}`, { key: `b${key++}`, className: cls }, renderInline(heading[2], `h${key}`)),
       )
       continue
     }
