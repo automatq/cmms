@@ -139,6 +139,24 @@ export default function CalendarPage() {
     onError: () => toast.error('Failed to update working days'),
   })
 
+  // Reschedule a work order (scheduledStart) or PM plan (nextDueAt) to a new day.
+  // Time is pinned to local noon to avoid timezone day-shift at midnight.
+  const reschedule = useMutation({
+    mutationFn: ({ event, date }: { event: { id: string; type: 'wo' | 'pm' }; date: string }) => {
+      const iso = new Date(`${date}T12:00:00`).toISOString()
+      return event.type === 'wo'
+        ? api.updateWorkOrder(event.id, { scheduledStart: iso })
+        : api.updatePmPlan(event.id, { nextDueAt: iso })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+      queryClient.invalidateQueries({ queryKey: ['pm-plans'] })
+      queryClient.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('Rescheduled')
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to reschedule'),
+  })
+
   const toggleWorkingDay = (dow: number) => {
     const next = workingDays.includes(dow)
       ? workingDays.filter((d) => d !== dow)
@@ -271,6 +289,35 @@ export default function CalendarPage() {
                             {isBlackout && ' — blackout active'}
                           </div>
                         </div>
+
+                        {events.length > 0 && (
+                          <div className="space-y-2 border-b pb-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              Scheduled here
+                            </p>
+                            {events.map((e) => (
+                              <div key={`resch-${e.type}-${e.id}`} className="flex items-center gap-2">
+                                {e.type === 'pm' ? (
+                                  <Clock className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                ) : (
+                                  <Wrench className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                                )}
+                                <span className="flex-1 truncate text-sm" title={e.title}>{e.title}</span>
+                                <Input
+                                  type="date"
+                                  defaultValue={iso}
+                                  aria-label={`Reschedule ${e.title}`}
+                                  className="h-7 w-[8.5rem] text-xs"
+                                  disabled={reschedule.isPending}
+                                  onChange={(ev) => {
+                                    const d = ev.target.value
+                                    if (d && d !== iso) reschedule.mutate({ event: { id: e.id, type: e.type }, date: d })
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
 
                         {dayBlackouts.length > 0 ? (
                           <div className="space-y-2">
