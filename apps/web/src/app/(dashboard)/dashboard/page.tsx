@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { DashboardCalendar, CalendarEvent } from '@/components/dashboard/dashboard-calendar'
 import { ActiveTechnicians } from '@/components/dashboard/active-technicians'
+import { KpiCard } from '@/components/dashboard/kpi-card'
 import { OnboardingWizard } from '@/components/onboarding/onboarding-wizard'
 import { useMemo, useState } from 'react'
 
@@ -154,9 +155,11 @@ export default function DashboardPage() {
 
   const kpis = dashboard?.kpis || []
   const openWOs = kpis.find((k: any) => k.label === 'Open Work Orders')?.value || 0
-  const completedWOs = kpis.find((k: any) => k.label === 'Completed (Period)')?.value || 0
+  const completedKpi = kpis.find((k: any) => k.label === 'Completed (Period)')
+  const completedWOs = completedKpi?.value || 0
   const overdueWOs = kpis.find((k: any) => k.label === 'Overdue')?.value || 0
   const pmCompliance = kpis.find((k: any) => k.label === 'PM Compliance')?.value || 0
+  const completionTrend: number[] = (dashboard?.completionTrend || []).map((d: any) => d.value)
 
   return (
     <div className="space-y-6">
@@ -175,65 +178,39 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Open Work Orders</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <ClipboardList className="h-4 w-4 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{openWOs}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Awaiting completion
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed (30 days)</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{completedWOs}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Work orders completed
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Overdue</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">{overdueWOs}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Requires attention
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">PM Compliance</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center">
-              <CalendarIcon className="h-4 w-4 text-blue-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{pmCompliance}%</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              On-time completion rate
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Open Work Orders"
+          value={openWOs}
+          icon={ClipboardList}
+          tint="primary"
+          subtitle="Awaiting completion"
+        />
+        <KpiCard
+          title="Completed (30 days)"
+          value={completedWOs}
+          icon={TrendingUp}
+          tint="emerald"
+          subtitle={completionTrend.length > 1 ? undefined : 'Work orders completed'}
+          trend={completedKpi?.trend}
+          trendDirection={completedKpi?.trendDirection}
+          sparkline={completionTrend}
+        />
+        <KpiCard
+          title="Overdue"
+          value={overdueWOs}
+          icon={AlertTriangle}
+          tint="destructive"
+          subtitle="Requires attention"
+          valueClassName="text-destructive"
+        />
+        <KpiCard
+          title="PM Compliance"
+          value={pmCompliance}
+          unit="%"
+          icon={CalendarIcon}
+          tint="blue"
+          subtitle="On-time completion rate"
+        />
       </div>
 
       {/* Active Technicians - Live */}
