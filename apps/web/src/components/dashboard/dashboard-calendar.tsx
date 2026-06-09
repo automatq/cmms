@@ -11,11 +11,11 @@ import {
     isSameMonth,
     isSameDay,
     addDays,
-    parseISO,
 } from 'date-fns'
 import { ChevronLeft, ChevronRight, Wrench, Clock, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 export type CalendarEvent = {
     id: string
@@ -34,10 +34,40 @@ interface DashboardCalendarProps {
 
 export function DashboardCalendar({ events = [], onEventClick }: DashboardCalendarProps) {
     const [currentDate, setCurrentDate] = React.useState(new Date())
+    // Which day's "+N more" popover is open (keyed by the day's ISO string). Only one at a time.
+    const [openDayKey, setOpenDayKey] = React.useState<string | null>(null)
 
     const nextMonth = () => setCurrentDate(addMonths(currentDate, 1))
     const prevMonth = () => setCurrentDate(subMonths(currentDate, 1))
     const goToToday = () => setCurrentDate(new Date())
+
+    // Shared chip renderer for both the inline cell list and the expanded popover.
+    // Pass onSelect to override the default click (e.g. to close the popover first).
+    const renderEventChip = (event: CalendarEvent, onSelect?: () => void) => (
+        <div
+            key={event.id}
+            onClick={onSelect ?? (() => onEventClick?.(event))}
+            className={cn(
+                "text-xs px-2 py-1 rounded-md truncate cursor-pointer transition-colors border group flex items-center gap-1.5",
+                // Color based on status first, fallback to type-based colors if no status
+                event.status === 'completed' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" :
+                    event.status === 'pending' ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/20" :
+                        event.status === 'in_progress' ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20" :
+                            event.status === 'cancelled' ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20" :
+                                event.status === 'overdue' ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20" :
+                                    // Fallback to type-based colors if no status
+                                    event.type === 'work_order' ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20" :
+                                        event.type === 'pm' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" :
+                                            "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20"
+            )}
+            title={`${event.title}${event.asset ? ` - ${event.asset}` : ''}`}
+        >
+            {event.type === 'work_order' && <Wrench className="h-3 w-3 shrink-0 opacity-70" />}
+            {event.type === 'pm' && <Clock className="h-3 w-3 shrink-0 opacity-70" />}
+            {event.type === 'downtime' && <AlertTriangle className="h-3 w-3 shrink-0 opacity-70" />}
+            <span className="truncate">{event.title}</span>
+        </div>
+    )
 
     const renderHeader = () => {
         return (
@@ -91,10 +121,12 @@ export function DashboardCalendar({ events = [], onEventClick }: DashboardCalend
 
                 // Filter events for this day
                 const dayEvents = events.filter((e) => isSameDay(e.date, cloneDay))
+                // Use cloneDay (not the mutated `day`) for a stable per-cell key.
+                const dayKey = cloneDay.toISOString()
 
                 days.push(
                     <div
-                        key={day.toISOString()}
+                        key={dayKey}
                         className={cn(
                             "min-h-[120px] p-2 border-r border-b transition-colors focus-within:bg-accent/50 hover:bg-accent/30 flex flex-col gap-1 overflow-hidden",
                             !isSameMonth(day, monthStart) && "bg-muted/10 text-muted-foreground opacity-50",
@@ -116,32 +148,37 @@ export function DashboardCalendar({ events = [], onEventClick }: DashboardCalend
                             )}
                         </div>
 
-                        <div className="flex-1 overflow-y-auto space-y-1 mt-1 pr-1 custom-scrollbar">
-                            {dayEvents.map((event) => (
-                                <div
-                                    key={event.id}
-                                    onClick={() => onEventClick?.(event)}
-                                    className={cn(
-                                        "text-xs px-2 py-1 rounded-md truncate cursor-pointer transition-colors border group flex items-center gap-1.5",
-                                        // Color based on status first, fallback to type-based colors if no status
-                                        event.status === 'completed' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" :
-                                            event.status === 'pending' ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/20" :
-                                                event.status === 'in_progress' ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20" :
-                                                    event.status === 'cancelled' ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20" :
-                                                        event.status === 'overdue' ? "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20" :
-                                                            // Fallback to type-based colors if no status
-                                                            event.type === 'work_order' ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20" :
-                                                                event.type === 'pm' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" :
-                                                                    "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20"
-                                    )}
-                                    title={`${event.title}${event.asset ? ` - ${event.asset}` : ''}`}
+                        <div className="flex-1 space-y-1 mt-1">
+                            {dayEvents.slice(0, 3).map((event) => renderEventChip(event))}
+
+                            {dayEvents.length > 3 && (
+                                <Popover
+                                    open={openDayKey === dayKey}
+                                    onOpenChange={(open) => setOpenDayKey(open ? dayKey : null)}
                                 >
-                                    {event.type === 'work_order' && <Wrench className="h-3 w-3 shrink-0 opacity-70" />}
-                                    {event.type === 'pm' && <Clock className="h-3 w-3 shrink-0 opacity-70" />}
-                                    {event.type === 'downtime' && <AlertTriangle className="h-3 w-3 shrink-0 opacity-70" />}
-                                    <span className="truncate">{event.title}</span>
-                                </div>
-                            ))}
+                                    <PopoverTrigger asChild>
+                                        <button
+                                            type="button"
+                                            className="w-full text-left text-[11px] font-medium text-muted-foreground hover:text-foreground px-2 py-0.5 rounded-md hover:bg-accent transition-colors"
+                                        >
+                                            +{dayEvents.length - 3} more
+                                        </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-72 space-y-2">
+                                        <p className="text-xs font-semibold">
+                                            {format(cloneDay, 'EEEE, MMM d')}
+                                        </p>
+                                        <div className="space-y-1 max-h-72 overflow-y-auto custom-scrollbar">
+                                            {dayEvents.map((event) =>
+                                                renderEventChip(event, () => {
+                                                    setOpenDayKey(null)
+                                                    onEventClick?.(event)
+                                                })
+                                            )}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            )}
                         </div>
                     </div>
                 )
