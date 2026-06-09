@@ -4,5 +4,6 @@ export * from './work-order-query.dto';
 export * from './update-status.dto';
 export * from './add-labor.dto';
 export * from './add-part.dto';
+export * from './create-comment.dto';
 export * from './save-checklist.dto';
 export * from './create-work-request.dto';

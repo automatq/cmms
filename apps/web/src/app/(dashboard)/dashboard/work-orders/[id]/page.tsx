@@ -30,6 +30,7 @@ import { getWorkOrderStatusMeta, getWorkOrderPriorityMeta, type WorkOrderStatus 
 import { StatusBadge } from '@/components/ui/status-badge'
 import { StatusTransitionControl } from '@/components/work-orders/status-transition-control'
 import { celebrate } from '@/lib/confetti'
+import { CommentsSection } from '@/components/work-orders/comments-section'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -715,6 +716,8 @@ export default function WorkOrderDetailPage() {
                             )}
                         </Tabs>
                     </Card>
+
+                    <CommentsSection workOrderId={id} />
                 </div>
 
                 {/* Sidebar */}

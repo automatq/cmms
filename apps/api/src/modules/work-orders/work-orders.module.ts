@@ -6,6 +6,7 @@ import {
   WoPart,
   WoAttachment,
   WoChecklistResult,
+  WoComment,
   WorkRequest,
 } from './entities';
 import { WorkOrdersService } from './work-orders.service';
@@ -29,6 +30,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
       WoPart,
       WoAttachment,
       WoChecklistResult,
+      WoComment,
       WorkRequest,
       ChecklistTemplate,
       Tenant,
