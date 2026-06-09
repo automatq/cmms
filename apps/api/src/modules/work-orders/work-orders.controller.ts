@@ -32,6 +32,7 @@ import {
   UpdateStatusDto,
   AddLaborDto,
   AddPartDto,
+  CreateCommentDto,
   SaveChecklistDto,
   CreateWorkRequestDto,
 } from './dto';
@@ -191,6 +192,28 @@ export class WorkOrdersController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.workOrdersService.removeLabor(id, laborId, user.tenantId);
+  }
+
+  // ==================== COMMENTS ====================
+
+  @Get(':id/comments')
+  @Permissions('work_orders:read')
+  @ApiOperation({ summary: 'List work order comments' })
+  @ApiResponse({ status: 200, description: 'Comments' })
+  getComments(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.workOrdersService.getComments(id, user.tenantId);
+  }
+
+  @Post(':id/comments')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Add a comment to a work order' })
+  @ApiResponse({ status: 201, description: 'Comment added' })
+  addComment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateCommentDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.addComment(id, dto, user.userId, user.tenantId);
   }
 
   // ==================== PARTS ====================

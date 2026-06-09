@@ -16,6 +16,7 @@ import {
   WoPart,
   WoAttachment,
   WoChecklistResult,
+  WoComment,
   WorkRequest,
   WorkRequestStatus,
 } from './entities';
@@ -26,6 +27,7 @@ import {
   UpdateStatusDto,
   AddLaborDto,
   AddPartDto,
+  CreateCommentDto,
   SaveChecklistDto,
   CreateWorkRequestDto,
 } from './dto';
@@ -55,6 +57,8 @@ export class WorkOrdersService {
     private readonly checklistRepository: Repository<WoChecklistResult>,
     @InjectRepository(WorkRequest)
     private readonly workRequestRepository: Repository<WorkRequest>,
+    @InjectRepository(WoComment)
+    private readonly commentRepository: Repository<WoComment>,
     @Inject(forwardRef(() => FilesService))
     private readonly filesService: FilesService,
     @Inject(forwardRef(() => NotificationsService))
@@ -423,6 +427,39 @@ export class WorkOrdersService {
     }
 
     await this.laborRepository.remove(labor);
+  }
+
+  // ==================== COMMENTS ====================
+
+  async getComments(woId: string, tenantId: string): Promise<WoComment[]> {
+    // Verifies the work order exists and belongs to the tenant.
+    await this.findOne(woId, tenantId);
+    return this.commentRepository.find({
+      where: { woId, tenantId },
+      relations: ['user'],
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  async addComment(
+    woId: string,
+    dto: CreateCommentDto,
+    userId: string,
+    tenantId: string,
+  ): Promise<WoComment> {
+    await this.findOne(woId, tenantId);
+    const comment = this.commentRepository.create({
+      woId,
+      tenantId,
+      userId,
+      body: dto.body,
+    });
+    const saved = await this.commentRepository.save(comment);
+    // Re-fetch with the author so the client can render it immediately.
+    return this.commentRepository.findOne({
+      where: { id: saved.id },
+      relations: ['user'],
+    }) as Promise<WoComment>;
   }
 
   // ==================== PARTS ====================

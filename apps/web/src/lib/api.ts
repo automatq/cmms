@@ -505,6 +505,14 @@ class ApiClient {
     return this.client.delete(`/work-orders/${woId}/labor/${laborId}`)
   }
 
+  async getWorkOrderComments(woId: string) {
+    return this.client.get(`/work-orders/${woId}/comments`)
+  }
+
+  async addWorkOrderComment(woId: string, body: string) {
+    return this.client.post(`/work-orders/${woId}/comments`, { body })
+  }
+
   async addWorkOrderPart(woId: string, data: any) {
     return this.client.post(`/work-orders/${woId}/parts`, data)
   }
