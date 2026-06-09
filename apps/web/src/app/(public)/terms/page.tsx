@@ -34,19 +34,19 @@ export default function TermsPage() {
         account. You must be at least 16 years old to use the Service.
       </p>
 
-      <h2>2. Subscriptions and billing</h2>
+      <h2>2. Pricing</h2>
       <p>
-        Paid plans are billed in advance on a recurring basis through Polar.sh.
-        Fees are non-refundable except where required by law. We may change
-        pricing with at least 30 days&rsquo; notice; changes apply at the next
-        renewal.
+        MainTek is currently provided free of charge, with every feature
+        included and no per-user fees. If we introduce paid plans in the future,
+        we will give at least 30 days&rsquo; notice before any fees apply to your
+        account.
       </p>
 
-      <h2>3. Free trials</h2>
+      <h2>3. Free access</h2>
       <p>
-        New organizations receive a 14-day Pro trial. If you do not subscribe
-        before the trial ends, your workspace is suspended; data is retained
-        for 90 days during which you can re-subscribe to restore access.
+        There is no trial period or payment required to use the Service. Your
+        workspace and data remain available for as long as your account is
+        active.
       </p>
 
       <h2>4. Acceptable use</h2>
