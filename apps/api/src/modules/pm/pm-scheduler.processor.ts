@@ -48,6 +48,11 @@ export class PmSchedulerProcessor extends WorkerHost implements OnModuleInit {
     if (job.name === 'check-due-pms') {
       const result = await this.pmService.processScheduledPMs();
       this.logger.log(`PM scheduler result: ${result.triggered} triggered, ${result.skipped} skipped`);
+
+      const meterResult = await this.pmService.processMeterPms();
+      this.logger.log(
+        `Meter PM result: ${meterResult.triggered} triggered, ${meterResult.initialized} baselines initialized, ${meterResult.skipped} skipped`,
+      );
     }
   }
 

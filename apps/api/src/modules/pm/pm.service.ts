@@ -21,6 +21,7 @@ import {
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { WorkOrderType, Priority } from '../work-orders/entities/work-order.entity';
+import { Asset } from '../assets/entities/asset.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
@@ -37,6 +38,8 @@ export class PmService {
     private readonly templateRepository: Repository<ChecklistTemplate>,
     @InjectRepository(PmHistory)
     private readonly historyRepository: Repository<PmHistory>,
+    @InjectRepository(Asset)
+    private readonly assetRepository: Repository<Asset>,
     @Inject(forwardRef(() => WorkOrdersService))
     private readonly workOrdersService: WorkOrdersService,
     @Inject(forwardRef(() => NotificationsService))
@@ -325,28 +328,80 @@ export class PmService {
     return { triggered, skipped };
   }
 
-  async checkMeterTriggers(assetId: string, newReading: number, tenantId: string): Promise<string[]> {
-    const createdWoIds: string[] = [];
+  /**
+   * Meter-based PM auto-generation (Worker, hourly).
+   *
+   * For every active meter-triggered plan, compares the asset's current meter
+   * value against the plan's last recorded reading + interval. The first time a
+   * plan is seen, its baseline (`lastMeterReading`) is initialized from the
+   * asset's current value so future intervals are measured from a known point —
+   * without this, a null baseline means a plan can never trigger.
+   *
+   * Runs on a schedule (rather than synchronously on each meter reading) to
+   * avoid an AssetsModule → PmModule → WorkOrdersModule → AssetsModule cycle;
+   * meter PM intervals are coarse enough that hourly polling is sufficient.
+   */
+  async processMeterPms(): Promise<{ triggered: number; initialized: number; skipped: number }> {
+    let triggered = 0;
+    let initialized = 0;
+    let skipped = 0;
 
-    // Find meter-based PM plans for this asset
     const plans = await this.pmPlanRepository.find({
       where: {
-        assetId,
-        tenantId,
-        triggerType: TriggerType.METER,
         isActive: true,
+        triggerType: TriggerType.METER,
       },
     });
 
     for (const plan of plans) {
-      if (!plan.meterInterval || !plan.lastMeterReading) continue;
+      try {
+        const interval = Number(plan.meterInterval);
+        if (!interval || interval <= 0) {
+          skipped++;
+          continue;
+        }
 
-      const nextTriggerAt = plan.lastMeterReading + plan.meterInterval;
-      if (newReading >= nextTriggerAt) {
+        const asset = await this.assetRepository.findOne({
+          where: { id: plan.assetId, tenantId: plan.tenantId },
+        });
+        if (!asset) {
+          skipped++;
+          continue;
+        }
+
+        const currentReading = Number(asset.currentMeterValue ?? 0);
+
+        // First observation: anchor the baseline so future intervals are measured from here.
+        if (plan.lastMeterReading === null || plan.lastMeterReading === undefined) {
+          plan.lastMeterReading = currentReading;
+          await this.pmPlanRepository.save(plan);
+          initialized++;
+          continue;
+        }
+
+        const lastReading = Number(plan.lastMeterReading);
+        if (currentReading < lastReading + interval) {
+          skipped++;
+          continue;
+        }
+
+        // Don't stack a second WO while one for this plan is still open.
+        const existingWo = await this.workOrdersService.findAll({
+          page: 1,
+          limit: 1,
+          pmPlanId: plan.id,
+          status: ['open', 'in_progress', 'on_hold'] as any,
+        }, plan.tenantId);
+
+        if (existingWo.total > 0) {
+          skipped++;
+          continue;
+        }
+
         const workOrder = await this.workOrdersService.create(
           {
             title: `PM: ${plan.name}`,
-            description: `Meter-triggered PM at ${newReading} ${plan.meterUnit || 'units'}`,
+            description: `Meter-triggered PM at ${currentReading} ${plan.meterUnit || 'units'}`,
             type: WorkOrderType.PREVENTIVE,
             priority: plan.priority as Priority,
             assetId: plan.assetId,
@@ -354,18 +409,49 @@ export class PmService {
             checklistTemplateId: plan.checklistTemplateId,
           },
           'system',
-          tenantId,
+          plan.tenantId,
         );
 
-        plan.lastMeterReading = newReading;
+        await this.historyRepository.save({
+          pmPlanId: plan.id,
+          tenantId: plan.tenantId,
+          woId: workOrder.id,
+          dueAt: new Date(),
+        });
+
+        plan.lastMeterReading = currentReading;
         plan.lastTriggeredAt = new Date();
         await this.pmPlanRepository.save(plan);
 
-        createdWoIds.push(workOrder.id);
+        try {
+          await this.webhooksService.trigger('pm.triggered', {
+            pmPlanId: plan.id,
+            pmPlanName: plan.name,
+            workOrderId: workOrder.id,
+            assetId: plan.assetId,
+          }, plan.tenantId);
+        } catch (err) {
+          this.logger.warn(`webhook pm.triggered failed for meter plan ${plan.id}: ${(err as Error).message}`);
+        }
+
+        try {
+          await this.notificationsService.onPmDue(
+            { id: plan.id, name: plan.name, assetId: plan.assetId },
+            plan.assignedTo ?? [],
+            plan.tenantId,
+          );
+        } catch (err) {
+          this.logger.warn(`notification onPmDue failed for meter plan ${plan.id}: ${(err as Error).message}`);
+        }
+
+        triggered++;
+      } catch (error) {
+        this.logger.error(`Failed to trigger meter PM ${plan.id}:`, error);
+        skipped++;
       }
     }
 
-    return createdWoIds;
+    return { triggered, initialized, skipped };
   }
 
   private async calculateNextDueDate(plan: PmPlan, tenantId: string): Promise<Date> {
