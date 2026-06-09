@@ -39,15 +39,14 @@ interface WorkOrder {
   asset?: { name?: string }
 }
 
-function BoardCard({ wo, dragging }: { wo: WorkOrder; dragging?: boolean }) {
-  const router = useRouter()
+/** Pure presentational card — shared by the draggable card and the drag overlay. */
+function CardFace({ wo, overlay }: { wo: WorkOrder; overlay?: boolean }) {
   const priority = getWorkOrderPriorityMeta(wo.priority)
   return (
     <div
-      onClick={() => !dragging && router.push(`/dashboard/work-orders/${wo.id}`)}
       className={cn(
-        'group rounded-lg border bg-card p-3 shadow-soft transition-shadow hover:shadow-soft-md',
-        dragging ? 'cursor-grabbing rotate-1' : 'cursor-grab',
+        'rounded-lg border bg-card p-3 shadow-soft',
+        overlay ? 'rotate-2 cursor-grabbing shadow-soft-lg' : 'transition-shadow hover:shadow-soft-md',
       )}
     >
       <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -61,19 +60,51 @@ function BoardCard({ wo, dragging }: { wo: WorkOrder; dragging?: boolean }) {
 }
 
 function DraggableCard({ wo }: { wo: WorkOrder }) {
+  const router = useRouter()
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: wo.id })
+  // Record where the pointer went down (capture phase, before dnd-kit) so a
+  // genuine click (no movement) navigates, while a drag does not.
+  const downAt = React.useRef<{ x: number; y: number } | null>(null)
+
   return (
-    <div ref={setNodeRef} {...listeners} {...attributes} className={cn(isDragging && 'opacity-40')}>
-      <BoardCard wo={wo} />
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onPointerDownCapture={(e) => {
+        downAt.current = { x: e.clientX, y: e.clientY }
+      }}
+      onClick={(e) => {
+        const s = downAt.current
+        if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) < 5) {
+          router.push(`/dashboard/work-orders/${wo.id}`)
+        }
+      }}
+      className={cn('cursor-grab touch-none outline-none', isDragging && 'opacity-40')}
+    >
+      <CardFace wo={wo} />
     </div>
   )
 }
 
-function BoardColumn({ status, items }: { status: WorkOrderStatus; items: WorkOrder[] }) {
+function BoardColumn({
+  status,
+  items,
+  activeStatus,
+}: {
+  status: WorkOrderStatus
+  items: WorkOrder[]
+  activeStatus: WorkOrderStatus | null
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: status })
   const meta = WO_STATUS_META[status]
+  // While a card is being dragged, a lane is a valid drop target only if the
+  // state machine allows the move (or it's the card's current lane).
+  const dragging = activeStatus !== null
+  const isValidTarget = !dragging || activeStatus === status || canTransition(activeStatus!, status)
+
   return (
-    <div className="flex w-72 shrink-0 flex-col">
+    <div className={cn('flex w-72 shrink-0 flex-col transition-opacity', dragging && !isValidTarget && 'opacity-40')}>
       <div className="mb-2 flex items-center gap-2 px-1">
         <span className={cn('h-2 w-2 rounded-full', meta.dotClass)} />
         <span className="text-sm font-semibold">{meta.label}</span>
@@ -84,15 +115,19 @@ function BoardColumn({ status, items }: { status: WorkOrderStatus; items: WorkOr
       <div
         ref={setNodeRef}
         className={cn(
-          'flex-1 space-y-2 rounded-xl border border-dashed p-2 transition-colors',
-          isOver ? 'border-primary/50 bg-primary/5' : 'border-border bg-muted/30',
+          'min-h-[80px] flex-1 space-y-2 rounded-xl border border-dashed p-2 transition-colors',
+          isOver && isValidTarget && 'border-primary bg-primary/10',
+          isOver && !isValidTarget && 'border-destructive/50 bg-destructive/5',
+          !isOver && 'border-border bg-muted/30',
         )}
       >
         {items.map((wo) => (
           <DraggableCard key={wo.id} wo={wo} />
         ))}
         {items.length === 0 && (
-          <div className="flex h-20 items-center justify-center text-xs text-muted-foreground">Drop here</div>
+          <div className="flex h-20 items-center justify-center text-xs text-muted-foreground">
+            {dragging && isValidTarget ? 'Drop here' : ''}
+          </div>
         )}
       </div>
     </div>
@@ -107,12 +142,13 @@ export function WorkOrdersBoard({ workOrders }: { workOrders: WorkOrder[] }) {
   React.useEffect(() => setItems(workOrders), [workOrders])
 
   const sensors = useSensors(
-    // 5px activation distance so a click still navigates rather than starts a drag.
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // 8px activation distance so a click still navigates rather than starts a drag.
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor),
   )
 
   const activeWo = activeId ? items.find((w) => w.id === activeId) : null
+  const activeStatus = (activeWo?.status as WorkOrderStatus | undefined) ?? null
 
   function onDragStart(e: DragStartEvent) {
     setActiveId(String(e.active.id))
@@ -128,7 +164,9 @@ export function WorkOrdersBoard({ workOrders }: { workOrders: WorkOrder[] }) {
     if (!wo || wo.status === target) return
 
     if (!canTransition(wo.status, target)) {
-      toast.error(`Can't move ${WO_STATUS_META[wo.status as WorkOrderStatus]?.label ?? wo.status} → ${WO_STATUS_META[target].label}`)
+      toast.error(
+        `Can't move ${WO_STATUS_META[wo.status as WorkOrderStatus]?.label ?? wo.status} → ${WO_STATUS_META[target].label}`,
+      )
       return
     }
 
@@ -159,10 +197,15 @@ export function WorkOrdersBoard({ workOrders }: { workOrders: WorkOrder[] }) {
     >
       <div className="flex gap-4 overflow-x-auto pb-4">
         {WO_STATUS_ORDER.map((status) => (
-          <BoardColumn key={status} status={status} items={items.filter((w) => w.status === status)} />
+          <BoardColumn
+            key={status}
+            status={status}
+            items={items.filter((w) => w.status === status)}
+            activeStatus={activeStatus}
+          />
         ))}
       </div>
-      <DragOverlay>{activeWo ? <BoardCard wo={activeWo} dragging /> : null}</DragOverlay>
+      <DragOverlay>{activeWo ? <CardFace wo={activeWo} overlay /> : null}</DragOverlay>
     </DndContext>
   )
 }
