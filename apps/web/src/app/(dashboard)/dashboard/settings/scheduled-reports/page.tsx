@@ -85,7 +85,21 @@ export default function ScheduledReportsPage() {
               <DialogHeader>
                 <DialogTitle>Schedule a Report</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (form.name && form.recipientEmails) {
+                    createMutation.mutate({
+                      ...form,
+                      recipientEmails: form.recipientEmails
+                        .split(',')
+                        .map((e) => e.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                }}
+              >
                 <Input
                   placeholder="Report name"
                   value={form.name}
@@ -121,6 +135,7 @@ export default function ScheduledReportsPage() {
                     {(['csv', 'pdf'] as const).map((f) => (
                       <button
                         key={f}
+                        type="button"
                         onClick={() => setForm({ ...form, format: f })}
                         className={`px-4 py-1.5 rounded-md text-sm ${
                           form.format === f
@@ -143,21 +158,13 @@ export default function ScheduledReportsPage() {
                   <p className="text-xs text-muted-foreground mt-1">Comma-separated email addresses</p>
                 </div>
                 <Button
+                  type="submit"
                   className="w-full"
-                  onClick={() =>
-                    createMutation.mutate({
-                      ...form,
-                      recipientEmails: form.recipientEmails
-                        .split(',')
-                        .map((e) => e.trim())
-                        .filter(Boolean),
-                    })
-                  }
                   disabled={!form.name || !form.recipientEmails || createMutation.isPending}
                 >
                   Create Schedule
                 </Button>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         }

@@ -61,7 +61,18 @@ export default function BudgetsPage() {
               <DialogHeader>
                 <DialogTitle>Create Budget</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (form.name && form.periodStart && form.periodEnd && form.plannedAmount) {
+                    createMutation.mutate({
+                      ...form,
+                      plannedAmount: parseFloat(form.plannedAmount),
+                    })
+                  }
+                }}
+              >
                 <Input placeholder="Budget name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -78,16 +89,13 @@ export default function BudgetsPage() {
                   <Input type="number" placeholder="0.00" value={form.plannedAmount} onChange={(e) => setForm({ ...form, plannedAmount: e.target.value })} />
                 </div>
                 <Button
+                  type="submit"
                   className="w-full"
-                  onClick={() => createMutation.mutate({
-                    ...form,
-                    plannedAmount: parseFloat(form.plannedAmount),
-                  })}
                   disabled={!form.name || !form.periodStart || !form.periodEnd || !form.plannedAmount || createMutation.isPending}
                 >
                   Create Budget
                 </Button>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         }
