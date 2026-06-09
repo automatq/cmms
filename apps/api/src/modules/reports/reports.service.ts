@@ -23,6 +23,8 @@ interface KpiMetric {
   unit?: string;
   trend?: number;
   trendDirection?: 'up' | 'down' | 'neutral';
+  /** Same metric for the immediately-preceding period of equal length. */
+  previousValue?: number;
 }
 
 interface ChartDataPoint {
@@ -78,6 +80,7 @@ export class ReportsService {
     kpis: KpiMetric[];
     workOrdersByStatus: ChartDataPoint[];
     workOrdersByPriority: ChartDataPoint[];
+    completionTrend: ChartDataPoint[];
     recentActivity: any[];
     upcomingPMs: any[];
     lowStockAlerts: any[];
@@ -85,10 +88,13 @@ export class ReportsService {
     const days = query.days || 30;
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
+    // The immediately-preceding period of equal length, for deltas.
+    const prevStartDate = new Date(startDate);
+    prevStartDate.setDate(prevStartDate.getDate() - days);
 
     // Work Order KPIs
     const now = new Date();
-    const [totalWOs, openWOs, completedWOs, overdueWOs] = await Promise.all([
+    const [totalWOs, openWOs, completedWOs, overdueWOs, prevCompletedWOs] = await Promise.all([
       this.workOrderRepo.count({ where: { tenantId, createdAt: Between(startDate, new Date()) } }),
       this.workOrderRepo.count({ where: { tenantId, status: In([WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS]) } }),
       this.workOrderRepo.count({ where: { tenantId, status: WorkOrderStatus.COMPLETED, completedAt: Between(startDate, new Date()) } }),
@@ -97,7 +103,31 @@ export class ReportsService {
         .andWhere('wo.status IN (:...statuses)', { statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS] })
         .andWhere('wo.scheduledEnd < :now', { now })
         .getCount(),
+      this.workOrderRepo.count({ where: { tenantId, status: WorkOrderStatus.COMPLETED, completedAt: Between(prevStartDate, startDate) } }),
     ]);
+
+    // Daily completion trend over the period (for the dashboard sparkline).
+    const completionTrendRaw = await this.workOrderRepo
+      .createQueryBuilder('wo')
+      .select("to_char(date_trunc('day', wo.completedAt), 'YYYY-MM-DD')", 'day')
+      .addSelect('COUNT(*)', 'count')
+      .where('wo.tenantId = :tenantId', { tenantId })
+      .andWhere('wo.status = :status', { status: WorkOrderStatus.COMPLETED })
+      .andWhere('wo.completedAt BETWEEN :start AND :end', { start: startDate, end: now })
+      .groupBy("date_trunc('day', wo.completedAt)")
+      .orderBy("date_trunc('day', wo.completedAt)", 'ASC')
+      .getRawMany();
+    const completionTrend: ChartDataPoint[] = completionTrendRaw.map((r) => ({
+      label: r.day,
+      value: parseInt(r.count, 10),
+    }));
+
+    const completedTrendPct =
+      prevCompletedWOs > 0
+        ? Math.round(((completedWOs - prevCompletedWOs) / prevCompletedWOs) * 100)
+        : completedWOs > 0
+          ? 100
+          : 0;
 
     // Planned vs Unplanned ratio
     const [plannedWOs, totalPeriodWOs] = await Promise.all([
@@ -164,7 +194,13 @@ export class ReportsService {
     return {
       kpis: [
         { label: 'Open Work Orders', value: openWOs, trend: 0, trendDirection: 'neutral' },
-        { label: 'Completed (Period)', value: completedWOs, trend: 0, trendDirection: 'neutral' },
+        {
+          label: 'Completed (Period)',
+          value: completedWOs,
+          previousValue: prevCompletedWOs,
+          trend: completedTrendPct,
+          trendDirection: completedWOs > prevCompletedWOs ? 'up' : completedWOs < prevCompletedWOs ? 'down' : 'neutral',
+        },
         { label: 'Overdue', value: overdueWOs, trend: 0, trendDirection: overdueWOs > 0 ? 'up' : 'neutral' },
         { label: 'MTTR', value: parseFloat(mttrResult?.mttr || '0'), unit: 'hours' },
         { label: 'PM Compliance', value: pmCompliance, unit: '%' },
@@ -172,6 +208,7 @@ export class ReportsService {
       ],
       workOrdersByStatus: woByStatus.map((s) => ({ label: s.status, value: parseInt(s.count, 10) })),
       workOrdersByPriority: woByPriority.map((p) => ({ label: p.priority, value: parseInt(p.count, 10) })),
+      completionTrend,
       recentActivity: recentActivity.map((wo) => ({
         id: wo.id,
         woNumber: wo.woNumber,
