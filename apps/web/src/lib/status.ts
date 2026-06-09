@@ -273,6 +273,37 @@ export function getStockMeta(qtyOnHand: number, reorderPoint = 0): StockMeta {
   }
 }
 
+// ── Due-date urgency (PM plans, scheduled work) ──────────────────────────────
+
+export type DueLevel = 'overdue' | 'soon' | 'scheduled' | 'none'
+
+export interface DueMeta {
+  level: DueLevel
+  label: string
+  badgeClass: string
+}
+
+/** Classify a due date as overdue / due-soon (≤7 days) / scheduled. */
+export function getDueMeta(date: string | Date | null | undefined, soonDays = 7): DueMeta {
+  if (!date) {
+    return { level: 'none', label: '', badgeClass: '' }
+  }
+  const due = new Date(date).getTime()
+  if (Number.isNaN(due)) return { level: 'none', label: '', badgeClass: '' }
+  const days = Math.floor((due - Date.now()) / 86_400_000)
+  if (days < 0) {
+    return { level: 'overdue', label: 'Overdue', badgeClass: COLOR_CLASSES.red.badge }
+  }
+  if (days <= soonDays) {
+    return {
+      level: 'soon',
+      label: days === 0 ? 'Due today' : `Due in ${days}d`,
+      badgeClass: COLOR_CLASSES.amber.badge,
+    }
+  }
+  return { level: 'scheduled', label: 'Scheduled', badgeClass: COLOR_CLASSES.slate.badge }
+}
+
 // ── Work-order state machine (mirror of apps/api/.../state-machine.ts) ────────
 // Keep in sync with the authoritative server-side transitions. The board and the
 // status-transition control consume this; they must never invent transitions.

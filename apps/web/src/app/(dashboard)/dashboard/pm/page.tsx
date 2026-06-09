@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { Plus, Search, Calendar, Clock, CheckCircle, Library } from 'lucide-react'
 import { useState } from 'react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
+import { getDueMeta } from '@/lib/status'
 
 export default function PmPlansPage() {
   const [search, setSearch] = useState('')
@@ -91,14 +92,24 @@ export default function PmPlansPage() {
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {plans.map((plan: any) => (
+            {plans.map((plan: any) => {
+              const due = plan.isActive ? getDueMeta(plan.nextDueAt) : getDueMeta(null)
+              return (
               <Link key={plan.id} href={`/dashboard/pm/${plan.id}`}>
-                <Card className="hover:border-primary transition-colors cursor-pointer h-full">
+                <Card className={cn(
+                  'hover:border-primary transition-colors cursor-pointer h-full',
+                  due.level === 'overdue' && 'border-l-4 border-l-red-500',
+                  due.level === 'soon' && 'border-l-4 border-l-amber-500',
+                )}>
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-lg">{plan.name}</CardTitle>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${plan.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                        }`}>
+                      <span className={cn(
+                        'rounded-full border px-2 py-0.5 text-xs font-semibold',
+                        plan.isActive
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : 'border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-300',
+                      )}>
                         {plan.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </div>
@@ -115,16 +126,22 @@ export default function PmPlansPage() {
                         <span>Trigger: {plan.triggerType}</span>
                       </div>
                       {plan.nextDueAt && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Calendar className="h-4 w-4 text-primary" />
                           <span className="font-medium">Next: {formatDate(plan.nextDueAt)}</span>
+                          {(due.level === 'overdue' || due.level === 'soon') && (
+                            <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-semibold', due.badgeClass)}>
+                              {due.label}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
                   </CardContent>
                 </Card>
               </Link>
-            ))}
+              )
+            })}
           </div>
 
           {/* Pagination */}
