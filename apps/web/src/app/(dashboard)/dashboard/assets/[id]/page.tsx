@@ -23,6 +23,7 @@ import { formatCurrency, formatTimeAgo, formatDate } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/providers/auth-provider'
 import { AssetQrCard } from '@/components/assets/asset-qr-card'
+import { AssetAiInsights } from '@/components/ai/asset-ai-insights'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { getWorkOrderStatusMeta, getAssetStatusMeta } from '@/lib/status'
 
@@ -505,6 +506,9 @@ export default function AssetDetailPage() {
             assetNumber={asset.assetNumber}
             canManage={canManageQr}
           />
+
+          {/* AI Insights */}
+          <AssetAiInsights assetId={id} />
         </div>
       </div>
 
