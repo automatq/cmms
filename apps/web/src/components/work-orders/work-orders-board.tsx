@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { celebrate } from '@/lib/confetti'
 import { StatusBadge } from '@/components/ui/status-badge'
 import {
   WO_STATUS_ORDER,
@@ -138,6 +139,7 @@ export function WorkOrdersBoard({ workOrders }: { workOrders: WorkOrder[] }) {
       .updateWorkOrderStatus(woId, target)
       .then(() => {
         toast.success(`${wo.woNumber ?? 'Work order'} → ${WO_STATUS_META[target].label}`)
+        if (target === 'completed') celebrate()
         queryClient.invalidateQueries({ queryKey: ['work-orders'] })
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       })
