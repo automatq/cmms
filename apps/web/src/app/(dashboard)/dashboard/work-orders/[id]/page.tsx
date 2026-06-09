@@ -29,6 +29,7 @@ import { formatDate, formatCurrency } from '@/lib/utils'
 import { getWorkOrderStatusMeta, getWorkOrderPriorityMeta, type WorkOrderStatus } from '@/lib/status'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { StatusTransitionControl } from '@/components/work-orders/status-transition-control'
+import { AssigneeControl } from '@/components/work-orders/assignee-control'
 import { celebrate } from '@/lib/confetti'
 import { CommentsSection } from '@/components/work-orders/comments-section'
 import { TimeLogSection } from '@/components/work-orders/time-log-section'
@@ -725,6 +726,18 @@ export default function WorkOrderDetailPage() {
 
                 {/* Sidebar */}
                 <div className="space-y-6">
+                    <Card>
+                        <CardHeader className="pb-3 border-b border-border/50">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <Users className="h-5 w-5 text-primary/70" />
+                                Assignee
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-5">
+                            <AssigneeControl workOrderId={id} assignedTo={wo.assignedTo} />
+                        </CardContent>
+                    </Card>
+
                     {(totalLaborCost > 0 || totalPartsCost > 0) && (
                         <Card>
                             <CardHeader className="pb-3 border-b border-border/50">

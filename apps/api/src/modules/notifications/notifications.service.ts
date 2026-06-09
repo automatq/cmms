@@ -229,11 +229,19 @@ export class NotificationsService {
   // ==================== EVENT TRIGGERS ====================
 
   async onWoStatusChanged(
-    workOrder: { id: string; woNumber: string; title?: string; status: string; createdById: string },
+    workOrder: {
+      id: string;
+      woNumber: string;
+      title?: string;
+      status: string;
+      createdById: string;
+      assignedToId?: string | null;
+    },
     oldStatus: string,
     tenantId: string,
   ): Promise<void> {
-    const userIds = workOrder.createdById ? [workOrder.createdById] : [];
+    // Notify both the creator and the assigned technician (deduped).
+    const userIds = [...new Set([workOrder.createdById, workOrder.assignedToId].filter(Boolean))] as string[];
     const users = userIds.length > 0
       ? await this.userRepository
           .createQueryBuilder('user')
@@ -346,6 +354,38 @@ export class NotificationsService {
           appUrl: this.appUrl,
         });
       }
+    }
+  }
+
+  /** Notify a technician that a work order has been assigned to them. */
+  async onWorkOrderAssigned(
+    workOrder: { id: string; woNumber: string; title?: string },
+    assigneeUserId: string,
+    tenantId: string,
+  ): Promise<void> {
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .where('user.id = :id', { id: assigneeUserId })
+      .getOne();
+    if (!user) return;
+
+    await this.createNotification(
+      user.id,
+      NotificationType.WO_ASSIGNED,
+      'Work order assigned to you',
+      `${workOrder.woNumber}${workOrder.title ? ` — ${workOrder.title}` : ''}`,
+      { workOrderId: workOrder.id },
+      tenantId,
+    );
+
+    if (user.email && user.notificationPreferences?.email_wo_assigned !== false) {
+      await this.sendEmail(user.email, `Assigned to you: ${workOrder.woNumber}`, 'wo-assigned', {
+        woNumber: workOrder.woNumber,
+        title: workOrder.title,
+        woId: workOrder.id,
+        appUrl: this.appUrl,
+      }).catch(() => undefined);
     }
   }
 
