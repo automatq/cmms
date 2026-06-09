@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { CommandPalette } from '@/components/command-palette'
 import { Breadcrumbs } from '@/components/layout/breadcrumbs'
+import { PageTransition } from '@/components/layout/page-transition'
 import { ImpersonationBanner } from '@/components/admin/impersonation-banner'
 import { useAuth } from '@/providers/auth-provider'
 
@@ -55,7 +56,7 @@ export default function DashboardLayout({
           <Header />
           <main className="p-6 space-y-6">
             <Breadcrumbs />
-            {children}
+            <PageTransition>{children}</PageTransition>
           </main>
         </div>
       </div>

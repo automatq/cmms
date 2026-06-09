@@ -29,6 +29,7 @@ import { formatDate, formatCurrency } from '@/lib/utils'
 import { getWorkOrderStatusMeta, getWorkOrderPriorityMeta, type WorkOrderStatus } from '@/lib/status'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { StatusTransitionControl } from '@/components/work-orders/status-transition-control'
+import { celebrate } from '@/lib/confetti'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -110,6 +111,9 @@ export default function WorkOrderDetailPage() {
             const previous = queryClient.getQueryData(['work-order', id])
             queryClient.setQueryData(['work-order', id], (old: any) => ({ ...old, status: newStatus }))
             return { previous }
+        },
+        onSuccess: (newStatus) => {
+            if (newStatus === 'completed') celebrate()
         },
         onError: (err: any, _newStatus, context) => {
             // Roll back the optimistic badge immediately so the user doesn't
