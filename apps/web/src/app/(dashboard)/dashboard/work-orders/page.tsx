@@ -45,9 +45,9 @@ export default function WorkOrdersPage() {
   const [showCreate, setShowCreate] = useState(false)
 
   // The board groups everything into lanes, so it needs a wider window than the
-  // paginated list/table.
+  // paginated list/table — capped at the API's max page size (100).
   const isBoard = view === 'board'
-  const limit = isBoard ? 200 : 20
+  const limit = isBoard ? 100 : 20
 
   const { data, isLoading } = useQuery({
     queryKey: ['work-orders', search, statusFilter, priorityFilter, isBoard ? 'board' : page, limit],

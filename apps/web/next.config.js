@@ -9,6 +9,32 @@ const apiHost = (() => {
   }
 })()
 
+// Origin of the file/object store that serves (presigned) asset & attachment
+// images, so it can be allowlisted in img-src / next image remotePatterns.
+// Configurable per deployment; defaults cover S3/CloudFront, local MinIO, and
+// the Railway-hosted MinIO used in production (*.up.railway.app).
+const filesOrigin = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_FILES_URL ? new URL(process.env.NEXT_PUBLIC_FILES_URL).origin : ''
+  } catch {
+    return ''
+  }
+})()
+
+const imgSrc = [
+  "'self'",
+  'data:',
+  'blob:',
+  'https://*.amazonaws.com',
+  'https://*.cloudfront.net',
+  'https://*.up.railway.app',
+  'http://localhost:9000',
+  'http://minio:9000',
+  filesOrigin,
+]
+  .filter(Boolean)
+  .join(' ')
+
 const cspDirectives = [
   "default-src 'self'",
   // Next.js needs unsafe-inline for the runtime; unsafe-eval only outside prod for fast refresh.
@@ -17,7 +43,7 @@ const cspDirectives = [
     : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://*.amazonaws.com https://*.cloudfront.net http://localhost:9000 http://minio:9000",
+  `img-src ${imgSrc}`,
   `connect-src 'self' https://${apiHost} ws://${apiHost} wss://${apiHost} https://api.maintek.app wss://api.maintek.app https://*.sentry.io`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
@@ -41,6 +67,7 @@ const nextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: '**.amazonaws.com' },
       { protocol: 'https', hostname: '**.cloudfront.net' },
+      { protocol: 'https', hostname: '**.up.railway.app' },
       { protocol: 'http', hostname: 'localhost', port: '9000' },
       { protocol: 'http', hostname: 'minio', port: '9000' },
     ],
