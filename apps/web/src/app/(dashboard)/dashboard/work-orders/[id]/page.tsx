@@ -31,6 +31,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { StatusTransitionControl } from '@/components/work-orders/status-transition-control'
 import { celebrate } from '@/lib/confetti'
 import { CommentsSection } from '@/components/work-orders/comments-section'
+import { TimeLogSection } from '@/components/work-orders/time-log-section'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -716,6 +717,8 @@ export default function WorkOrderDetailPage() {
                             )}
                         </Tabs>
                     </Card>
+
+                    <TimeLogSection workOrderId={id} />
 
                     <CommentsSection workOrderId={id} />
                 </div>

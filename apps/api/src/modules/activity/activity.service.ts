@@ -340,6 +340,18 @@ export class ActivityService {
       .getMany();
   }
 
+  /** Full time log (all sessions: active/completed/abandoned) for a work order. */
+  async getActivitiesForWorkOrder(
+    workOrderId: string,
+    tenantId: string,
+  ): Promise<TechActivity[]> {
+    return this.activityRepository.find({
+      where: { workOrderId, tenantId },
+      relations: ['user'],
+      order: { startedAt: 'DESC' },
+    });
+  }
+
   async getMyActiveActivity(
     userId: string,
     tenantId: string,
