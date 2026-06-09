@@ -348,4 +348,50 @@ export class NotificationsService {
       }
     }
   }
+
+  /**
+   * Notify users @mentioned in a work-order comment. Mentioned ids are validated
+   * to be members of the tenant (so a client can't notify arbitrary users), and
+   * the author is never notified of their own mention.
+   */
+  async notifyCommentMentions(opts: {
+    mentionUserIds: string[];
+    authorUserId: string;
+    authorName: string;
+    snippet: string;
+    workOrderId: string;
+    commentId: string;
+    tenantId: string;
+  }): Promise<void> {
+    const ids = [...new Set(opts.mentionUserIds.filter((id) => id && id !== opts.authorUserId))];
+    if (ids.length === 0) return;
+
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', {
+        tenantId: opts.tenantId,
+      })
+      .where('user.id IN (:...ids)', { ids })
+      .getMany();
+
+    for (const user of users) {
+      await this.createNotification(
+        user.id,
+        NotificationType.MENTION,
+        `${opts.authorName} mentioned you`,
+        opts.snippet,
+        { workOrderId: opts.workOrderId, commentId: opts.commentId },
+        opts.tenantId,
+      );
+
+      if (user.email && user.notificationPreferences?.email_mention !== false) {
+        await this.sendEmail(user.email, `${opts.authorName} mentioned you`, 'mention', {
+          authorName: opts.authorName,
+          snippet: opts.snippet,
+          woId: opts.workOrderId,
+          appUrl: this.appUrl,
+        }).catch(() => undefined);
+      }
+    }
+  }
 }

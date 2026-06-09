@@ -10,10 +10,25 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn, formatTimeAgo } from '@/lib/utils'
 import { SearchAutocomplete } from '@/components/search-autocomplete'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+
+// Map a notification's data payload to the page that lets the user act on it.
+function notificationHref(n: any): string | null {
+  const d = n?.data || {}
+  if (d.workOrderId) return `/dashboard/work-orders/${d.workOrderId}`
+  if (d.pmPlanId) return `/dashboard/pm/${d.pmPlanId}`
+  if (d.partId) return `/dashboard/inventory/parts/${d.partId}`
+  if (d.assetId) return `/dashboard/assets/${d.assetId}`
+  if (d.workRequestId || n?.type === 'work_request') return '/dashboard/work-requests'
+  return null
+}
 
 export function Header() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const router = useRouter()
+  const [bellOpen, setBellOpen] = useState(false)
 
   // Fetch notifications
   const { data: notificationsData } = useQuery({
@@ -68,7 +83,7 @@ export function Header() {
         <div className="flex items-center gap-2 sm:gap-4">
           <ThemeToggle />
 
-          <Popover>
+          <Popover open={bellOpen} onOpenChange={setBellOpen}>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="relative hover:bg-muted/80 transition-colors">
                 <Bell className="h-5 w-5" />
@@ -105,7 +120,16 @@ export function Header() {
                         <div className="mt-1 shrink-0">
                           {getIcon(notification.type)}
                         </div>
-                        <div className="flex-1 min-w-0 space-y-1">
+                        <button
+                          type="button"
+                          className="flex-1 min-w-0 space-y-1 text-left"
+                          onClick={() => {
+                            const href = notificationHref(notification)
+                            if (!notification.isRead) markReadMutation.mutate(notification.id)
+                            setBellOpen(false)
+                            if (href) router.push(href)
+                          }}
+                        >
                           <p className={cn(
                             "text-sm font-medium leading-none",
                             !notification.isRead ? "text-foreground" : "text-muted-foreground"
@@ -118,7 +142,7 @@ export function Header() {
                           <p className="text-[10px] text-muted-foreground/80 mt-1">
                             {formatTimeAgo(new Date(notification.createdAt))}
                           </p>
-                        </div>
+                        </button>
                         {!notification.isRead && (
                           <div className="shrink-0 flex items-start">
                             <Button
