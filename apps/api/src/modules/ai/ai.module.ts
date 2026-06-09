@@ -12,6 +12,7 @@ import { PmHistory } from '../pm/entities/pm-history.entity';
 import { AI_PROVIDER } from './providers/ai-provider.interface';
 import { OllamaProvider } from './providers/ollama.provider';
 import { BedrockProvider } from './providers/bedrock.provider';
+import { AnthropicProvider } from './providers/anthropic.provider';
 
 @Module({
   imports: [
@@ -23,11 +24,23 @@ import { BedrockProvider } from './providers/bedrock.provider';
     {
       provide: AI_PROVIDER,
       useFactory: (configService: ConfigService) => {
-        const provider = configService.get<string>('AI_PROVIDER', 'ollama');
-        if (provider === 'bedrock') {
-          return new BedrockProvider(configService);
+        // Precedence: an explicit AI_PROVIDER always wins; otherwise prefer
+        // Anthropic (hosted Claude) when ANTHROPIC_API_KEY is present so a
+        // cloud deploy works with a single env var, falling back to Ollama for
+        // local/self-hosted. The old hard default of 'ollama' pointed at
+        // http://ollama:11434, which is unreachable on most hosts (→ 503s).
+        const explicit = configService.get<string>('AI_PROVIDER');
+        const anthropicKey = configService.get<string>('ANTHROPIC_API_KEY');
+        const provider = explicit || (anthropicKey ? 'anthropic' : 'ollama');
+
+        switch (provider) {
+          case 'anthropic':
+            return new AnthropicProvider(configService);
+          case 'bedrock':
+            return new BedrockProvider(configService);
+          default:
+            return new OllamaProvider(configService);
         }
-        return new OllamaProvider(configService);
       },
       inject: [ConfigService],
     },
