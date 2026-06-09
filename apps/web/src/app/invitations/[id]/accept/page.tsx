@@ -129,6 +129,7 @@ export default function AcceptInvitationPage() {
 
   // Signed in but with the wrong email
   if (session.user.email.toLowerCase() !== inviteEmail.toLowerCase()) {
+    const returnTo = encodeURIComponent(`/invitations/${invitationId}/accept`)
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/20 p-4">
         <Card className="w-full max-w-md">
@@ -142,9 +143,14 @@ export default function AcceptInvitationPage() {
               <strong>{session.user.email}</strong>.
             </CardDescription>
           </CardHeader>
-          <CardFooter>
+          <CardFooter className="flex-col gap-2">
             <Button asChild className="w-full" variant="outline">
-              <Link href="/sign-in">Switch accounts</Link>
+              <Link href={`/sign-in?returnTo=${returnTo}`}>Switch accounts</Link>
+            </Button>
+            <Button asChild className="w-full" variant="ghost">
+              <Link href={`/sign-up?returnTo=${returnTo}&email=${encodeURIComponent(inviteEmail)}`}>
+                Create an account for {inviteEmail}
+              </Link>
             </Button>
           </CardFooter>
         </Card>

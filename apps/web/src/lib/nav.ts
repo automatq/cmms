@@ -3,6 +3,7 @@
  * command palette, and breadcrumbs so they never drift.
  */
 import {
+  Building2,
   LayoutDashboard,
   Package,
   ClipboardList,
@@ -46,6 +47,7 @@ export const primaryNav: NavItem[] = [
 ]
 
 export const settingsSubNav: NavItem[] = [
+  { name: 'Organization', href: '/dashboard/settings', icon: Building2 },
   { name: 'Members', href: '/dashboard/settings/members', icon: Users },
   { name: 'Teams', href: '/dashboard/settings/teams', icon: Users },
   { name: 'Webhooks', href: '/dashboard/settings/webhooks', icon: Webhook },

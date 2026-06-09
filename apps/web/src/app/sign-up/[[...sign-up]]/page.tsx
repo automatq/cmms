@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { signUp } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,8 +12,17 @@ import { Wrench } from 'lucide-react'
 
 export default function SignUpPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  // Invitation links arrive as /sign-up?returnTo=/invitations/<id>/accept&email=…
+  // Honor them so an invited user lands back on the accept page and joins the
+  // inviting org, instead of being funneled into creating their own org.
+  // Only allow same-app relative paths to avoid an open redirect.
+  const rawReturnTo = searchParams?.get('returnTo') || ''
+  const returnTo = rawReturnTo.startsWith('/') && !rawReturnTo.startsWith('//') ? rawReturnTo : ''
+  const invitedEmail = searchParams?.get('email') || ''
+
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(invitedEmail)
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -27,8 +36,9 @@ export default function SignUpPage() {
       if (res.error) {
         setError(res.error.message || 'Sign up failed')
       } else {
-        // Auto-signed in by Better Auth's autoSignIn:true; go to org creation
-        router.push('/onboarding/create-org')
+        // Auto-signed in by Better Auth's autoSignIn:true. Invited users go
+        // back to their invitation; everyone else goes to org creation.
+        router.push(returnTo || '/onboarding/create-org')
       }
     } catch (err: any) {
       setError(err?.message || 'Sign up failed')
@@ -93,7 +103,10 @@ export default function SignUpPage() {
             </Button>
             <p className="text-sm text-muted-foreground text-center">
               Already have an account?{' '}
-              <Link href="/sign-in" className="text-primary hover:underline">
+              <Link
+                href={returnTo ? `/sign-in?returnTo=${encodeURIComponent(returnTo)}` : '/sign-in'}
+                className="text-primary hover:underline"
+              >
                 Sign in
               </Link>
             </p>
