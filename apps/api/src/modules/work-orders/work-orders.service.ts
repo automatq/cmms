@@ -456,10 +456,29 @@ export class WorkOrdersService {
     });
     const saved = await this.commentRepository.save(comment);
     // Re-fetch with the author so the client can render it immediately.
-    return this.commentRepository.findOne({
+    const full = (await this.commentRepository.findOne({
       where: { id: saved.id },
       relations: ['user'],
-    }) as Promise<WoComment>;
+    })) as WoComment;
+
+    // Notify @mentioned users (validated against tenant membership).
+    if (dto.mentions?.length) {
+      const author = full?.user;
+      const authorName =
+        [author?.firstName, author?.lastName].filter(Boolean).join(' ') || author?.email || 'Someone';
+      const snippet = dto.body.length > 140 ? `${dto.body.slice(0, 140)}…` : dto.body;
+      await this.notificationsService.notifyCommentMentions({
+        mentionUserIds: dto.mentions,
+        authorUserId: userId,
+        authorName,
+        snippet,
+        workOrderId: woId,
+        commentId: saved.id,
+        tenantId,
+      });
+    }
+
+    return full;
   }
 
   // ==================== PARTS ====================

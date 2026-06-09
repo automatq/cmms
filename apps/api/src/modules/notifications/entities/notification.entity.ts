@@ -21,6 +21,7 @@ export enum NotificationType {
   WARRANTY_EXPIRING = 'warranty_expiring',
   BUDGET_ALERT = 'budget_alert',
   CONTRACT_EXPIRING = 'contract_expiring',
+  MENTION = 'mention',
 }
 
 @Entity('notifications')

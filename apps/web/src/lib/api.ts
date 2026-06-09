@@ -509,8 +509,11 @@ class ApiClient {
     return this.client.get(`/work-orders/${woId}/comments`)
   }
 
-  async addWorkOrderComment(woId: string, body: string) {
-    return this.client.post(`/work-orders/${woId}/comments`, { body })
+  async addWorkOrderComment(woId: string, body: string, mentions?: string[]) {
+    return this.client.post(`/work-orders/${woId}/comments`, {
+      body,
+      ...(mentions && mentions.length ? { mentions } : {}),
+    })
   }
 
   async addWorkOrderPart(woId: string, data: any) {
