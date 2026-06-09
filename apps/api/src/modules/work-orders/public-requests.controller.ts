@@ -88,13 +88,17 @@ export class PublicRequestsController {
 
     const saved = await this.workRequestRepository.save(request);
 
-    // Notify tenant admins
+    // Notify the techs/managers who can action it (in-app + email), same path
+    // the authenticated submission uses — so QR-portal requests aren't a
+    // second-class, in-app-only notification.
     try {
-      await this.notificationsService.broadcastToTenant(
-        'work_request',
-        `New Request: ${body.title}`,
-        `A new maintenance request has been submitted${body.submitterName ? ` by ${body.submitterName}` : ''}.`,
-        { requestId: saved.id },
+      await this.notificationsService.onWorkRequestSubmitted(
+        {
+          id: saved.id,
+          title: saved.title,
+          description: saved.description,
+          submittedBy: saved.submitterName,
+        },
         tenant.id,
       );
     } catch {
