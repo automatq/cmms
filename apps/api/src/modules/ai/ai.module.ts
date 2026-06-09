@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AiService } from './ai.service';
@@ -32,6 +32,14 @@ import { AnthropicProvider } from './providers/anthropic.provider';
         const explicit = configService.get<string>('AI_PROVIDER');
         const anthropicKey = configService.get<string>('ANTHROPIC_API_KEY');
         const provider = explicit || (anthropicKey ? 'anthropic' : 'ollama');
+
+        // An unrecognized explicit value would silently fall through to Ollama
+        // (likely unreachable). Surface the misconfiguration loudly.
+        if (explicit && !['anthropic', 'bedrock', 'ollama'].includes(explicit)) {
+          new Logger('AiModule').warn(
+            `Unknown AI_PROVIDER "${explicit}" — falling back to Ollama. Valid values: anthropic, bedrock, ollama.`,
+          );
+        }
 
         switch (provider) {
           case 'anthropic':

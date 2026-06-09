@@ -46,6 +46,7 @@ const PERMISSIONS_BY_ROLE: Record<string, string[]> = {
     'inventory:read',
     'pm:read',
     'reports:read',
+    'ai:read',
   ],
 };
 
