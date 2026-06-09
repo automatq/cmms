@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { WorkOrdersTable } from '@/components/work-orders/work-orders-table'
 import { WorkOrdersBoard } from '@/components/work-orders/work-orders-board'
+import { WorkOrderFormSheet } from '@/components/work-orders/work-order-form-sheet'
 import {
   getWorkOrderStatusMeta,
   getWorkOrderPriorityMeta,
@@ -41,6 +42,7 @@ export default function WorkOrdersPage() {
   const [priorityFilter, setPriorityFilter] = useState<string[]>([])
   const [view, setView] = useState<View>('board')
   const [page, setPage] = useState(1)
+  const [showCreate, setShowCreate] = useState(false)
 
   // The board groups everything into lanes, so it needs a wider window than the
   // paginated list/table.
@@ -71,11 +73,9 @@ export default function WorkOrdersPage() {
         title="Work Orders"
         description="Track and manage maintenance work orders"
         actions={
-          <Button asChild>
-            <Link href="/dashboard/work-orders/new">
-              <Plus className="h-4 w-4 mr-2" />
-              New Work Order
-            </Link>
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Work Order
           </Button>
         }
       />
@@ -151,11 +151,9 @@ export default function WorkOrdersPage() {
             <p className="text-muted-foreground mb-4">
               {hasFilters ? 'Try different filters' : 'Create your first work order'}
             </p>
-            <Button asChild>
-              <Link href="/dashboard/work-orders/new">
-                <Plus className="h-4 w-4 mr-2" />
-                New Work Order
-              </Link>
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Work Order
             </Button>
           </CardContent>
         </Card>
@@ -215,6 +213,8 @@ export default function WorkOrdersPage() {
           </Button>
         </div>
       )}
+
+      <WorkOrderFormSheet open={showCreate} onOpenChange={setShowCreate} />
     </div>
   )
 }
