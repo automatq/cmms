@@ -37,6 +37,15 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1
 
 const adminClient = axios.create({ baseURL: API_URL })
 
+adminClient.interceptors.request.use((config) => {
+  const token =
+    typeof window !== 'undefined' ? localStorage.getItem('maintek_auth_token') : null
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 interface Tenant {
   id: string
   name: string
@@ -47,8 +56,6 @@ interface Tenant {
   assetCount: number
   storageBytesUsed: number
   createdAt: string
-  polarCustomerId?: string
-  polarSubscriptionId?: string
 }
 
 const statusColors: Record<string, string> = {
@@ -275,12 +282,6 @@ export default function AdminTenantsPage() {
                   <span className="text-muted-foreground">Storage</span>
                   <span>{formatBytes(selectedTenant.storageBytesUsed)}</span>
                 </div>
-                {selectedTenant.polarCustomerId && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Polar Customer</span>
-                    <span className="font-mono text-xs">{selectedTenant.polarCustomerId}</span>
-                  </div>
-                )}
               </div>
             </div>
           )}

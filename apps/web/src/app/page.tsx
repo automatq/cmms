@@ -35,7 +35,7 @@ export default function HomePage() {
               <Link href="/sign-in">Sign in</Link>
             </Button>
             <Button asChild>
-              <Link href="/sign-up">Start free trial</Link>
+              <Link href="/sign-up">Get started free</Link>
             </Button>
           </div>
         </div>
@@ -59,7 +59,7 @@ export default function HomePage() {
         <div className="flex items-center justify-center gap-3 flex-wrap">
           <Button size="lg" asChild>
             <Link href="/sign-up">
-              Start 14-day free trial
+              Get started free
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
@@ -68,7 +68,7 @@ export default function HomePage() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground mt-4">
-          No credit card required · Full access for 14 days
+          No credit card required · Every feature included, free
         </p>
       </section>
 
@@ -127,15 +127,15 @@ export default function HomePage() {
           </div>
           <Card className="border-primary/20">
             <CardContent className="p-8 space-y-4">
-              <div className="text-5xl font-bold text-primary">14 days</div>
+              <div className="text-5xl font-bold text-primary">Free</div>
               <p className="text-lg font-medium">Full access. No card required.</p>
               <p className="text-sm text-muted-foreground">
-                Try every feature free for 14 days. If you love it, add a payment method to keep going.
-                If you don't, walk away — no charges, no calls.
+                Every feature is free — work orders, PM, assets, reports, and the AI assistant.
+                No per-user pricing, no sales calls, no charges.
               </p>
               <Button asChild className="w-full">
                 <Link href="/sign-up">
-                  Start your trial
+                  Get started free
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>

@@ -22,9 +22,9 @@ export default function PricingPage() {
   return (
     <div className="container mx-auto px-4 py-16">
       <div className="text-center mb-12">
-        <h1 className="text-4xl md:text-5xl font-bold mb-4">One plan. Everything included.</h1>
+        <h1 className="text-4xl md:text-5xl font-bold mb-4">Free. Everything included.</h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          14 days free. Cancel anytime. No per-user pricing surprises.
+          Free for every team. No credit card. No per-user pricing surprises.
         </p>
       </div>
 
@@ -33,11 +33,11 @@ export default function PricingPage() {
           <CardHeader className="text-center pb-2">
             <CardTitle className="text-3xl">MainTek</CardTitle>
             <div className="mt-4">
-              <span className="text-5xl font-bold">$269</span>
-              <span className="text-muted-foreground"> CAD/month</span>
+              <span className="text-5xl font-bold">$0</span>
+              <span className="text-muted-foreground"> forever</span>
             </div>
             <CardDescription className="mt-2">
-              Flat rate. Unlimited everything. 14-day free trial — no card required.
+              Unlimited everything. Every feature included — no card required.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -51,12 +51,12 @@ export default function PricingPage() {
             </ul>
             <Link href="/sign-up" className="block">
               <Button className="w-full" size="lg">
-                Start 14-day free trial
+                Get started free
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
             <p className="text-center text-xs text-muted-foreground">
-              No credit card required to start. Add a payment method any time before your trial ends.
+              No credit card required. Every feature is included, free.
             </p>
           </CardContent>
         </Card>

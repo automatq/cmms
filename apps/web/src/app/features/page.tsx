@@ -103,7 +103,7 @@ export default function FeaturesPage() {
               <Link href="/sign-in">Sign in</Link>
             </Button>
             <Button asChild>
-              <Link href="/sign-up">Start free trial</Link>
+              <Link href="/sign-up">Get started free</Link>
             </Button>
           </div>
         </div>
@@ -134,7 +134,7 @@ export default function FeaturesPage() {
         <div className="text-center mt-16">
           <Button size="lg" asChild>
             <Link href="/sign-up">
-              Start 14-day free trial
+              Get started free
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>

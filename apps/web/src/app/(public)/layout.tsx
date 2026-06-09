@@ -24,7 +24,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               <Link href="/sign-in">Sign in</Link>
             </Button>
             <Button asChild>
-              <Link href="/sign-up">Start free trial</Link>
+              <Link href="/sign-up">Get started free</Link>
             </Button>
           </div>
         </div>

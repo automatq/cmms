@@ -24,7 +24,7 @@ export default function AboutPage() {
               <Link href="/sign-in">Sign in</Link>
             </Button>
             <Button asChild>
-              <Link href="/sign-up">Start free trial</Link>
+              <Link href="/sign-up">Get started free</Link>
             </Button>
           </div>
         </div>
@@ -39,7 +39,7 @@ export default function AboutPage() {
             which meant the people actually doing the work never used it.
           </p>
           <p className="text-muted-foreground text-lg leading-relaxed mt-4">
-            We built MainTek to fix that. One transparent price. Mobile-first. QR scanning so a tech can start
+            We built MainTek to fix that. Free for the whole team. Mobile-first. QR scanning so a tech can start
             a work order in two seconds. AI to help diagnose failures based on your own asset history.
           </p>
           <p className="text-muted-foreground text-lg leading-relaxed mt-4">
@@ -51,7 +51,7 @@ export default function AboutPage() {
         <div className="mt-12">
           <Button size="lg" asChild>
             <Link href="/sign-up">
-              Try MainTek free for 14 days
+              Get started free
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
