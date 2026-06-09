@@ -82,7 +82,13 @@ export default function WebhooksPage() {
               <DialogHeader>
                 <DialogTitle>Create Webhook</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (newWebhook.url && newWebhook.events.length) createMutation.mutate(newWebhook)
+                }}
+              >
                 <Input
                   placeholder="https://example.com/webhook"
                   value={newWebhook.url}
@@ -104,13 +110,13 @@ export default function WebhooksPage() {
                   </div>
                 </div>
                 <Button
+                  type="submit"
                   className="w-full"
-                  onClick={() => createMutation.mutate(newWebhook)}
                   disabled={!newWebhook.url || !newWebhook.events.length || createMutation.isPending}
                 >
                   Create Webhook
                 </Button>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         }

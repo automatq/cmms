@@ -75,7 +75,20 @@ export default function ServiceContractsPage() {
               <DialogHeader>
                 <DialogTitle>Create Service Contract</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (form.name && form.startDate && form.endDate) {
+                    createMutation.mutate({
+                      ...form,
+                      cost: form.cost ? parseFloat(form.cost) : undefined,
+                      slaResponseHours: form.slaResponseHours ? parseInt(form.slaResponseHours) : undefined,
+                      slaResolutionHours: form.slaResolutionHours ? parseInt(form.slaResolutionHours) : undefined,
+                    })
+                  }
+                }}
+              >
                 <Input placeholder="Contract name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 <Input placeholder="Contract number (optional)" value={form.contractNumber} onChange={(e) => setForm({ ...form, contractNumber: e.target.value })} />
                 <select
@@ -104,18 +117,13 @@ export default function ServiceContractsPage() {
                   <Input type="number" placeholder="SLA Resolution (hrs)" value={form.slaResolutionHours} onChange={(e) => setForm({ ...form, slaResolutionHours: e.target.value })} />
                 </div>
                 <Button
+                  type="submit"
                   className="w-full"
-                  onClick={() => createMutation.mutate({
-                    ...form,
-                    cost: form.cost ? parseFloat(form.cost) : undefined,
-                    slaResponseHours: form.slaResponseHours ? parseInt(form.slaResponseHours) : undefined,
-                    slaResolutionHours: form.slaResolutionHours ? parseInt(form.slaResolutionHours) : undefined,
-                  })}
                   disabled={!form.name || !form.startDate || !form.endDate || createMutation.isPending}
                 >
                   Create Contract
                 </Button>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         }

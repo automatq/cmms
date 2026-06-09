@@ -184,23 +184,30 @@ export default function WorkRequestsPage() {
                         <DialogTitle>Reject Work Request</DialogTitle>
                         <DialogDescription>Provide a reason for rejecting this request.</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-2">
-                        <Input
-                            placeholder="Reason for rejection..."
-                            value={rejectReason}
-                            onChange={(e) => setRejectReason(e.target.value)}
-                        />
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setRejectDialogId(null)}>Cancel</Button>
-                        <Button
-                            variant="destructive"
-                            disabled={!rejectReason.trim() || rejectMutation.isPending}
-                            onClick={() => rejectDialogId && rejectMutation.mutate({ id: rejectDialogId, reason: rejectReason })}
-                        >
-                            {rejectMutation.isPending ? 'Rejecting...' : 'Reject'}
-                        </Button>
-                    </DialogFooter>
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault()
+                            if (rejectDialogId && rejectReason.trim()) rejectMutation.mutate({ id: rejectDialogId, reason: rejectReason })
+                        }}
+                    >
+                        <div className="space-y-2">
+                            <Input
+                                placeholder="Reason for rejection..."
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                            />
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setRejectDialogId(null)}>Cancel</Button>
+                            <Button
+                                type="submit"
+                                variant="destructive"
+                                disabled={!rejectReason.trim() || rejectMutation.isPending}
+                            >
+                                {rejectMutation.isPending ? 'Rejecting...' : 'Reject'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </div>

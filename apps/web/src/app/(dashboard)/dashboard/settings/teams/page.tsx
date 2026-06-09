@@ -55,7 +55,13 @@ export default function TeamsPage() {
               <DialogHeader>
                 <DialogTitle>Create Team</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (newTeam.name) createMutation.mutate(newTeam)
+                }}
+              >
                 <Input
                   placeholder="Team name"
                   value={newTeam.name}
@@ -67,13 +73,13 @@ export default function TeamsPage() {
                   onChange={(e) => setNewTeam({ ...newTeam, description: e.target.value })}
                 />
                 <Button
+                  type="submit"
                   className="w-full"
-                  onClick={() => createMutation.mutate(newTeam)}
                   disabled={!newTeam.name || createMutation.isPending}
                 >
                   Create Team
                 </Button>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         }
