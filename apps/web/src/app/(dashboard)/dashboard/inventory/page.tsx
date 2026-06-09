@@ -10,7 +10,8 @@ import Link from 'next/link'
 import { PageHeader } from '@/components/ui/page-header'
 import { Plus, Search, Package, AlertTriangle, Download, Upload } from 'lucide-react'
 import { useState } from 'react'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, cn } from '@/lib/utils'
+import { getStockMeta } from '@/lib/status'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { toast } from 'sonner'
 
@@ -142,7 +143,9 @@ export default function InventoryPage() {
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {parts.map((part: any) => (
+            {parts.map((part: any) => {
+              const stock = getStockMeta(part.qtyOnHand ?? 0, part.reorderPoint ?? 0)
+              return (
               <Link key={part.id} href={`/dashboard/inventory/parts/${part.id}`} className="block h-full">
                 <Card className="hover:border-primary/50 hover:shadow-md transition-all cursor-pointer h-full flex flex-col">
                   <CardContent className="p-5 flex-1 flex flex-col">
@@ -160,6 +163,25 @@ export default function InventoryPage() {
                         <span className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20">
                           Critical
                         </span>
+                      )}
+                    </div>
+
+                    {/* Stock level */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium">
+                          <span className="text-foreground">{part.qtyOnHand ?? 0}</span>
+                          <span className="text-muted-foreground"> in stock</span>
+                        </span>
+                        <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-semibold', stock.badgeClass)}>
+                          {stock.label}
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div className={cn('h-full rounded-full transition-all', stock.barClass)} style={{ width: `${stock.percent}%` }} />
+                      </div>
+                      {part.reorderPoint > 0 && (
+                        <p className="text-[11px] text-muted-foreground">Reorder at {part.reorderPoint}</p>
                       )}
                     </div>
 
@@ -188,7 +210,8 @@ export default function InventoryPage() {
                   </CardContent>
                 </Card>
               </Link>
-            ))}
+              )
+            })}
           </div>
 
           {/* Pagination */}

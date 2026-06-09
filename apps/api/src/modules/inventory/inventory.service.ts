@@ -134,6 +134,24 @@ export class InventoryService {
 
     const data = await qb.getMany();
 
+    // Attach the total on-hand quantity (summed across storerooms) to each part
+    // so the list UI can show stock levels without an N+1 of per-part lookups.
+    // Read-only aggregate — no schema change.
+    const partIds = data.map((p) => p.id);
+    if (partIds.length) {
+      const sums = await this.stockRepo
+        .createQueryBuilder('s')
+        .select('s.partId', 'partId')
+        .addSelect('COALESCE(SUM(s.qtyOnHand), 0)', 'qty')
+        .where('s.partId IN (:...partIds)', { partIds })
+        .groupBy('s.partId')
+        .getRawMany();
+      const qtyByPart = new Map<string, number>(sums.map((r) => [r.partId, Number(r.qty)]));
+      data.forEach((p) => {
+        (p as Part & { qtyOnHand: number }).qtyOnHand = qtyByPart.get(p.id) ?? 0;
+      });
+    }
+
     return { data, total, page: query.page || 1, limit: query.limit || 20 };
   }
 

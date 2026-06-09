@@ -14,22 +14,23 @@ import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAuth } from '@/providers/auth-provider'
-import { getAssetStatusMeta } from '@/lib/status'
+import { getAssetStatusMeta, ASSET_STATUS_META, type AssetStatus } from '@/lib/status'
 import { cn } from '@/lib/utils'
 
 export default function AssetsPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('')
   const [page, setPage] = useState(1)
   const [viewMode, setViewMode] = useState<'grid' | 'hierarchy'>('grid')
   const [showImport, setShowImport] = useState(false)
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['assets', search, page],
+    queryKey: ['assets', search, statusFilter, page],
     queryFn: async () => {
-      const res = await api.getAssets({ search, page, limit: 20 })
+      const res = await api.getAssets({ search, status: statusFilter || undefined, page, limit: 20 })
       return res.data
     },
   })
@@ -137,9 +138,9 @@ export default function AssetsPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="flex gap-4">
-        <div className="relative flex-1 max-w-md">
+      {/* Search + status filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search assets..."
@@ -147,6 +148,27 @@ export default function AssetsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
           />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            variant={statusFilter === '' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => { setStatusFilter(''); setPage(1) }}
+          >
+            All
+          </Button>
+          {(Object.keys(ASSET_STATUS_META) as AssetStatus[]).map((s) => (
+            <Button
+              key={s}
+              variant={statusFilter === s ? 'default' : 'outline'}
+              size="sm"
+              className="gap-1.5"
+              onClick={() => { setStatusFilter(s); setPage(1) }}
+            >
+              <span className={cn('h-2 w-2 rounded-full', ASSET_STATUS_META[s].dotClass)} />
+              {ASSET_STATUS_META[s].label}
+            </Button>
+          ))}
         </div>
       </div>
 
