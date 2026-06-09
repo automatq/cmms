@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 import {
   WorkOrder,
   WoLabor,
@@ -8,10 +9,15 @@ import {
   WoChecklistResult,
   WoComment,
   WorkRequest,
+  WoTemplate,
+  WoAssignee,
 } from './entities';
 import { WorkOrdersService } from './work-orders.service';
 import { WorkOrdersController, WorkRequestsController } from './work-orders.controller';
 import { PublicRequestsController } from './public-requests.controller';
+import { SlaEscalationProcessor } from './sla-escalation.processor';
+import { WoTemplatesService } from './wo-templates.service';
+import { WoTemplatesController } from './wo-templates.controller';
 import { Tenant } from '../users/entities/tenant.entity';
 import { FilesModule } from '../files/files.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -32,10 +38,15 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
       WoChecklistResult,
       WoComment,
       WorkRequest,
+      WoTemplate,
+      WoAssignee,
       ChecklistTemplate,
       Tenant,
       Asset,
     ]),
+    BullModule.registerQueue({
+      name: 'sla-escalation',
+    }),
     forwardRef(() => FilesModule),
     forwardRef(() => NotificationsModule),
     forwardRef(() => InventoryModule),
@@ -43,8 +54,13 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
     forwardRef(() => WebhooksModule),
     TenantModule,
   ],
-  providers: [WorkOrdersService],
-  controllers: [WorkOrdersController, WorkRequestsController, PublicRequestsController],
+  providers: [WorkOrdersService, SlaEscalationProcessor, WoTemplatesService],
+  controllers: [
+    WorkOrdersController,
+    WorkRequestsController,
+    PublicRequestsController,
+    WoTemplatesController,
+  ],
   exports: [WorkOrdersService],
 })
 export class WorkOrdersModule {}

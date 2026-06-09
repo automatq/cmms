@@ -7,3 +7,5 @@ export * from './add-part.dto';
 export * from './create-comment.dto';
 export * from './save-checklist.dto';
 export * from './create-work-request.dto';
+export * from './wo-template.dto';
+export * from './add-assignee.dto';

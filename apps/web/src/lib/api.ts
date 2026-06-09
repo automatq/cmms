@@ -199,6 +199,36 @@ class ApiClient {
     return this.client.patch(`/work-orders/${id}/status`, { status })
   }
 
+  // Work Order crew (additional assignees)
+  async addWorkOrderAssignee(id: string, userId: string) {
+    return this.client.post(`/work-orders/${id}/assignees`, { userId })
+  }
+
+  async removeWorkOrderAssignee(id: string, userId: string) {
+    return this.client.delete(`/work-orders/${id}/assignees/${userId}`)
+  }
+
+  // Work Order Templates
+  async getWoTemplates() {
+    return this.client.get('/work-order-templates')
+  }
+
+  async getWoTemplate(id: string) {
+    return this.client.get(`/work-order-templates/${id}`)
+  }
+
+  async createWoTemplate(data: any) {
+    return this.client.post('/work-order-templates', data)
+  }
+
+  async updateWoTemplate(id: string, data: any) {
+    return this.client.patch(`/work-order-templates/${id}`, data)
+  }
+
+  async deleteWoTemplate(id: string) {
+    return this.client.delete(`/work-order-templates/${id}`)
+  }
+
   // Work Requests
   async getWorkRequests(params?: Record<string, unknown>) {
     return this.client.get('/work-orders/requests', { params })
@@ -231,6 +261,22 @@ class ApiClient {
 
   async deletePmPlan(id: string) {
     return this.client.delete(`/pm/${id}`)
+  }
+
+  // Sensors / condition-based maintenance
+  async ingestSensorReading(data: {
+    assetId: string
+    metric: string
+    value: number
+    unit?: string
+    recordedAt?: string
+    source?: string
+  }) {
+    return this.client.post('/sensors/readings', data)
+  }
+
+  async getSensorReadings(assetId: string, metric?: string) {
+    return this.client.get('/sensors/readings', { params: { assetId, metric } })
   }
 
   async togglePmPlanActive(id: string) {
@@ -316,6 +362,10 @@ class ApiClient {
     return this.client.post('/ai/troubleshoot', data)
   }
 
+  async aiGenerateChecklist(data: { description: string; assetId?: string; category?: string }) {
+    return this.client.post('/ai/generate-checklist', data)
+  }
+
   async aiSummarizeWorkOrder(workOrderId: string) {
     return this.client.post('/ai/summarize-wo', { workOrderId })
   }
@@ -380,7 +430,7 @@ class ApiClient {
     return this.client.get('/users/me')
   }
 
-  async updateNotificationPreferences(preferences: Record<string, boolean>) {
+  async updateNotificationPreferences(preferences: Record<string, unknown>) {
     return this.client.patch('/users/me/preferences', { notificationPreferences: preferences })
   }
 

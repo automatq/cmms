@@ -5,3 +5,5 @@ export * from './wo-attachment.entity';
 export * from './wo-checklist-result.entity';
 export * from './wo-comment.entity';
 export * from './work-request.entity';
+export * from './wo-template.entity';
+export * from './wo-assignee.entity';

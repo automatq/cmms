@@ -55,7 +55,7 @@ export class UpdateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsObject()
-  notificationPreferences?: Record<string, boolean>;
+  notificationPreferences?: Record<string, unknown>;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -8,6 +8,7 @@ import {
   IsBoolean,
   IsArray,
   IsDateString,
+  IsObject,
 } from 'class-validator';
 import { TriggerType, FrequencyUnit } from '../entities/pm-plan.entity';
 
@@ -103,4 +104,9 @@ export class UpdatePmPlanDto {
   @IsOptional()
   @IsBoolean()
   ignoreBlackouts?: boolean;
+
+  @ApiPropertyOptional({ description: 'Extra config; for CONDITION triggers holds { condition: {...} }' })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
 }

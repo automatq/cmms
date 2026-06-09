@@ -10,13 +10,14 @@ import { Repository, LessThanOrEqual, Between } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { addDays, addWeeks, addMonths, addYears, startOfDay, endOfDay } from 'date-fns';
-import { PmPlan, TriggerType, FrequencyUnit, ChecklistTemplate, PmHistory, PmHistoryStatus } from './entities';
+import { PmPlan, TriggerType, FrequencyUnit, ChecklistTemplate, PmHistory, PmHistoryStatus, SensorReading } from './entities';
 import {
   CreatePmPlanDto,
   UpdatePmPlanDto,
   PmQueryDto,
   CreateChecklistTemplateDto,
   UpdateChecklistTemplateDto,
+  IngestSensorReadingDto,
 } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { WorkOrdersService } from '../work-orders/work-orders.service';
@@ -26,6 +27,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
 import { BlackoutsService } from '../blackouts/blackouts.service';
+import { evalCondition } from './condition.util';
 
 @Injectable()
 export class PmService {
@@ -40,6 +42,8 @@ export class PmService {
     private readonly historyRepository: Repository<PmHistory>,
     @InjectRepository(Asset)
     private readonly assetRepository: Repository<Asset>,
+    @InjectRepository(SensorReading)
+    private readonly sensorReadingRepository: Repository<SensorReading>,
     @Inject(forwardRef(() => WorkOrdersService))
     private readonly workOrdersService: WorkOrdersService,
     @Inject(forwardRef(() => NotificationsService))
@@ -452,6 +456,206 @@ export class PmService {
     }
 
     return { triggered, initialized, skipped };
+  }
+
+  // ==================== CONDITION-BASED MAINTENANCE ====================
+
+  /**
+   * Ingest a sensor reading for an asset, then evaluate any CONDITION-trigger PM
+   * plans for that (asset, metric) against their thresholds — auto-creating a
+   * work order on breach. Gated behind the tenant's `sensors` module.
+   */
+  async ingestSensorReading(
+    dto: IngestSensorReadingDto,
+    tenantId: string,
+  ): Promise<{ readingId: string; triggered: boolean; workOrderId?: string }> {
+    const asset = await this.assetRepository.findOne({
+      where: { id: dto.assetId, tenantId },
+    });
+    if (!asset) {
+      throw new NotFoundException(`Asset ${dto.assetId} not found`);
+    }
+
+    const reading = await this.sensorReadingRepository.save(
+      this.sensorReadingRepository.create({
+        assetId: dto.assetId,
+        metric: dto.metric,
+        value: dto.value,
+        unit: dto.unit,
+        source: dto.source,
+        recordedAt: dto.recordedAt ? new Date(dto.recordedAt) : new Date(),
+        tenantId,
+      }),
+    );
+
+    const result = await this.evaluateConditionPlans(
+      dto.assetId,
+      dto.metric,
+      Number(dto.value),
+      dto.unit,
+      tenantId,
+    );
+
+    return { readingId: reading.id, ...result };
+  }
+
+  /** Find CONDITION plans for (asset, metric), evaluate, and trigger on breach. */
+  private async evaluateConditionPlans(
+    assetId: string,
+    metric: string,
+    value: number,
+    unit: string | undefined,
+    tenantId: string,
+  ): Promise<{ triggered: boolean; workOrderId?: string }> {
+    const plans = await this.pmPlanRepository.find({
+      where: { isActive: true, triggerType: TriggerType.CONDITION, assetId, tenantId },
+    });
+
+    for (const plan of plans) {
+      const cond = (plan.metadata as any)?.condition;
+      if (!cond || cond.metric !== metric) continue;
+
+      const { breached, severity } = evalCondition(value, cond);
+      if (!breached) continue;
+
+      // Debounce: don't re-trigger within the configured window.
+      const debounceMs = Number(cond.debounceMinutes || 0) * 60 * 1000;
+      if (debounceMs > 0 && plan.lastTriggeredAt && Date.now() - new Date(plan.lastTriggeredAt).getTime() < debounceMs) {
+        continue;
+      }
+
+      // Don't stack a second WO while one for this plan is still open.
+      const existingWo = await this.workOrdersService.findAll(
+        { page: 1, limit: 1, pmPlanId: plan.id, status: ['open', 'in_progress', 'on_hold'] as any },
+        tenantId,
+      );
+      if (existingWo.total > 0) continue;
+
+      const woId = await this.triggerConditionWo(plan, metric, value, unit, severity);
+      if (woId) return { triggered: true, workOrderId: woId };
+    }
+
+    return { triggered: false };
+  }
+
+  /** Create the work order + history + notifications for a breached condition plan. */
+  private async triggerConditionWo(
+    plan: PmPlan,
+    metric: string,
+    value: number,
+    unit: string | undefined,
+    severity: 'warning' | 'critical' | null,
+  ): Promise<string | null> {
+    try {
+      const priority = severity === 'critical' ? Priority.HIGH : (plan.priority as Priority);
+      const workOrder = await this.workOrdersService.create(
+        {
+          title: `Condition alert: ${plan.name}`,
+          description: `${metric} = ${value}${unit ? ` ${unit}` : ''} crossed ${severity || 'threshold'} threshold`,
+          type: WorkOrderType.CORRECTIVE,
+          priority,
+          assetId: plan.assetId,
+          pmPlanId: plan.id,
+          checklistTemplateId: plan.checklistTemplateId,
+        },
+        'system',
+        plan.tenantId,
+      );
+
+      await this.historyRepository.save({
+        pmPlanId: plan.id,
+        tenantId: plan.tenantId,
+        woId: workOrder.id,
+        dueAt: new Date(),
+      });
+
+      plan.lastTriggeredAt = new Date();
+      await this.pmPlanRepository.save(plan);
+
+      try {
+        await this.webhooksService.trigger('pm.triggered', {
+          pmPlanId: plan.id,
+          pmPlanName: plan.name,
+          workOrderId: workOrder.id,
+          assetId: plan.assetId,
+          trigger: 'condition',
+        }, plan.tenantId);
+      } catch (err) {
+        this.logger.warn(`webhook pm.triggered failed for condition plan ${plan.id}: ${(err as Error).message}`);
+      }
+
+      try {
+        await this.notificationsService.onPmDue(
+          { id: plan.id, name: plan.name, assetId: plan.assetId },
+          plan.assignedTo ?? [],
+          plan.tenantId,
+        );
+      } catch (err) {
+        this.logger.warn(`notification onPmDue failed for condition plan ${plan.id}: ${(err as Error).message}`);
+      }
+
+      return workOrder.id;
+    } catch (error) {
+      this.logger.error(`Failed to trigger condition PM ${plan.id}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Backstop sweep: re-evaluate every active CONDITION plan against the latest
+   * reading for its metric. Ingestion evaluates inline, so this only catches
+   * plans created/edited after a reading already arrived.
+   */
+  async processConditionPms(): Promise<{ triggered: number; skipped: number }> {
+    let triggered = 0;
+    let skipped = 0;
+
+    const plans = await this.pmPlanRepository.find({
+      where: { isActive: true, triggerType: TriggerType.CONDITION },
+    });
+
+    for (const plan of plans) {
+      const cond = (plan.metadata as any)?.condition;
+      if (!cond || !cond.metric || !plan.assetId) {
+        skipped++;
+        continue;
+      }
+
+      const latest = await this.sensorReadingRepository.findOne({
+        where: { assetId: plan.assetId, metric: cond.metric, tenantId: plan.tenantId },
+        order: { recordedAt: 'DESC' },
+      });
+      if (!latest) {
+        skipped++;
+        continue;
+      }
+
+      const result = await this.evaluateConditionPlans(
+        plan.assetId,
+        cond.metric,
+        Number(latest.value),
+        latest.unit,
+        plan.tenantId,
+      );
+      if (result.triggered) triggered++;
+      else skipped++;
+    }
+
+    return { triggered, skipped };
+  }
+
+  /** Recent sensor readings for an asset (optionally filtered by metric). */
+  async getSensorReadings(
+    assetId: string,
+    tenantId: string,
+    metric?: string,
+    limit = 100,
+  ): Promise<SensorReading[]> {
+    return this.sensorReadingRepository.find({
+      where: { assetId, tenantId, ...(metric ? { metric } : {}) },
+      order: { recordedAt: 'DESC' },
+      take: Math.min(limit, 500),
+    });
   }
 
   private async calculateNextDueDate(plan: PmPlan, tenantId: string): Promise<Date> {

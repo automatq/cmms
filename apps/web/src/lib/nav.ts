@@ -15,6 +15,7 @@ import {
   Sparkles,
   Users,
   Webhook,
+  Bell,
   Clock,
   Shield,
   DollarSign,
@@ -48,6 +49,7 @@ export const settingsSubNav: NavItem[] = [
   { name: 'Members', href: '/dashboard/settings/members', icon: Users },
   { name: 'Teams', href: '/dashboard/settings/teams', icon: Users },
   { name: 'Webhooks', href: '/dashboard/settings/webhooks', icon: Webhook },
+  { name: 'Notifications', href: '/dashboard/settings/notifications', icon: Bell },
   { name: 'Scheduled Reports', href: '/dashboard/settings/scheduled-reports', icon: CalendarClock },
 ]
 

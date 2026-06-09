@@ -14,8 +14,27 @@ import {
   AiFailurePredictionDto,
   AiMaintenanceRecommendationDto,
   AiTroubleshootDto,
+  AiGenerateChecklistDto,
 } from './dto';
 import { AiProvider, AI_PROVIDER, ChatMessage } from './providers/ai-provider.interface';
+
+export interface GeneratedChecklistItem {
+  step: number;
+  instruction: string;
+  requiresPhoto?: boolean;
+  requiresValue?: boolean;
+  unit?: string;
+  passFail?: boolean;
+  safetyNotes?: string;
+  requiredPPE?: string[];
+}
+
+export interface GeneratedChecklist {
+  name: string;
+  description: string;
+  category: string;
+  items: GeneratedChecklistItem[];
+}
 
 interface ConversationContext {
   messages: ChatMessage[];
@@ -299,6 +318,101 @@ ${assetContext}
 Provide step-by-step troubleshooting guide with safety precautions.`;
 
     return this.callAi(prompt, 'You are a maintenance troubleshooting assistant.', 0.4);
+  }
+
+  /**
+   * Generate a draft PM checklist from a manual excerpt or freeform description.
+   * Returns the parsed draft WITHOUT persisting — the UI lets the user review
+   * and save it through the existing checklist-template create path.
+   */
+  async generateChecklist(
+    dto: AiGenerateChecklistDto,
+    tenantId: string,
+  ): Promise<GeneratedChecklist> {
+    let assetContext = '';
+    if (dto.assetId) {
+      const asset = await this.assetRepo.findOne({
+        where: { id: dto.assetId, tenantId },
+        relations: ['category'],
+      });
+      if (asset) {
+        assetContext = `Target asset: ${asset.name} (${asset.assetNumber}), category ${asset.category?.name || 'Unknown'}, manufacturer ${asset.manufacturer || 'n/a'}, model ${asset.model || 'n/a'}.\n`;
+      }
+    }
+
+    const system =
+      'You are a maintenance reliability engineer who writes precise preventive-maintenance checklists. ' +
+      'Respond with ONLY valid JSON (no markdown, no commentary).';
+
+    const prompt = `Create a maintenance checklist based on the following.
+${dto.category ? `Category: ${dto.category}\n` : ''}${assetContext}Source / description:
+${dto.description}
+
+Return JSON exactly of this shape:
+{"name": string, "description": string, "category": string, "items": [{"step": number, "instruction": string, "requiresPhoto"?: boolean, "requiresValue"?: boolean, "unit"?: string, "passFail"?: boolean, "safetyNotes"?: string, "requiredPPE"?: string[]}]}
+Rules: 5-20 concise, actionable steps numbered sequentially from 1; set requiresValue + unit for measurements; set passFail for inspection checks; include safetyNotes/requiredPPE where relevant.`;
+
+    let raw: string;
+    try {
+      raw = await this.provider.chat(
+        [
+          { role: 'system', content: system },
+          { role: 'user', content: prompt },
+        ],
+        { temperature: 0.3, maxTokens: 2000 },
+      );
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error(`AI provider error: ${error?.message || 'Unknown'}`);
+      throw new HttpException('AI service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    return this.parseGeneratedChecklist(raw, dto.category);
+  }
+
+  /** Tolerant JSON extraction + normalization of an AI-generated checklist. */
+  private parseGeneratedChecklist(raw: string, fallbackCategory?: string): GeneratedChecklist {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) {
+      throw new HttpException('AI returned an unparseable checklist', HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw.slice(start, end + 1));
+    } catch {
+      throw new HttpException('AI returned malformed checklist JSON', HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    const rawItems: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+    const items: GeneratedChecklistItem[] = rawItems
+      .filter((it) => it && typeof it.instruction === 'string' && it.instruction.trim())
+      .map((it, idx) => ({
+        step: typeof it.step === 'number' ? it.step : idx + 1,
+        instruction: String(it.instruction).trim(),
+        ...(it.requiresPhoto != null ? { requiresPhoto: !!it.requiresPhoto } : {}),
+        ...(it.requiresValue != null ? { requiresValue: !!it.requiresValue } : {}),
+        ...(typeof it.unit === 'string' ? { unit: it.unit } : {}),
+        ...(it.passFail != null ? { passFail: !!it.passFail } : {}),
+        ...(typeof it.safetyNotes === 'string' ? { safetyNotes: it.safetyNotes } : {}),
+        ...(Array.isArray(it.requiredPPE)
+          ? { requiredPPE: it.requiredPPE.filter((p: unknown) => typeof p === 'string') }
+          : {}),
+      }))
+      // Re-number to guarantee a clean sequential order.
+      .map((it, idx) => ({ ...it, step: idx + 1 }));
+
+    if (items.length === 0) {
+      throw new HttpException('AI returned an empty checklist', HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    return {
+      name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : 'Generated checklist',
+      description: typeof parsed.description === 'string' ? parsed.description : '',
+      category: typeof parsed.category === 'string' && parsed.category ? parsed.category : fallbackCategory || '',
+      items,
+    };
   }
 
   async processNaturalLanguageQuery(query: string): Promise<string> {

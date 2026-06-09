@@ -34,6 +34,7 @@ import {
   Trash2,
   GripVertical,
   Edit,
+  Sparkles,
 } from 'lucide-react'
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -71,6 +72,8 @@ export default function PmTemplatesPage() {
   const [showEditor, setShowEditor] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editorForm, setEditorForm] = useState({ name: '', description: '', category: '', items: [{ ...emptyStep }] })
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiForm, setAiForm] = useState({ description: '', category: '' })
 
   const { data: libraryTemplates = [], isLoading: isLibraryLoading } = useQuery({
     queryKey: ['library-templates'],
@@ -131,6 +134,38 @@ export default function PmTemplatesPage() {
     setEditorForm({ name: '', description: '', category: '', items: [{ ...emptyStep }] })
     setShowEditor(true)
   }
+
+  // Generate a draft with AI, then open the editor prefilled for review/save.
+  const generateMutation = useMutation({
+    mutationFn: (data: { description: string; category?: string }) => api.aiGenerateChecklist(data),
+    onSuccess: (res) => {
+      const draft = res.data
+      setEditingId(null)
+      setEditorForm({
+        name: draft.name || '',
+        description: draft.description || '',
+        category: draft.category || aiForm.category || '',
+        items:
+          draft.items?.length > 0
+            ? draft.items.map((it: any, i: number) => ({
+                step: i + 1,
+                instruction: it.instruction || '',
+                requiresPhoto: !!it.requiresPhoto,
+                requiresValue: !!it.requiresValue,
+                unit: it.unit || '',
+                passFail: !!it.passFail,
+              }))
+            : [{ ...emptyStep }],
+      })
+      setAiOpen(false)
+      setShowEditor(true)
+      toast.success('Draft generated — review and save')
+    },
+    onError: (error: any) => {
+      const msg = error.response?.data?.message
+      toast.error(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to generate checklist')
+    },
+  })
 
   const openEditEditor = (template: any) => {
     setEditingId(template.id)
@@ -214,9 +249,14 @@ export default function PmTemplatesPage() {
             </p>
           </div>
         </div>
-        <Button onClick={openCreateEditor}>
-          <Plus className="h-4 w-4 mr-2" /> Create Template
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => { setAiForm({ description: '', category: '' }); setAiOpen(true) }}>
+            <Sparkles className="h-4 w-4 mr-2" /> Generate with AI
+          </Button>
+          <Button onClick={openCreateEditor}>
+            <Plus className="h-4 w-4 mr-2" /> Create Template
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -428,6 +468,59 @@ export default function PmTemplatesPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate with AI Dialog */}
+      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate checklist with AI</DialogTitle>
+            <DialogDescription>
+              Paste a manual excerpt or describe the equipment and task. We'll draft a checklist for you to review and save.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!aiForm.description.trim()) {
+                toast.error('Add a description or manual excerpt')
+                return
+              }
+              generateMutation.mutate({
+                description: aiForm.description,
+                category: aiForm.category || undefined,
+              })
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label>Category (optional)</Label>
+              <Input
+                value={aiForm.category}
+                onChange={(e) => setAiForm({ ...aiForm, category: e.target.value })}
+                placeholder="e.g. HVAC, Pumps, Electrical"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description / manual excerpt *</Label>
+              <Textarea
+                value={aiForm.description}
+                onChange={(e) => setAiForm({ ...aiForm, description: e.target.value })}
+                placeholder="e.g. Monthly inspection for a centrifugal pump: check seals, bearings, vibration, lubrication…"
+                className="min-h-[140px]"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAiOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={generateMutation.isPending}>
+                <Sparkles className="h-4 w-4 mr-2" />
+                {generateMutation.isPending ? 'Generating…' : 'Generate draft'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

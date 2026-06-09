@@ -23,6 +23,7 @@ import {
   ArrowLeft, Clock, Wrench, MapPin, Target, FileText,
   Settings2, Plus, Trash2, Upload, Download,
   DollarSign, Paperclip, ClipboardCheck, Users, File as FileIcon,
+  AlertTriangle, CalendarClock,
 } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
 import { formatDate, formatCurrency } from '@/lib/utils'
@@ -378,6 +379,22 @@ export default function WorkOrderDetailPage() {
                                     {wo.asset.name}
                                 </Link>
                             )}
+                            {wo.dueDate && (() => {
+                                const overdue =
+                                    new Date(wo.dueDate) < new Date() &&
+                                    (wo.status === 'open' || wo.status === 'in_progress')
+                                return overdue ? (
+                                    <span className="flex items-center gap-1.5 font-medium text-destructive">
+                                        <AlertTriangle className="h-3.5 w-3.5" />
+                                        Overdue · due {formatDate(wo.dueDate)}
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-1.5">
+                                        <CalendarClock className="h-3.5 w-3.5" />
+                                        Due {formatDate(wo.dueDate)}
+                                    </span>
+                                )
+                            })()}
                         </div>
                     </div>
                 </div>
@@ -734,7 +751,7 @@ export default function WorkOrderDetailPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-5">
-                            <AssigneeControl workOrderId={id} assignedTo={wo.assignedTo} />
+                            <AssigneeControl workOrderId={id} assignedTo={wo.assignedTo} assignees={wo.assignees} />
                         </CardContent>
                     </Card>
 

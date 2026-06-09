@@ -54,7 +54,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Update current user notification preferences' })
   @ApiResponse({ status: 200, description: 'Preferences updated' })
   updateMyPreferences(
-    @Body('notificationPreferences') preferences: Record<string, boolean>,
+    @Body('notificationPreferences') preferences: Record<string, unknown>,
     @CurrentUser() user: RequestUser,
   ) {
     return this.usersService.update(user.userId, { notificationPreferences: preferences }, user.tenantId);

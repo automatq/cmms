@@ -30,6 +30,17 @@ class ChecklistItemDto {
   @IsOptional()
   @IsBoolean()
   passFail?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  safetyNotes?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  requiredPPE?: string[];
 }
 
 export class CreateChecklistTemplateDto {

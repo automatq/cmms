@@ -118,6 +118,8 @@ export class NotificationsService {
     const templateFiles = [
       'wo-assigned',
       'wo-completed',
+      'wo-due-soon',
+      'wo-overdue',
       'pm-due',
       'low-stock',
       'work-request',
@@ -303,6 +305,123 @@ export class NotificationsService {
     return this.pushTokenRepository.find({ where: { userId, tenantId } });
   }
 
+  // ==================== EXTRA CHANNELS (SMS / Slack / Teams / Push) ====================
+
+  /** Send an SMS via Twilio's REST API. No-op (returns false) if unconfigured. */
+  async sendSms(toPhone: string, body: string): Promise<boolean> {
+    const sid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
+    const token = this.configService.get<string>('TWILIO_AUTH_TOKEN');
+    const from = this.configService.get<string>('TWILIO_FROM');
+    if (!sid || !token || !from || !toPhone) {
+      this.logger.debug('SMS transport not configured; skipped');
+      return false;
+    }
+    try {
+      const params = new URLSearchParams({ To: toPhone, From: from, Body: body });
+      const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
+      if (!res.ok) {
+        this.logger.error(`Twilio SMS failed (${res.status}) -> ${toPhone}`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.logger.error(`SMS send failed -> ${toPhone}: ${error instanceof Error ? error.message : error}`);
+      return false;
+    }
+  }
+
+  /** Post a message to a Slack incoming-webhook URL. */
+  async sendSlack(webhookUrl: string, title: string, message: string): Promise<boolean> {
+    if (!webhookUrl) return false;
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `*${title}*\n${message}` }),
+      });
+      return res.ok;
+    } catch (error) {
+      this.logger.error(`Slack send failed: ${error instanceof Error ? error.message : error}`);
+      return false;
+    }
+  }
+
+  /** Post a message to a Microsoft Teams incoming-webhook URL. */
+  async sendTeams(webhookUrl: string, title: string, message: string): Promise<boolean> {
+    if (!webhookUrl) return false;
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, text: message }),
+      });
+      return res.ok;
+    } catch (error) {
+      this.logger.error(`Teams send failed: ${error instanceof Error ? error.message : error}`);
+      return false;
+    }
+  }
+
+  /** Send an Expo push notification to a user's registered devices. */
+  async sendPush(
+    userId: string,
+    title: string,
+    body: string,
+    data: Record<string, unknown>,
+    tenantId: string,
+  ): Promise<boolean> {
+    const tokens = await this.getUserPushTokens(userId, tenantId);
+    if (tokens.length === 0) return false;
+    try {
+      const messages = tokens.map((t) => ({ to: t.token, title, body, data, sound: 'default' }));
+      const res = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messages),
+      });
+      return res.ok;
+    } catch (error) {
+      this.logger.error(`Push send failed -> user ${userId}: ${error instanceof Error ? error.message : error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Fan a notification out to a user's enabled extra channels (SMS / Slack /
+   * Teams / push). In-app + email are handled by the event methods; this adds
+   * the opt-in channels based on the user's notificationPreferences. Each send
+   * is isolated so one failing channel never blocks the others.
+   */
+  private async deliverExtraChannels(
+    user: User,
+    title: string,
+    message: string,
+    data: Record<string, unknown>,
+    tenantId: string,
+  ): Promise<void> {
+    const prefs = user.notificationPreferences || {};
+
+    if (prefs.channel_sms_enabled && (prefs as any).channel_sms_phone) {
+      await this.sendSms(String((prefs as any).channel_sms_phone), `${title}: ${message}`);
+    }
+    if (prefs.channel_slack_enabled && (prefs as any).channel_slack_webhook) {
+      await this.sendSlack(String((prefs as any).channel_slack_webhook), title, message);
+    }
+    if (prefs.channel_teams_enabled && (prefs as any).channel_teams_webhook) {
+      await this.sendTeams(String((prefs as any).channel_teams_webhook), title, message);
+    }
+    if (prefs.channel_push_enabled !== false) {
+      await this.sendPush(user.id, title, message, data, tenantId);
+    }
+  }
+
   // ==================== EVENT TRIGGERS ====================
 
   async onWoStatusChanged(
@@ -375,6 +494,14 @@ export class NotificationsService {
           appUrl: this.appUrl,
         });
       }
+
+      await this.deliverExtraChannels(
+        user,
+        'PM plan due',
+        `Preventive maintenance "${pmPlan.name}" is due`,
+        { pmPlanId: pmPlan.id },
+        tenantId,
+      );
     }
   }
 
@@ -500,6 +627,125 @@ export class NotificationsService {
         woId: workOrder.id,
         appUrl: this.appUrl,
       });
+    }
+
+    await this.deliverExtraChannels(
+      user,
+      'Work order assigned to you',
+      `${workOrder.woNumber}${workOrder.title ? ` — ${workOrder.title}` : ''}`,
+      { workOrderId: workOrder.id },
+      tenantId,
+    );
+  }
+
+  /**
+   * Resolve the assignee + creator of a work order to tenant-member User rows
+   * (deduped). Shared by the SLA due-soon / overdue notifiers.
+   */
+  private async resolveWoStakeholders(
+    workOrder: { assignedToId?: string | null; createdById?: string | null },
+    tenantId: string,
+  ): Promise<User[]> {
+    const userIds = [
+      ...new Set([workOrder.assignedToId, workOrder.createdById].filter(Boolean)),
+    ] as string[];
+    if (userIds.length === 0) return [];
+    return this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .where('user.id IN (:...userIds)', { userIds })
+      .getMany();
+  }
+
+  /** Notify stakeholders that a work order is approaching its SLA due date. */
+  async onWoDueSoon(
+    workOrder: {
+      id: string;
+      woNumber: string;
+      title?: string;
+      dueDate?: Date | string | null;
+      assignedToId?: string | null;
+      createdById?: string | null;
+    },
+    tenantId: string,
+  ): Promise<void> {
+    const due = workOrder.dueDate ? new Date(workOrder.dueDate).toLocaleString() : '';
+    const users = await this.resolveWoStakeholders(workOrder, tenantId);
+
+    for (const user of users) {
+      await this.createNotification(
+        user.id,
+        NotificationType.WO_DUE_SOON,
+        'Work order due soon',
+        `${workOrder.woNumber}${workOrder.title ? ` — ${workOrder.title}` : ''} is due ${due}`,
+        { workOrderId: workOrder.id },
+        tenantId,
+      );
+
+      if (user.email && user.notificationPreferences?.email_wo_due_soon !== false) {
+        await this.sendEmail(user.email, `Due soon: ${workOrder.woNumber}`, 'wo-due-soon', {
+          woNumber: workOrder.woNumber,
+          title: workOrder.title,
+          dueDate: due,
+          woId: workOrder.id,
+          appUrl: this.appUrl,
+        });
+      }
+
+      await this.deliverExtraChannels(
+        user,
+        'Work order due soon',
+        `${workOrder.woNumber}${workOrder.title ? ` — ${workOrder.title}` : ''} is due ${due}`,
+        { workOrderId: workOrder.id },
+        tenantId,
+      );
+    }
+  }
+
+  /** Notify stakeholders that a work order has breached its SLA due date. */
+  async onWoOverdue(
+    workOrder: {
+      id: string;
+      woNumber: string;
+      title?: string;
+      dueDate?: Date | string | null;
+      assignedToId?: string | null;
+      createdById?: string | null;
+    },
+    level: number,
+    tenantId: string,
+  ): Promise<void> {
+    const due = workOrder.dueDate ? new Date(workOrder.dueDate).toLocaleString() : '';
+    const users = await this.resolveWoStakeholders(workOrder, tenantId);
+
+    for (const user of users) {
+      await this.createNotification(
+        user.id,
+        NotificationType.WO_OVERDUE,
+        'Work order overdue',
+        `${workOrder.woNumber}${workOrder.title ? ` — ${workOrder.title}` : ''} is overdue (escalation level ${level})`,
+        { workOrderId: workOrder.id, escalationLevel: level },
+        tenantId,
+      );
+
+      if (user.email && user.notificationPreferences?.email_wo_overdue !== false) {
+        await this.sendEmail(user.email, `Overdue: ${workOrder.woNumber}`, 'wo-overdue', {
+          woNumber: workOrder.woNumber,
+          title: workOrder.title,
+          dueDate: due,
+          level,
+          woId: workOrder.id,
+          appUrl: this.appUrl,
+        });
+      }
+
+      await this.deliverExtraChannels(
+        user,
+        'Work order overdue',
+        `${workOrder.woNumber}${workOrder.title ? ` — ${workOrder.title}` : ''} is overdue (level ${level})`,
+        { workOrderId: workOrder.id, escalationLevel: level },
+        tenantId,
+      );
     }
   }
 

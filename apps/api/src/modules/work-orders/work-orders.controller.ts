@@ -35,6 +35,7 @@ import {
   CreateCommentDto,
   SaveChecklistDto,
   CreateWorkRequestDto,
+  AddAssigneeDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -192,6 +193,32 @@ export class WorkOrdersController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.workOrdersService.removeLabor(id, laborId, user.tenantId);
+  }
+
+  // ==================== ADDITIONAL ASSIGNEES (crew) ====================
+
+  @Post(':id/assignees')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Add a technician to the work order crew' })
+  @ApiResponse({ status: 201, description: 'Assignee added' })
+  addAssignee(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddAssigneeDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.addAssignee(id, dto.userId, user.userId, user.tenantId);
+  }
+
+  @Delete(':id/assignees/:userId')
+  @Permissions('work_orders:write')
+  @ApiOperation({ summary: 'Remove a technician from the work order crew' })
+  @ApiResponse({ status: 200, description: 'Assignee removed' })
+  removeAssignee(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.workOrdersService.removeAssignee(id, userId, user.tenantId);
   }
 
   // ==================== COMMENTS ====================

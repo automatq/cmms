@@ -73,10 +73,15 @@ export default function WorkOrdersPage() {
         title="Work Orders"
         description="Track and manage maintenance work orders"
         actions={
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Work Order
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/work-orders/templates">Templates</Link>
+            </Button>
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Work Order
+            </Button>
+          </div>
         }
       />
 

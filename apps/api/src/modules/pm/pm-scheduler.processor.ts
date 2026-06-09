@@ -53,6 +53,11 @@ export class PmSchedulerProcessor extends WorkerHost implements OnModuleInit {
       this.logger.log(
         `Meter PM result: ${meterResult.triggered} triggered, ${meterResult.initialized} baselines initialized, ${meterResult.skipped} skipped`,
       );
+
+      const conditionResult = await this.pmService.processConditionPms();
+      this.logger.log(
+        `Condition PM result: ${conditionResult.triggered} triggered, ${conditionResult.skipped} skipped`,
+      );
     }
   }
 

@@ -16,6 +16,7 @@ import {
   AiFailurePredictionDto,
   AiMaintenanceRecommendationDto,
   AiTroubleshootDto,
+  AiGenerateChecklistDto,
 } from './dto';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -73,5 +74,11 @@ export class AiController {
   @Permissions('ai:read')
   troubleshoot(@Body() dto: AiTroubleshootDto, @CurrentUser() user: RequestUser) {
     return this.aiService.troubleshoot(dto, user.tenantId);
+  }
+
+  @Post('generate-checklist')
+  @Permissions('ai:read')
+  generateChecklist(@Body() dto: AiGenerateChecklistDto, @CurrentUser() user: RequestUser) {
+    return this.aiService.generateChecklist(dto, user.tenantId);
   }
 }

@@ -50,6 +50,11 @@ export class CreateWorkOrderDto {
   @IsDateString()
   scheduledEnd?: string;
 
+  @ApiPropertyOptional({ description: 'SLA target completion time; drives due-soon/overdue escalation' })
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

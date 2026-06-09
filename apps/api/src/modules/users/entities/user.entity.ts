@@ -63,8 +63,10 @@ export class User {
   @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true, name: 'hourly_rate' })
   hourlyRate: number;
 
+  // Mixed values: per-event email toggles (boolean) plus channel config such as
+  // SMS phone / Slack & Teams webhook URLs (string) and channel enable flags.
   @Column({ type: 'jsonb', default: {}, name: 'notification_preferences' })
-  notificationPreferences: Record<string, boolean>;
+  notificationPreferences: Record<string, unknown>;
 
   @ManyToMany(() => Role, (role) => role.users, { eager: true })
   @JoinTable({

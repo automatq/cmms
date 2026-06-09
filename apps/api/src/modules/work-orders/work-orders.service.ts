@@ -19,6 +19,7 @@ import {
   WoComment,
   WorkRequest,
   WorkRequestStatus,
+  WoAssignee,
 } from './entities';
 import {
   CreateWorkOrderDto,
@@ -39,6 +40,7 @@ import { DowntimeService } from '../assets/downtime.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 import { STATUS_TRANSITIONS } from './state-machine';
+import { isDueSoon, overdueEscalationLevel } from './sla.util';
 
 @Injectable()
 export class WorkOrdersService {
@@ -71,6 +73,8 @@ export class WorkOrdersService {
     private readonly webhooksService: WebhooksService,
     @InjectRepository(ChecklistTemplate)
     private readonly checklistTemplateRepository: Repository<ChecklistTemplate>,
+    @InjectRepository(WoAssignee)
+    private readonly assigneeRepository: Repository<WoAssignee>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -196,6 +200,8 @@ export class WorkOrdersService {
         'parts',
         'attachments',
         'checklistResults',
+        'assignees',
+        'assignees.user',
       ],
     });
 
@@ -228,6 +234,44 @@ export class WorkOrdersService {
     }
 
     return updated;
+  }
+
+  // ==================== ADDITIONAL ASSIGNEES (crew) ====================
+
+  /** Add a technician to a work order's crew (beyond the primary assignee). */
+  async addAssignee(
+    woId: string,
+    assigneeUserId: string,
+    actorUserId: string,
+    tenantId: string,
+  ): Promise<WorkOrder> {
+    const workOrder = await this.findOne(woId, tenantId);
+
+    const existing = await this.assigneeRepository.findOne({
+      where: { woId, userId: assigneeUserId, tenantId },
+    });
+    if (!existing) {
+      await this.assigneeRepository.save(
+        this.assigneeRepository.create({ woId, userId: assigneeUserId, tenantId }),
+      );
+      // Notify the added technician (unless they added themselves).
+      if (assigneeUserId !== actorUserId) {
+        await this.notificationsService.onWorkOrderAssigned(
+          { id: workOrder.id, woNumber: workOrder.woNumber, title: workOrder.title },
+          assigneeUserId,
+          tenantId,
+        );
+      }
+    }
+
+    return this.findOne(woId, tenantId);
+  }
+
+  /** Remove a technician from a work order's crew. */
+  async removeAssignee(woId: string, assigneeUserId: string, tenantId: string): Promise<WorkOrder> {
+    await this.findOne(woId, tenantId);
+    await this.assigneeRepository.delete({ woId, userId: assigneeUserId, tenantId });
+    return this.findOne(woId, tenantId);
   }
 
   async delete(id: string, tenantId: string): Promise<void> {
@@ -881,8 +925,63 @@ export class WorkOrdersService {
         statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS],
       })
       .andWhere('wo.tenantId = :tenantId', { tenantId })
-      .andWhere('wo.scheduledEnd < :now', { now })
+      // Prefer the explicit SLA dueDate; fall back to the scheduled end for
+      // work orders that don't carry an SLA target.
+      .andWhere('COALESCE(wo.dueDate, wo.scheduledEnd) < :now', { now })
       .getCount();
+  }
+
+  /**
+   * SLA sweep (run by the sla-escalation scheduler across all tenants):
+   *  - fires WO_DUE_SOON once when an open WO enters the 24h pre-due window;
+   *  - escalates overdue WOs through levels 1/2/3 (now / +24h / +72h past due),
+   *    notifying assignee + creator only when a new threshold is crossed so the
+   *    every-15-min cadence doesn't spam.
+   */
+  async processSlaEscalations(): Promise<{ dueSoon: number; overdue: number; escalated: number }> {
+    const now = Date.now();
+
+    const workOrders = await this.workOrderRepository
+      .createQueryBuilder('wo')
+      .where('wo.status IN (:...statuses)', {
+        statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS],
+      })
+      .andWhere('wo.dueDate IS NOT NULL')
+      .getMany();
+
+    let dueSoon = 0;
+    let overdue = 0;
+    let escalated = 0;
+
+    for (const wo of workOrders) {
+      const due = new Date(wo.dueDate).getTime();
+      const meta = (wo.metadata || {}) as Record<string, unknown>;
+
+      if (due > now) {
+        // Upcoming — fire the due-soon nudge once when it enters the window.
+        if (isDueSoon(due, now) && !meta.slaDueSoonNotified) {
+          meta.slaDueSoonNotified = true;
+          wo.metadata = meta;
+          await this.workOrderRepository.save(wo);
+          await this.notificationsService.onWoDueSoon(wo, wo.tenantId);
+          dueSoon++;
+        }
+        continue;
+      }
+
+      // Overdue — escalate to the highest threshold crossed so far.
+      overdue++;
+      const hoursOver = (now - due) / (60 * 60 * 1000);
+      const targetLevel = overdueEscalationLevel(hoursOver);
+      if (targetLevel > (wo.escalationLevel || 0)) {
+        wo.escalationLevel = targetLevel;
+        await this.workOrderRepository.save(wo);
+        await this.notificationsService.onWoOverdue(wo, targetLevel, wo.tenantId);
+        escalated++;
+      }
+    }
+
+    return { dueSoon, overdue, escalated };
   }
 
   async findByAsset(assetId: string, tenantId: string): Promise<WorkOrder[]> {

@@ -16,6 +16,7 @@ import { WoLabor } from './wo-labor.entity';
 import { WoPart } from './wo-part.entity';
 import { WoAttachment } from './wo-attachment.entity';
 import { WoChecklistResult } from './wo-checklist-result.entity';
+import { WoAssignee } from './wo-assignee.entity';
 import { TenantAwareEntity } from '../../../common/entities/tenant-aware.entity';
 
 export enum WorkOrderType {
@@ -108,6 +109,16 @@ export class WorkOrder extends TenantAwareEntity {
   @Column({ type: 'timestamptz', nullable: true, name: 'scheduled_end' })
   scheduledEnd: Date;
 
+  // SLA target completion time. Distinct from scheduledEnd (a plan): missing
+  // this drives the WO_DUE_SOON / WO_OVERDUE escalation pipeline.
+  @Column({ type: 'timestamptz', nullable: true, name: 'due_date' })
+  dueDate: Date;
+
+  // How many escalation steps have already fired for an overdue WO, so the
+  // SLA scheduler re-notifies only when it crosses a new threshold.
+  @Column({ type: 'int', default: 0, name: 'escalation_level' })
+  escalationLevel: number;
+
   @Column({ type: 'timestamptz', nullable: true, name: 'actual_start' })
   actualStart: Date;
 
@@ -176,6 +187,9 @@ export class WorkOrder extends TenantAwareEntity {
 
   @OneToMany(() => WoChecklistResult, (result) => result.workOrder, { cascade: true })
   checklistResults: WoChecklistResult[];
+
+  @OneToMany(() => WoAssignee, (a) => a.workOrder, { cascade: true })
+  assignees: WoAssignee[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

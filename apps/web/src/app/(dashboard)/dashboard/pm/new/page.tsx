@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 export default function NewPmPlanPage() {
   const router = useRouter()
@@ -26,6 +27,12 @@ export default function NewPmPlanPage() {
     assetId: '',
     isActive: true,
     skipBlackouts: true,
+    // Condition (sensor) trigger config
+    conditionMetric: '',
+    conditionOperator: 'gt',
+    conditionWarning: '',
+    conditionCritical: '',
+    conditionDebounce: '60',
   })
 
   const { data: assets } = useQuery({
@@ -46,6 +53,36 @@ export default function NewPmPlanPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Condition (sensor) trigger: send a clean payload with the rule in metadata.
+    if (formData.triggerType === 'condition') {
+      if (!formData.assetId) {
+        toast.error('Condition-based PM requires an asset')
+        return
+      }
+      if (!formData.conditionMetric.trim() || formData.conditionCritical === '') {
+        toast.error('Set a metric and a critical threshold')
+        return
+      }
+      createMutation.mutate({
+        name: formData.name,
+        description: formData.description || undefined,
+        assetId: formData.assetId,
+        triggerType: 'condition',
+        ignoreBlackouts: !formData.skipBlackouts,
+        metadata: {
+          condition: {
+            metric: formData.conditionMetric.trim(),
+            operator: formData.conditionOperator,
+            criticalThreshold: Number(formData.conditionCritical),
+            ...(formData.conditionWarning !== '' ? { warningThreshold: Number(formData.conditionWarning) } : {}),
+            ...(formData.conditionDebounce !== '' ? { debounceMinutes: Number(formData.conditionDebounce) } : {}),
+          },
+        },
+      })
+      return
+    }
+
     const { skipBlackouts, ...rest } = formData
     const data = {
       ...rest,
@@ -123,8 +160,69 @@ export default function NewPmPlanPage() {
                 <option value="time">Time Based</option>
                 <option value="meter">Meter Based</option>
                 <option value="both">Time or Meter</option>
+                <option value="condition">Condition (sensor)</option>
               </Select>
             </div>
+            {formData.triggerType === 'condition' && (
+              <div className="space-y-4 rounded-lg border border-dashed p-4">
+                <p className="text-sm text-muted-foreground">
+                  Auto-create a work order when an ingested sensor reading for this asset crosses a threshold.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="conditionMetric">Metric *</Label>
+                    <Input
+                      id="conditionMetric"
+                      value={formData.conditionMetric}
+                      onChange={(e) => setFormData({ ...formData, conditionMetric: e.target.value })}
+                      placeholder="e.g. temperature"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="conditionOperator">Trigger when</Label>
+                    <Select
+                      id="conditionOperator"
+                      value={formData.conditionOperator}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, conditionOperator: e.target.value })}
+                    >
+                      <option value="gt">Reading is at or above</option>
+                      <option value="lt">Reading is at or below</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="conditionWarning">Warning threshold</Label>
+                    <Input
+                      id="conditionWarning"
+                      type="number"
+                      value={formData.conditionWarning}
+                      onChange={(e) => setFormData({ ...formData, conditionWarning: e.target.value })}
+                      placeholder="optional"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="conditionCritical">Critical threshold *</Label>
+                    <Input
+                      id="conditionCritical"
+                      type="number"
+                      value={formData.conditionCritical}
+                      onChange={(e) => setFormData({ ...formData, conditionCritical: e.target.value })}
+                      placeholder="e.g. 80"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="conditionDebounce">Debounce (minutes)</Label>
+                    <Input
+                      id="conditionDebounce"
+                      type="number"
+                      value={formData.conditionDebounce}
+                      onChange={(e) => setFormData({ ...formData, conditionDebounce: e.target.value })}
+                      placeholder="60"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">Select the asset below — required for condition triggers.</p>
+              </div>
+            )}
             {(formData.triggerType === 'time' || formData.triggerType === 'both') && (
               <div className="space-y-2">
                 <Label htmlFor="intervalDays">Interval (Days)</Label>
