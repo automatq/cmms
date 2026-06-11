@@ -749,6 +749,51 @@ export class NotificationsService {
     }
   }
 
+  /** Notify every member of a team that a work order was assigned to their team. */
+  async onWorkOrderAssignedToTeam(
+    workOrder: { id: string; woNumber: string; title?: string },
+    memberUserIds: string[],
+    teamName: string,
+    tenantId: string,
+  ): Promise<void> {
+    const ids = [...new Set(memberUserIds.filter(Boolean))];
+    if (ids.length === 0) return;
+
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })
+      .where('user.id IN (:...ids)', { ids })
+      .getMany();
+
+    for (const user of users) {
+      await this.createNotification(
+        user.id,
+        NotificationType.WO_ASSIGNED,
+        `Work order assigned to ${teamName}`,
+        `${workOrder.woNumber}${workOrder.title ? ` — ${workOrder.title}` : ''}`,
+        { workOrderId: workOrder.id },
+        tenantId,
+      );
+
+      if (user.email && user.notificationPreferences?.email_wo_assigned !== false) {
+        await this.sendEmail(user.email, `Assigned to ${teamName}: ${workOrder.woNumber}`, 'wo-assigned', {
+          woNumber: workOrder.woNumber,
+          title: workOrder.title,
+          woId: workOrder.id,
+          appUrl: this.appUrl,
+        });
+      }
+
+      await this.deliverExtraChannels(
+        user,
+        `Work order assigned to ${teamName}`,
+        `${workOrder.woNumber}${workOrder.title ? ` — ${workOrder.title}` : ''}`,
+        { workOrderId: workOrder.id },
+        tenantId,
+      );
+    }
+  }
+
   /**
    * Notify users @mentioned in a work-order comment. Mentioned ids are validated
    * to be members of the tenant (so a client can't notify arbitrary users), and

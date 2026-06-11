@@ -31,6 +31,8 @@ import { ActivityModule } from './modules/activity/activity.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { BlackoutsModule } from './modules/blackouts/blackouts.module';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { FeatureGateGuard } from './common/guards/feature-gate.guard';
 import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
 import { HealthController } from './health.controller';
@@ -143,6 +145,8 @@ import { HealthController } from './health.controller';
     WebhooksModule,
     ImportsModule,
     BlackoutsModule,
+    ApiKeysModule,
+    AuditModule,
   ],
   controllers: [HealthController],
   providers: [

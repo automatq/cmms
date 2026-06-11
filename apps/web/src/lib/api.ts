@@ -58,6 +58,10 @@ class ApiClient {
     return this.client.get(`/assets/${id}`)
   }
 
+  async getAssetHealth(id: string) {
+    return this.client.get(`/assets/${id}/health`)
+  }
+
   async createAsset(data: any) {
     return this.client.post('/assets', data)
   }
@@ -432,6 +436,28 @@ class ApiClient {
 
   async updateNotificationPreferences(preferences: Record<string, unknown>) {
     return this.client.patch('/users/me/preferences', { notificationPreferences: preferences })
+  }
+
+  // API Keys
+  async getApiKeys() {
+    return this.client.get('/api-keys')
+  }
+
+  async getApiKeyScopes() {
+    return this.client.get('/api-keys/scopes')
+  }
+
+  async createApiKey(data: { name: string; permissions: string[] }) {
+    return this.client.post('/api-keys', data)
+  }
+
+  async revokeApiKey(id: string) {
+    return this.client.delete(`/api-keys/${id}`)
+  }
+
+  // Audit log
+  async getAuditLogs(params?: { resourceType?: string; resourceId?: string }) {
+    return this.client.get('/audit-logs', { params })
   }
 
   // CSV Import/Export

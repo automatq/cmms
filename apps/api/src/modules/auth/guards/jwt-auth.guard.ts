@@ -12,6 +12,7 @@ import { fromNodeHeaders } from 'better-auth/node';
 import type { Auth } from 'better-auth';
 import { InjectBetterAuth } from 'nestjs-better-auth';
 import { Pool } from 'pg';
+import { createHash } from 'crypto';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 import { PlanTier, TenantStatus } from '../../users/entities/tenant.entity';
@@ -97,6 +98,16 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
+
+    // API-key path: integrations send the raw token in `x-api-key`. The key
+    // authenticates as its creating user (keeps FK columns like createdById
+    // valid) but carries only the key's scoped permissions.
+    const apiKeyHeader = request.headers['x-api-key'];
+    if (typeof apiKeyHeader === 'string' && apiKeyHeader.startsWith('mk_')) {
+      request.user = await this.authenticateApiKey(apiKeyHeader);
+      return true;
+    }
+
     const headers = fromNodeHeaders(request.headers);
 
     let session: Awaited<ReturnType<typeof this.auth.api.getSession>>;
@@ -220,5 +231,63 @@ export class JwtAuthGuard implements CanActivate {
 
     request.user = requestUser;
     return true;
+  }
+
+  /**
+   * Resolve a raw `mk_…` token to a RequestUser. Uses the same raw pool the
+   * session path uses for org-status checks (no extra DI on the guard).
+   */
+  private async authenticateApiKey(rawKey: string): Promise<RequestUser> {
+    const keyHash = createHash('sha256').update(rawKey).digest('hex');
+
+    let row: any;
+    try {
+      const res = await getPool().query(
+        `SELECT k.id, k.tenant_id, k.permissions, k.created_by, o.status, o.plan, o.trial_ends_at
+         FROM api_keys k
+         JOIN organizations o ON o.id = k.tenant_id
+         WHERE k.key_hash = $1 AND k.revoked_at IS NULL
+         LIMIT 1`,
+        [keyHash],
+      );
+      row = res.rows[0];
+    } catch (err) {
+      this.logger.error('API key lookup failed', err);
+      throw new UnauthorizedException('Authentication required');
+    }
+
+    if (!row) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    // Mirror the session path's billing gate so an expired trial blocks
+    // API-key callers too (and lazily flips the org to suspended).
+    if (process.env.BILLING_ENFORCED === 'true') {
+      if (row.status === 'trial' && row.trial_ends_at && new Date(row.trial_ends_at) < new Date()) {
+        row.status = TenantStatus.SUSPENDED;
+        getPool()
+          .query(`UPDATE organizations SET status = 'suspended', updated_at = now() WHERE id = $1`, [row.tenant_id])
+          .catch(() => undefined);
+      }
+    }
+    if (row.status === TenantStatus.SUSPENDED || row.status === TenantStatus.CANCELLED) {
+      throw new ForbiddenException('Organization is not active');
+    }
+
+    // Best-effort usage stamp; never block the request on it.
+    getPool()
+      .query(`UPDATE api_keys SET last_used_at = now() WHERE id = $1`, [row.id])
+      .catch(() => undefined);
+
+    return {
+      userId: row.created_by,
+      tenantId: row.tenant_id,
+      email: '',
+      plan: (row.plan as PlanTier) || PlanTier.FREE,
+      permissions: Array.isArray(row.permissions) ? row.permissions : [],
+      roles: ['api-key'],
+      systemRole: null,
+      impersonatedBy: null,
+    };
   }
 }

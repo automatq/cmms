@@ -49,6 +49,12 @@ export class UpdateWorkOrderDto {
   @IsUUID()
   assignedToId?: string | null;
 
+  @ApiPropertyOptional({ description: 'Team id to assign the work order to; null to unassign — notifies team members' })
+  @IsOptional()
+  @ValidateIf((o) => o.teamId !== null && o.teamId !== '')
+  @IsUUID()
+  teamId?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()

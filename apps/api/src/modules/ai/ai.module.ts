@@ -9,6 +9,9 @@ import { AssetMeter } from '../assets/entities/asset-meter.entity';
 import { AssetDowntime } from '../assets/entities/asset-downtime.entity';
 import { AssetConditionLog } from '../assets/entities/asset-condition-log.entity';
 import { PmHistory } from '../pm/entities/pm-history.entity';
+import { PmPlan } from '../pm/entities/pm-plan.entity';
+import { Part } from '../inventory/entities/part.entity';
+import { InventoryStock } from '../inventory/entities/inventory-stock.entity';
 import { AI_PROVIDER } from './providers/ai-provider.interface';
 import { OllamaProvider } from './providers/ollama.provider';
 import { BedrockProvider } from './providers/bedrock.provider';
@@ -17,7 +20,17 @@ import { AnthropicProvider } from './providers/anthropic.provider';
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([WorkOrder, Asset, AssetMeter, AssetDowntime, AssetConditionLog, PmHistory]),
+    TypeOrmModule.forFeature([
+      WorkOrder,
+      Asset,
+      AssetMeter,
+      AssetDowntime,
+      AssetConditionLog,
+      PmHistory,
+      PmPlan,
+      Part,
+      InventoryStock,
+    ]),
   ],
   controllers: [AiController],
   providers: [

@@ -27,6 +27,8 @@ import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 import { Asset } from '../assets/entities/asset.entity';
 import { TenantModule } from '../../common/tenant/tenant.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
+import { UsersModule } from '../users/users.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
     forwardRef(() => InventoryModule),
     forwardRef(() => AssetsModule),
     forwardRef(() => WebhooksModule),
+    forwardRef(() => UsersModule),
+    AuditModule,
     TenantModule,
   ],
   providers: [WorkOrdersService, SlaEscalationProcessor, WoTemplatesService],

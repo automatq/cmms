@@ -8,7 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull, In } from 'typeorm';
+import { Repository, IsNull, In, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as QRCode from 'qrcode';
 import { randomBytes } from 'crypto';
@@ -19,8 +19,10 @@ import {
   AssetCategory,
   AssetDocument,
   AssetMeter,
+  AssetDowntime,
   Location,
 } from './entities';
+import { computeHealthScore, HealthScore } from './health.util';
 import {
   CreateAssetDto,
   UpdateAssetDto,
@@ -62,6 +64,8 @@ export class AssetsService {
     private readonly documentRepository: Repository<AssetDocument>,
     @InjectRepository(AssetMeter)
     private readonly meterRepository: Repository<AssetMeter>,
+    @InjectRepository(AssetDowntime)
+    private readonly downtimeRepository: Repository<AssetDowntime>,
     @InjectRepository(Location)
     private readonly locationRepository: Repository<Location>,
     @Inject(forwardRef(() => FilesService))
@@ -266,6 +270,29 @@ export class AssetsService {
     }
 
     return this.decorateAsset(asset);
+  }
+
+  /**
+   * Rule-based health score for an asset, from its latest condition rating and
+   * downtime over the last 90 days. See computeHealthScore for the rubric.
+   */
+  async getHealthScore(id: string, tenantId: string): Promise<HealthScore> {
+    const asset = await this.assetRepository.findOne({ where: { id, tenantId } });
+    if (!asset) {
+      throw new NotFoundException(`Asset with ID ${id} not found`);
+    }
+
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const recentDowntime = await this.downtimeRepository.find({
+      where: { assetId: id, tenantId, startedAt: MoreThan(since) },
+    });
+    const downtimeMinutes = recentDowntime.reduce((sum, d) => sum + (d.durationMinutes || 0), 0);
+
+    return computeHealthScore({
+      condition: asset.assetCondition ?? null,
+      status: asset.status,
+      downtimeMinutes,
+    });
   }
 
   async findWithHistory(
