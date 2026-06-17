@@ -19,10 +19,11 @@ import {
   Calendar, Gauge, FileText, Upload, Download, Trash2, Archive, Plus,
 } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
-import { formatCurrency, formatTimeAgo, formatDate } from '@/lib/utils'
+import { formatCurrency, formatTimeAgo, formatDate, cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAuth } from '@/providers/auth-provider'
 import { AssetQrCard } from '@/components/assets/asset-qr-card'
+import { SensorReadingsCard } from '@/components/assets/sensor-readings-card'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { getWorkOrderStatusMeta, getAssetStatusMeta } from '@/lib/status'
 
@@ -74,6 +75,17 @@ export default function AssetDetailPage() {
     queryFn: async () => {
       const res = await api.getAssetMeters(id)
       return res.data
+    },
+    enabled: !!id,
+  })
+
+  // Rule-based health score (condition + recent downtime).
+  const { data: health } = useQuery({
+    queryKey: ['asset-health', id],
+    queryFn: async () => (await api.getAssetHealth(id)).data as {
+      score: number
+      band: 'healthy' | 'monitor' | 'at_risk' | 'critical'
+      factors: string[]
     },
     enabled: !!id,
   })
@@ -181,6 +193,20 @@ export default function AssetDetailPage() {
               {asset.isCritical && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wider bg-destructive/10 text-destructive">
                   Critical
+                </span>
+              )}
+              {health && (
+                <span
+                  title={health.factors.join(' · ')}
+                  className={cn(
+                    'px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wider',
+                    health.band === 'healthy' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+                    health.band === 'monitor' && 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+                    health.band === 'at_risk' && 'bg-orange-500/10 text-orange-700 dark:text-orange-400',
+                    health.band === 'critical' && 'bg-destructive/10 text-destructive',
+                  )}
+                >
+                  Health {health.score}
                 </span>
               )}
             </div>
@@ -387,6 +413,9 @@ export default function AssetDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Sensor readings (condition-based maintenance) */}
+          <SensorReadingsCard assetId={id} />
         </div>
 
         {/* Sidebar */}

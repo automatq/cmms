@@ -1,11 +1,16 @@
 import { Injectable, Logger, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { WorkOrder } from '../work-orders/entities/work-order.entity';
+import { Repository, In, MoreThan } from 'typeorm';
+import { WorkOrder, WorkOrderStatus } from '../work-orders/entities/work-order.entity';
 import { Asset } from '../assets/entities/asset.entity';
 import { AssetMeter } from '../assets/entities/asset-meter.entity';
 import { AssetDowntime } from '../assets/entities/asset-downtime.entity';
 import { AssetConditionLog } from '../assets/entities/asset-condition-log.entity';
+import { PmPlan } from '../pm/entities/pm-plan.entity';
+import { PmHistory } from '../pm/entities/pm-history.entity';
+import { Part } from '../inventory/entities/part.entity';
+import { InventoryStock } from '../inventory/entities/inventory-stock.entity';
+import { buildClassifierPrompt, parseToolSelection } from './ai-grounding.util';
 import {
   AiTaskType,
   AiQueryDto,
@@ -59,6 +64,14 @@ export class AiService {
     private downtimeRepo: Repository<AssetDowntime>,
     @InjectRepository(AssetConditionLog)
     private conditionLogRepo: Repository<AssetConditionLog>,
+    @InjectRepository(PmPlan)
+    private pmPlanRepo: Repository<PmPlan>,
+    @InjectRepository(PmHistory)
+    private pmHistoryRepo: Repository<PmHistory>,
+    @InjectRepository(Part)
+    private partRepo: Repository<Part>,
+    @InjectRepository(InventoryStock)
+    private stockRepo: Repository<InventoryStock>,
   ) {}
 
   private async callAi(
@@ -124,7 +137,7 @@ export class AiService {
           throw new HttpException('query required', HttpStatus.BAD_REQUEST);
         }
         return {
-          result: await this.processNaturalLanguageQuery(dto.query),
+          result: await this.processNaturalLanguageQuery(dto.query, tenantId),
           taskType: AiTaskType.NATURAL_LANGUAGE_QUERY,
         };
     }
@@ -147,9 +160,22 @@ export class AiService {
 
     context.messages.push({ role: 'user', content: dto.message });
 
+    // Ground the reply in live tenant data when the question needs it. The
+    // grounding is merged into the single leading system message (never cached)
+    // so it works uniformly across providers — Anthropic/Bedrock hoist system
+    // turns to a top-level field, but Ollama sends messages verbatim and a
+    // mid-conversation system turn is non-standard.
+    const grounding = await this.buildGroundingContext(dto.message, tenantId);
+    const callMessages: ChatMessage[] = grounding
+      ? [
+          { role: 'system', content: `${context.messages[0].content}\n\n${grounding}` },
+          ...context.messages.slice(1),
+        ]
+      : context.messages;
+
     try {
       const assistantMessage = await this.provider.chat(
-        context.messages,
+        callMessages,
         { temperature: dto.temperature ?? 0.7 },
       );
 
@@ -159,6 +185,9 @@ export class AiService {
 
       return { response: assistantMessage, conversationId };
     } catch (error: any) {
+      // Revert the orphaned user turn so a failed call doesn't leave the cached
+      // conversation with two consecutive user messages.
+      context.messages.pop();
       if (error instanceof HttpException) throw error;
       throw new HttpException('AI service unavailable', HttpStatus.SERVICE_UNAVAILABLE);
     }
@@ -206,7 +235,7 @@ Provide a brief 2-3 sentence summary.`;
         take: 20,
       }),
       this.meterRepo.find({
-        where: { assetId: dto.assetId },
+        where: { assetId: dto.assetId, tenantId },
         order: { recordedAt: 'DESC' },
         take: 20,
       }),
@@ -415,12 +444,233 @@ Rules: 5-20 concise, actionable steps numbered sequentially from 1; set requires
     };
   }
 
-  async processNaturalLanguageQuery(query: string): Promise<string> {
-    return this.callAi(
-      query,
-      'You are a MainTek assistant. Answer maintenance-related questions concisely.',
-      0.6,
+  // ==================== DATA GROUNDING ====================
+
+  /**
+   * Decide which tenant data a question needs (cheap classifier call), fetch
+   * it, and return a context block — or null for generic questions. Never
+   * throws: any failure degrades to an ungrounded answer.
+   */
+  private async buildGroundingContext(question: string, tenantId: string): Promise<string | null> {
+    let tools: string[] = [];
+    try {
+      const raw = await this.callAi(
+        buildClassifierPrompt(question),
+        'You route questions to data sources. Respond with only a JSON array.',
+        0,
+      );
+      tools = parseToolSelection(raw);
+    } catch {
+      return null;
+    }
+    if (tools.length === 0) return null;
+
+    const sections: string[] = [];
+    for (const tool of tools) {
+      try {
+        const section = await this.fetchGroundingSection(tool, tenantId);
+        if (section) sections.push(section);
+      } catch (err) {
+        this.logger.warn(
+          `Grounding fetch "${tool}" failed: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+    if (sections.length === 0) return null;
+
+    return (
+      `Live data from this organization's CMMS (fetched ${new Date().toISOString()}). ` +
+      `Answer using these records; if they don't cover the question, say so.\n\n` +
+      sections.join('\n\n')
     );
+  }
+
+  private async fetchGroundingSection(tool: string, tenantId: string): Promise<string | null> {
+    const now = new Date();
+    const fmtDate = (d: Date | string | null | undefined) =>
+      d ? new Date(d).toISOString().slice(0, 10) : 'n/a';
+
+    switch (tool) {
+      case 'open_work_orders': {
+        const wos = await this.workOrderRepo.find({
+          where: {
+            tenantId,
+            status: In([WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD]),
+          },
+          relations: ['asset'],
+          order: { createdAt: 'DESC' },
+          take: 25,
+        });
+        if (wos.length === 0) return 'OPEN WORK ORDERS: none';
+        return (
+          `OPEN WORK ORDERS (up to 25 most recent):\n` +
+          wos
+            .map(
+              (w) =>
+                `- ${w.woNumber} [${w.priority}/${w.status}] ${w.title}` +
+                `${w.asset ? ` — asset: ${w.asset.name}` : ''}` +
+                `${w.dueDate ? ` (due ${fmtDate(w.dueDate)})` : ''}`,
+            )
+            .join('\n')
+        );
+      }
+
+      case 'overdue_work_orders': {
+        const wos = await this.workOrderRepo
+          .createQueryBuilder('wo')
+          .leftJoinAndSelect('wo.asset', 'asset')
+          .where('wo.tenantId = :tenantId', { tenantId })
+          .andWhere('wo.status IN (:...statuses)', {
+            statuses: [WorkOrderStatus.OPEN, WorkOrderStatus.IN_PROGRESS],
+          })
+          .andWhere('COALESCE(wo.dueDate, wo.scheduledEnd) < :now', { now })
+          .orderBy('COALESCE(wo.dueDate, wo.scheduledEnd)', 'ASC')
+          .take(25)
+          .getMany();
+        if (wos.length === 0) return 'OVERDUE WORK ORDERS: none';
+        return (
+          `OVERDUE WORK ORDERS (oldest first, up to 25):\n` +
+          wos
+            .map(
+              (w) =>
+                `- ${w.woNumber} [${w.priority}] ${w.title}` +
+                `${w.asset ? ` — asset: ${w.asset.name}` : ''} (was due ${fmtDate(w.dueDate || w.scheduledEnd)})`,
+            )
+            .join('\n')
+        );
+      }
+
+      case 'recent_completions': {
+        const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const wos = await this.workOrderRepo.find({
+          where: { tenantId, status: WorkOrderStatus.COMPLETED, completedAt: MoreThan(since) },
+          relations: ['asset'],
+          order: { completedAt: 'DESC' },
+          take: 15,
+        });
+        if (wos.length === 0) return 'COMPLETED WORK ORDERS (last 30 days): none';
+        return (
+          `COMPLETED WORK ORDERS (last 30 days, up to 15):\n` +
+          wos
+            .map(
+              (w) =>
+                `- ${w.woNumber} ${w.title}${w.asset ? ` — ${w.asset.name}` : ''}` +
+                ` (completed ${fmtDate(w.completedAt)}${w.actualHours ? `, ${w.actualHours}h` : ''}${
+                  w.actualCost ? `, $${w.actualCost}` : ''
+                })`,
+            )
+            .join('\n')
+        );
+      }
+
+      case 'asset_summary': {
+        const rows: { status: string; count: string }[] = await this.assetRepo
+          .createQueryBuilder('a')
+          .select('a.status', 'status')
+          .addSelect('COUNT(*)', 'count')
+          .where('a.tenantId = :tenantId', { tenantId })
+          .groupBy('a.status')
+          .getRawMany();
+        const critical = await this.assetRepo.find({
+          where: { tenantId, isCritical: true },
+          take: 10,
+        });
+        const counts = rows.map((r) => `${r.status}: ${r.count}`).join(', ') || 'no assets';
+        const criticalLine =
+          critical.length > 0
+            ? `\nCritical assets: ${critical.map((a) => `${a.name} (${a.status})`).join(', ')}`
+            : '';
+        return `ASSET SUMMARY — counts by status: ${counts}${criticalLine}`;
+      }
+
+      case 'asset_downtime': {
+        const since = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const rows: { assetId: string; totalMinutes: string }[] = await this.downtimeRepo
+          .createQueryBuilder('d')
+          .select('d.assetId', 'assetId')
+          .addSelect('SUM(d.durationMinutes)', 'totalMinutes')
+          .where('d.tenantId = :tenantId', { tenantId })
+          .andWhere('d.startedAt > :since', { since })
+          .groupBy('d.assetId')
+          .orderBy('SUM(d.durationMinutes)', 'DESC', 'NULLS LAST')
+          .limit(10)
+          .getRawMany();
+        if (rows.length === 0) return 'ASSET DOWNTIME (last 90 days): none recorded';
+        const assets = await this.assetRepo.find({
+          where: { id: In(rows.map((r) => r.assetId)), tenantId },
+        });
+        const nameById = new Map(assets.map((a) => [a.id, a.name]));
+        return (
+          `ASSET DOWNTIME (last 90 days, top ${rows.length}):\n` +
+          rows
+            .map(
+              (r) =>
+                `- ${nameById.get(r.assetId) || r.assetId}: ${Math.round(Number(r.totalMinutes) || 0)} minutes`,
+            )
+            .join('\n')
+        );
+      }
+
+      case 'pm_status': {
+        const since = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const hist: { status: string; count: string }[] = await this.pmHistoryRepo
+          .createQueryBuilder('h')
+          .select('h.status', 'status')
+          .addSelect('COUNT(*)', 'count')
+          .where('h.tenantId = :tenantId', { tenantId })
+          .andWhere('h.triggeredAt > :since', { since })
+          .groupBy('h.status')
+          .getRawMany();
+        const overdue = await this.pmPlanRepo
+          .createQueryBuilder('p')
+          .where('p.tenantId = :tenantId', { tenantId })
+          .andWhere('p.isActive = true')
+          .andWhere('p.nextDueAt < :now', { now })
+          .orderBy('p.nextDueAt', 'ASC')
+          .take(10)
+          .getMany();
+        const counts = hist.map((r) => `${r.status || 'pending'}: ${r.count}`).join(', ') || 'no history';
+        const overdueLine =
+          overdue.length > 0
+            ? `\nOverdue PM plans: ${overdue.map((p) => `${p.name} (due ${fmtDate(p.nextDueAt)})`).join(', ')}`
+            : '\nOverdue PM plans: none';
+        return `PM STATUS (last 90 days) — ${counts}${overdueLine}`;
+      }
+
+      case 'low_stock_parts': {
+        const rows: { name: string; sku: string; reorderpoint: string; onhand: string }[] =
+          await this.partRepo
+            .createQueryBuilder('p')
+            .leftJoin(InventoryStock, 's', 's.part_id = p.id AND s.tenant_id = p.tenant_id')
+            .select('p.name', 'name')
+            .addSelect('p.sku', 'sku')
+            .addSelect('p.reorder_point', 'reorderpoint')
+            .addSelect('COALESCE(SUM(s.qty_on_hand), 0)', 'onhand')
+            .where('p.tenant_id = :tenantId', { tenantId })
+            .andWhere('p.reorder_point IS NOT NULL')
+            .andWhere('p.is_active = true')
+            .groupBy('p.id')
+            .having('COALESCE(SUM(s.qty_on_hand), 0) <= p.reorder_point')
+            .limit(15)
+            .getRawMany();
+        if (rows.length === 0) return 'LOW STOCK PARTS: none below reorder point';
+        return (
+          `LOW STOCK PARTS (at/below reorder point, up to 15):\n` +
+          rows
+            .map((r) => `- ${r.name} (${r.sku}): ${r.onhand} on hand, reorder at ${r.reorderpoint}`)
+            .join('\n')
+        );
+      }
+
+      default:
+        return null;
+    }
+  }
+
+  async processNaturalLanguageQuery(query: string, tenantId: string): Promise<string> {
+    const baseSystem = 'You are a MainTek assistant. Answer maintenance-related questions concisely.';
+    const grounding = await this.buildGroundingContext(query, tenantId);
+    return this.callAi(query, grounding ? `${baseSystem}\n\n${grounding}` : baseSystem, 0.6);
   }
 
   async checkHealth(): Promise<{ status: string; provider: string; model: string }> {

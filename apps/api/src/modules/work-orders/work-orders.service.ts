@@ -41,6 +41,8 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 import { STATUS_TRANSITIONS } from './state-machine';
 import { isDueSoon, overdueEscalationLevel } from './sla.util';
+import { TeamsService } from '../users/teams.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class WorkOrdersService {
@@ -75,6 +77,9 @@ export class WorkOrdersService {
     private readonly checklistTemplateRepository: Repository<ChecklistTemplate>,
     @InjectRepository(WoAssignee)
     private readonly assigneeRepository: Repository<WoAssignee>,
+    @Inject(forwardRef(() => TeamsService))
+    private readonly teamsService: TeamsService,
+    private readonly auditService: AuditService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -112,6 +117,17 @@ export class WorkOrdersService {
     } catch (err) {
       this.logger.warn(`webhook wo.created failed for ${savedWo.id}: ${(err as Error).message}`);
     }
+
+    await this.auditService.record(
+      {
+        userId,
+        action: 'work_order.created',
+        resourceType: 'work_order',
+        resourceId: savedWo.id,
+        afterData: { woNumber: savedWo.woNumber, title: savedWo.title, type: savedWo.type, priority: savedWo.priority },
+      },
+      tenantId,
+    );
 
     return this.findOne(savedWo.id, tenantId);
   }
@@ -215,10 +231,12 @@ export class WorkOrdersService {
   async update(id: string, dto: UpdateWorkOrderDto, userId: string, tenantId: string): Promise<WorkOrder> {
     const workOrder = await this.findOne(id, tenantId);
     const prevAssignee = workOrder.assignedToId || null;
+    const prevTeam = workOrder.teamId || null;
 
     Object.assign(workOrder, dto);
     // Treat empty string as an explicit unassign.
     if (dto.assignedToId === '') workOrder.assignedToId = null as unknown as string;
+    if (dto.teamId === '') workOrder.teamId = null as unknown as string;
 
     await this.workOrderRepository.save(workOrder);
     const updated = await this.findOne(id, tenantId);
@@ -231,6 +249,37 @@ export class WorkOrdersService {
         newAssignee,
         tenantId,
       );
+    }
+    if (newAssignee !== prevAssignee) {
+      await this.auditService.record(
+        {
+          userId,
+          action: 'work_order.assigned',
+          resourceType: 'work_order',
+          resourceId: updated.id,
+          afterData: { woNumber: updated.woNumber, assignedToId: newAssignee },
+        },
+        tenantId,
+      );
+    }
+
+    // Notify the members of a newly-assigned team.
+    const newTeam = updated.teamId || null;
+    if (newTeam && newTeam !== prevTeam) {
+      try {
+        const team = await this.teamsService.findOne(newTeam, tenantId);
+        const memberIds = (team.members || []).map((m) => m.id).filter((mid) => mid !== userId);
+        if (memberIds.length > 0) {
+          await this.notificationsService.onWorkOrderAssignedToTeam(
+            { id: updated.id, woNumber: updated.woNumber, title: updated.title },
+            memberIds,
+            team.name,
+            tenantId,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(`team assignment notify failed for WO ${updated.id}: ${(err as Error).message}`);
+      }
     }
 
     return updated;
@@ -411,6 +460,17 @@ export class WorkOrdersService {
 
     // Send notifications
     await this.notificationsService.onWoStatusChanged(savedWo, oldStatus, tenantId);
+
+    await this.auditService.record(
+      {
+        userId,
+        action: 'work_order.status_changed',
+        resourceType: 'work_order',
+        resourceId: savedWo.id,
+        afterData: { woNumber: savedWo.woNumber, from: oldStatus, to: status },
+      },
+      tenantId,
+    );
 
     // Trigger webhooks
     try {

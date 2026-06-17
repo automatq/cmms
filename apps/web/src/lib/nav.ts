@@ -3,6 +3,7 @@
  * command palette, and breadcrumbs so they never drift.
  */
 import {
+  Building2,
   LayoutDashboard,
   Package,
   ClipboardList,
@@ -16,6 +17,8 @@ import {
   Users,
   Webhook,
   Bell,
+  KeyRound,
+  ScrollText,
   Clock,
   Shield,
   DollarSign,
@@ -37,6 +40,7 @@ export const primaryNav: NavItem[] = [
   { name: 'Assets', href: '/dashboard/assets', icon: Package },
   { name: 'Work Orders', href: '/dashboard/work-orders', icon: ClipboardList, badge: 'overdueWorkOrders' },
   { name: 'Work Requests', href: '/dashboard/work-requests', icon: Inbox, badge: 'pendingRequests' },
+  { name: 'Dispatch', href: '/dashboard/dispatch', icon: Users },
   { name: 'PM Plans', href: '/dashboard/pm', icon: Calendar },
   { name: 'Calendar', href: '/dashboard/calendar', icon: CalendarClock },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Warehouse },
@@ -46,9 +50,12 @@ export const primaryNav: NavItem[] = [
 ]
 
 export const settingsSubNav: NavItem[] = [
+  { name: 'Organization', href: '/dashboard/settings', icon: Building2 },
   { name: 'Members', href: '/dashboard/settings/members', icon: Users },
   { name: 'Teams', href: '/dashboard/settings/teams', icon: Users },
   { name: 'Webhooks', href: '/dashboard/settings/webhooks', icon: Webhook },
+  { name: 'API Keys', href: '/dashboard/settings/api-keys', icon: KeyRound },
+  { name: 'Audit Log', href: '/dashboard/settings/audit-log', icon: ScrollText },
   { name: 'Notifications', href: '/dashboard/settings/notifications', icon: Bell },
   { name: 'Scheduled Reports', href: '/dashboard/settings/scheduled-reports', icon: CalendarClock },
 ]
@@ -86,6 +93,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   'work-orders': 'Work Orders',
   'work-requests': 'Work Requests',
+  dispatch: 'Dispatch',
   pm: 'PM Plans',
   assets: 'Assets',
   inventory: 'Inventory',
@@ -104,6 +112,9 @@ const SEGMENT_LABELS: Record<string, string> = {
   suppliers: 'Suppliers',
   transactions: 'Transactions',
   templates: 'Templates',
+  'api-keys': 'API Keys',
+  'audit-log': 'Audit Log',
+  notifications: 'Notifications',
 }
 
 export function labelForSegment(segment: string): string {

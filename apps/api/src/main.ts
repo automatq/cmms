@@ -180,7 +180,7 @@ async function bootstrap() {
         ? false
         : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
     exposedHeaders: ['set-auth-token', 'set-auth-jwt'],
     credentials: true,
   });
@@ -197,8 +197,9 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger Documentation (disabled in production)
-  if (nodeEnv !== 'production') {
+  // Swagger Documentation (off in production unless SWAGGER_ENABLED=true —
+  // tenants integrating via API keys need the reference in prod too).
+  if (nodeEnv !== 'production' || configService.get('SWAGGER_ENABLED') === 'true') {
     const config = new DocumentBuilder()
       .setTitle('MainTek API')
       .setDescription('MainTek Maintenance Management API')
@@ -211,6 +212,15 @@ async function bootstrap() {
           description: 'Enter JWT access token',
         },
         'JWT',
+      )
+      .addApiKey(
+        {
+          type: 'apiKey',
+          name: 'x-api-key',
+          in: 'header',
+          description: 'Tenant API key (mk_…) created under Settings → API Keys',
+        },
+        'ApiKey',
       )
       .addTag('assets', 'Asset management endpoints')
       .addTag('work-orders', 'Work order management endpoints')

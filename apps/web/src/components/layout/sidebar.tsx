@@ -2,12 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/providers/auth-provider'
-import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Settings,
   LogOut,
@@ -21,6 +18,7 @@ import {
 import { useState } from 'react'
 import { QrScannerDialog } from '@/components/dashboard/qr-scanner-dialog'
 import { openCommandPalette } from '@/components/command-palette'
+import { OrgSwitcher } from '@/components/layout/org-switcher'
 import { primaryNav, settingsSubNav, reportSubNav } from '@/lib/nav'
 
 export function Sidebar() {
@@ -28,14 +26,6 @@ export function Sidebar() {
   const { user, logout, activeOrgId } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
-
-  // Reuses the cached ['organization'] query (dashboard/settings already prime it).
-  // Disabled for superadmins with no active org so we don't fire a GET /organization 404.
-  const { data: organization, isLoading: isLoadingOrg } = useQuery({
-    queryKey: ['organization'],
-    queryFn: () => api.getOrganization().then((r) => r.data),
-    enabled: !!activeOrgId,
-  })
 
   return (
     <>
@@ -58,20 +48,18 @@ export function Sidebar() {
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Logo + current organization */}
+          {/* Logo */}
           <div className="flex items-center gap-2 px-6 py-5 border-b">
             <Wrench className="h-8 w-8 text-primary shrink-0" />
-            <div className="flex flex-col min-w-0">
-              <span className="text-xl font-bold leading-tight">MainTek</span>
-              {activeOrgId && isLoadingOrg ? (
-                <Skeleton className="h-3 w-24 mt-1" />
-              ) : organization?.name ? (
-                <span className="text-xs text-muted-foreground truncate">
-                  {organization.name}
-                </span>
-              ) : null}
-            </div>
+            <span className="text-xl font-bold leading-tight">MainTek</span>
           </div>
+
+          {/* Current organization (becomes a switcher with multiple orgs) */}
+          {activeOrgId && (
+            <div className="px-4 pt-4">
+              <OrgSwitcher />
+            </div>
+          )}
 
           {/* Quick Actions */}
           <div className="px-4 pt-4 space-y-2">

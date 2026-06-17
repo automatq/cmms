@@ -159,6 +159,14 @@ export class AssetsController {
     return this.assetsService.recordMeterReading(id, dto, user.userId, user.tenantId);
   }
 
+  @Get(':id/health')
+  @Permissions('assets:read')
+  @ApiOperation({ summary: 'Rule-based asset health score (0-100) + band' })
+  @ApiResponse({ status: 200, description: 'Asset health score' })
+  getHealthScore(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.assetsService.getHealthScore(id, user.tenantId);
+  }
+
   @Get(':id/meters')
   @Permissions('assets:read')
   @ApiOperation({ summary: 'Get meter history' })
