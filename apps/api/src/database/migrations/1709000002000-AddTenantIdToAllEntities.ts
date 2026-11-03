@@ -62,8 +62,14 @@ export class AddTenantIdToAllEntities1709000002000 implements MigrationInterface
       defaultTenantId = inserted[0].id;
     }
 
-    // Add tenant_id column to all tables
+    // Add tenant_id column to all tables. Tables that don't exist yet on a
+    // fresh database (e.g. tech_activities, created by a later migration that
+    // already includes tenant_id) are skipped.
     for (const table of this.tables) {
+      const exists = await queryRunner.query(`SELECT to_regclass('"${table}"') AS oid`);
+      if (!exists[0]?.oid) {
+        continue;
+      }
       await queryRunner.query(`
         ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "tenant_id" uuid
       `);

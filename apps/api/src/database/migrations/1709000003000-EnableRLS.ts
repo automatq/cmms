@@ -55,6 +55,12 @@ export class EnableRLS1709000003000 implements MigrationInterface {
 
     // Enable RLS on all tenant-aware tables
     for (const table of this.tables) {
+      // Skip tables that don't exist yet on a fresh database (tech_activities
+      // is created by a later migration).
+      const exists = await queryRunner.query(`SELECT to_regclass('"${table}"') AS oid`);
+      if (!exists[0]?.oid) {
+        continue;
+      }
       await queryRunner.query(`ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY`);
 
       // FORCE RLS ensures the policy applies even to the table owner
