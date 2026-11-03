@@ -1,0 +1,42 @@
+# Local development backing services, published on localhost ports.
+# Usage: docker compose -f docs/docker-compose.dev.yml up -d
+# The API (apps/api/.env.example) and web app defaults already point at these.
+# Object storage is RustFS (S3-compatible, same API the app uses for MinIO/S3).
+name: maintek-dev
+services:
+  postgres:
+    image: docker.io/timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: maintek
+      POSTGRES_PASSWORD: maintek_secret_password
+      POSTGRES_DB: maintek
+    ports: ["5432:5432"]
+    volumes:
+      - pg:/var/lib/postgresql/data
+      - ../infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maintek -d maintek"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: docker.io/library/redis:7-alpine
+    ports: ["6379:6379"]
+  minio:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: maintek_minio
+      RUSTFS_SECRET_KEY: maintek_minio_secret
+      RUSTFS_VOLUMES: /data
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio:/data]
+  mailpit:
+    image: docker.io/axllent/mailpit:latest
+    ports: ["1025:1025", "8025:8025"]
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+volumes:
+  pg:
+  minio:

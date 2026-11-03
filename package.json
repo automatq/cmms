@@ -11,7 +11,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "npm run dev --workspace=@maintek/api",
+    "dev:api": "npm run start:dev --workspace=@maintek/api",
     "dev:web": "npm run dev --workspace=@maintek/web",
     "dev:mobile": "npm run start --workspace=@maintek/mobile",
     "build:api": "npm run build --workspace=@maintek/api",

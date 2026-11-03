@@ -1,13 +1,17 @@
 /** @type {import('next').NextConfig} */
 const isProd = process.env.NODE_ENV === 'production'
 
-const apiHost = (() => {
+// API origin (scheme + host) so connect-src matches whatever scheme the API is
+// actually served on: https in production, plain http for local dev on :4000.
+const apiOrigin = (() => {
   try {
-    return new URL(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').host
+    return new URL(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').origin
   } catch {
-    return 'localhost:4000'
+    return 'http://localhost:4000'
   }
 })()
+const apiHost = apiOrigin.replace(/^https?:\/\//, '')
+const apiWsOrigin = apiOrigin.replace(/^http/, 'ws')
 
 // Origin of the file/object store that serves (presigned) asset & attachment
 // images, so it can be allowlisted in img-src / next image remotePatterns.
@@ -44,7 +48,7 @@ const cspDirectives = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   `img-src ${imgSrc}`,
-  `connect-src 'self' https://${apiHost} ws://${apiHost} wss://${apiHost} https://api.maintek.app wss://api.maintek.app https://*.sentry.io`,
+  `connect-src 'self' ${apiOrigin} ${apiWsOrigin} https://${apiHost} wss://${apiHost} https://api.maintek.app wss://api.maintek.app https://*.sentry.io`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
