@@ -37,7 +37,7 @@
     "@tanstack/react-table": "^8.13.0",
     "axios": "^1.8.0",
     "axios-retry": "^4.5.0",
-    "better-auth": "^1.6.14",
+    "better-auth": "^1.7.25",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -58,7 +58,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.22.4",
+    "zod": "^4.6.7",
     "zustand": "^4.5.1"
   },
   "devDependencies": {
