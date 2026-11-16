@@ -11,7 +11,7 @@ import { Reflector } from '@nestjs/core';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Auth } from 'better-auth';
 import { InjectBetterAuth } from 'nestjs-better-auth';
-import { Pool } from 'pg';
+import { getAuthPool as getPool, resolveMembership } from '../membership';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 import { PlanTier, TenantStatus } from '../../users/entities/tenant.entity';
@@ -49,33 +49,6 @@ const PERMISSIONS_BY_ROLE: Record<string, string[]> = {
     'ai:read',
   ],
 };
-
-let pool: Pool | undefined;
-function getPool(): Pool {
-  if (!pool) {
-    const databaseUrl = process.env.DATABASE_URL;
-    pool = databaseUrl
-      ? new Pool({
-          connectionString: databaseUrl,
-          ssl:
-            process.env.DB_SSL === 'true' || databaseUrl.includes('sslmode=require')
-              ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
-              : undefined,
-        })
-      : new Pool({
-          host: process.env.DB_HOST,
-          port: parseInt(process.env.DB_PORT || '5432', 10),
-          user: process.env.DB_USERNAME,
-          password: process.env.DB_PASSWORD,
-          database: process.env.DB_DATABASE,
-          ssl:
-            process.env.DB_SSL === 'true'
-              ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
-              : undefined,
-        });
-  }
-  return pool;
-}
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -153,13 +126,15 @@ export class JwtAuthGuard implements CanActivate {
     }
     const tenantId = activeOrgId;
 
-    let role = 'member';
-    try {
-      const member = await (this.auth.api as any).getActiveMember({ headers });
-      role = member?.role || 'member';
-    } catch {
-      // No member record - fall back to member
+    // The session's activeOrganizationId outlives membership: a user removed
+    // from (or deactivated in) an org keeps the old value on their session.
+    // Previously a missing member row fell back to role 'member' (read access
+    // retained). Now it is denied.
+    const membership = await resolveMembership(session.user.id, tenantId);
+    if (!membership.ok) {
+      throw new ForbiddenException(membership.reason);
     }
+    const role = membership.role;
 
     // Check the org's billing/trial status. If the trial has expired without a
     // payment method, suspend the org. Suspended orgs return 402 (payment

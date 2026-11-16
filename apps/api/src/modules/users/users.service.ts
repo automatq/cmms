@@ -156,6 +156,10 @@ export class UsersService {
       throw new BadRequestException('Email cannot be changed here. Users change their own email from their account settings.');
     }
 
+    if (dto.status !== undefined) {
+      await this.setMembershipStatus(id, tenantId, dto.status === UserStatus.ACTIVE ? 'active' : 'inactive');
+    }
+
     const { roleIds, email: _email, ...updateData } = dto;
     Object.assign(user, updateData);
 
@@ -165,14 +169,25 @@ export class UsersService {
 
   async deactivate(id: string, tenantId: string): Promise<User> {
     const user = await this.findOne(id, tenantId);
+    // Access is enforced per membership (see auth/membership.ts). users.status
+    // is kept in sync for display in this org's user list.
+    await this.setMembershipStatus(id, tenantId, 'inactive');
     user.status = UserStatus.INACTIVE;
     return this.userRepository.save(user);
   }
 
   async activate(id: string, tenantId: string): Promise<User> {
     const user = await this.findOne(id, tenantId);
+    await this.setMembershipStatus(id, tenantId, 'active');
     user.status = UserStatus.ACTIVE;
     return this.userRepository.save(user);
+  }
+
+  private async setMembershipStatus(userId: string, tenantId: string, status: 'active' | 'inactive'): Promise<void> {
+    await this.userRepository.query(
+      `UPDATE members SET status = $3 WHERE user_id = $1 AND organization_id = $2`,
+      [userId, tenantId, status],
+    );
   }
 
   async assignRole(userId: string, roleId: string, tenantId: string): Promise<User> {

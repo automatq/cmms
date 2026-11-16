@@ -2,7 +2,13 @@ import { Resend } from 'resend';
 import { Logger } from '@nestjs/common';
 
 const logger = new Logger('EmailSender');
-const resend = new Resend(process.env.RESEND_API_KEY || '');
+// Created lazily: resend >= 6.3x throws when constructed without an API key,
+// and running without one (emails skipped) is a supported configuration.
+let resendClient: Resend | null = null;
+function getResend(): Resend {
+  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
+  return resendClient;
+}
 
 const FROM = process.env.EMAIL_FROM || 'MainTek <noreply@maintek.app>';
 const APP_NAME = 'MainTek';
@@ -14,7 +20,7 @@ async function send(to: string, subject: string, html: string): Promise<void> {
   }
 
   try {
-    const result = await resend.emails.send({ from: FROM, to, subject, html });
+    const result = await getResend().emails.send({ from: FROM, to, subject, html });
     if (result.error) {
       logger.error(
         `Resend rejected "${subject}" -> ${to}: ${result.error.name}: ${result.error.message}`,
@@ -102,7 +108,7 @@ export async function sendScheduledReportEmail(
   // a Buffer directly when we have one (Resend SDK accepts it). For CSV
   // (string) we pass through unchanged.
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: FROM,
       to: recipients,
       subject,

@@ -20,12 +20,25 @@ import {
 } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { WorkOrdersService } from '../work-orders/work-orders.service';
-import { WorkOrderType, Priority } from '../work-orders/entities/work-order.entity';
+import { WorkOrderType, Priority, WorkOrderStatus } from '../work-orders/entities/work-order.entity';
 import { Asset } from '../assets/entities/asset.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
 import { BlackoutsService } from '../blackouts/blackouts.service';
+
+/**
+ * Any non-terminal WO for a plan blocks generating another one. New WOs start
+ * as REQUESTED, so omitting it (as before) meant the guard never matched a
+ * freshly generated PM work order and duplicates piled up.
+ */
+export const OPEN_PM_WORK_ORDER_STATUSES: WorkOrderStatus[] = [
+  WorkOrderStatus.REQUESTED,
+  WorkOrderStatus.PENDING_APPROVAL,
+  WorkOrderStatus.OPEN,
+  WorkOrderStatus.IN_PROGRESS,
+  WorkOrderStatus.ON_HOLD,
+];
 
 @Injectable()
 export class PmService {
@@ -260,7 +273,7 @@ export class PmService {
             page: 1,
             limit: 1,
             pmPlanId: plan.id,
-            status: ['open', 'in_progress', 'on_hold'] as any,
+            status: OPEN_PM_WORK_ORDER_STATUSES,
           }, tenantId);
 
           if (existingWo.total > 0) {
@@ -390,7 +403,7 @@ export class PmService {
           page: 1,
           limit: 1,
           pmPlanId: plan.id,
-          status: ['open', 'in_progress', 'on_hold'] as any,
+          status: OPEN_PM_WORK_ORDER_STATUSES,
         }, plan.tenantId);
 
         if (existingWo.total > 0) {
@@ -454,31 +467,35 @@ export class PmService {
     return { triggered, initialized, skipped };
   }
 
-  private async calculateNextDueDate(plan: PmPlan, tenantId: string): Promise<Date> {
-    const baseDate = plan.rollingSchedule
-      ? new Date()
-      : plan.nextDueAt || new Date();
+  private async calculateNextDueDate(plan: PmPlan, tenantId: string, now: Date = new Date()): Promise<Date> {
+    const advance = (from: Date): Date => {
+      if (plan.triggerType === TriggerType.TIME && plan.frequencyValue && plan.frequencyUnit) {
+        switch (plan.frequencyUnit) {
+          case FrequencyUnit.DAY:
+            return addDays(from, plan.frequencyValue);
+          case FrequencyUnit.WEEK:
+            return addWeeks(from, plan.frequencyValue);
+          case FrequencyUnit.MONTH:
+            return addMonths(from, plan.frequencyValue);
+          case FrequencyUnit.YEAR:
+            return addYears(from, plan.frequencyValue);
+        }
+      }
+      return addDays(from, 30);
+    };
 
     let next: Date;
-    if (plan.triggerType === TriggerType.TIME && plan.frequencyValue && plan.frequencyUnit) {
-      switch (plan.frequencyUnit) {
-        case FrequencyUnit.DAY:
-          next = addDays(baseDate, plan.frequencyValue);
-          break;
-        case FrequencyUnit.WEEK:
-          next = addWeeks(baseDate, plan.frequencyValue);
-          break;
-        case FrequencyUnit.MONTH:
-          next = addMonths(baseDate, plan.frequencyValue);
-          break;
-        case FrequencyUnit.YEAR:
-          next = addYears(baseDate, plan.frequencyValue);
-          break;
-        default:
-          next = addDays(baseDate, 30);
-      }
+    if (plan.rollingSchedule || !plan.nextDueAt) {
+      next = advance(now);
     } else {
-      next = addDays(baseDate, 30);
+      // Fixed schedule: keep the original cadence, but skip any periods that
+      // were missed (e.g. the plan was paused or the scheduler was down).
+      // Advancing only one interval per run used to generate one catch-up WO
+      // per hourly tick until the schedule caught up with the present.
+      next = advance(plan.nextDueAt);
+      for (let i = 0; next <= now && i < 10000; i++) {
+        next = advance(next);
+      }
     }
 
     if (plan.ignoreBlackouts) return next;
