@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource } from 'typeorm';
+import { Repository, In, Not, DataSource } from 'typeorm';
 import {
   WorkOrder,
   WorkOrderStatus,
@@ -39,6 +39,8 @@ import { DowntimeService } from '../assets/downtime.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 import { STATUS_TRANSITIONS } from './state-machine';
+import { PmHistory, PmHistoryStatus } from '../pm/entities/pm-history.entity';
+import { PmPlan } from '../pm/entities/pm-plan.entity';
 
 @Injectable()
 export class WorkOrdersService {
@@ -345,10 +347,24 @@ export class WorkOrdersService {
       }
     }
 
-    if (status === WorkOrderStatus.COMPLETED && workOrder.assetId) {
-      // Auto-end downtime tracking
+    // Auto-end downtime tracking. Cancelling a WO that was started must also
+    // end the downtime it opened, or the asset stays "under repair" forever.
+    const endsWork = status === WorkOrderStatus.COMPLETED || (status === WorkOrderStatus.CANCELLED && !!workOrder.actualStart);
+    if (endsWork && workOrder.assetId) {
       try {
-        await this.downtimeService.endDowntime(workOrder.assetId, userId, tenantId);
+        // Downtime is tracked per asset; keep it open while any OTHER work
+        // order on the same asset is still being worked on.
+        const otherActive = await this.workOrderRepository.count({
+          where: {
+            tenantId,
+            assetId: workOrder.assetId,
+            id: Not(id),
+            status: In([WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD]),
+          },
+        });
+        if (otherActive === 0) {
+          await this.downtimeService.endDowntime(workOrder.assetId, userId, tenantId);
+        }
       } catch (error) {
         this.logger.error(`Failed to end downtime for asset ${workOrder.assetId}: ${(error as Error).message}`);
       }
@@ -374,6 +390,10 @@ export class WorkOrdersService {
 
     const savedWo = await this.workOrderRepository.save(workOrder);
 
+    if (workOrder.pmPlanId && (status === WorkOrderStatus.COMPLETED || status === WorkOrderStatus.CANCELLED)) {
+      await this.recordPmOutcome(workOrder, status, tenantId);
+    }
+
     // Send notifications
     await this.notificationsService.onWoStatusChanged(savedWo, oldStatus, tenantId);
 
@@ -395,6 +415,37 @@ export class WorkOrdersService {
     }
 
     return this.findOne(id, tenantId);
+  }
+
+  /**
+   * Record the outcome of a PM-generated work order on its pm_history row, which
+   * drives PM compliance. A PM is on time when completed before the plan's next
+   * occurrence is due (i.e. within its own interval); cancelled PMs are skipped.
+   */
+  private async recordPmOutcome(workOrder: WorkOrder, status: WorkOrderStatus, tenantId: string): Promise<void> {
+    try {
+      const historyRepo = this.dataSource.getRepository(PmHistory);
+      const history = await historyRepo.findOne({ where: { woId: workOrder.id, tenantId } });
+      if (!history) return;
+
+      if (status === WorkOrderStatus.CANCELLED) {
+        history.status = PmHistoryStatus.SKIPPED;
+        history.completedAt = null as any;
+      } else {
+        const completedAt = workOrder.completedAt ?? new Date();
+        const nextDue = await historyRepo.manager
+          .getRepository(PmPlan)
+          .findOne({ where: { id: workOrder.pmPlanId!, tenantId }, select: ['id', 'nextDueAt'] });
+        history.completedAt = completedAt;
+        history.status =
+          !nextDue?.nextDueAt || completedAt <= new Date(nextDue.nextDueAt)
+            ? PmHistoryStatus.ON_TIME
+            : PmHistoryStatus.LATE;
+      }
+      await historyRepo.save(history);
+    } catch (error) {
+      this.logger.error(`Failed to record PM outcome for WO ${workOrder.id}: ${(error as Error).message}`);
+    }
   }
 
   private async calculateActualCost(workOrder: WorkOrder): Promise<void> {

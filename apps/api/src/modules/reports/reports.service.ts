@@ -676,7 +676,7 @@ export class ReportsService {
       .where('tx.tenantId = :tenantId', { tenantId })
       .andWhere('tx.performedAt BETWEEN :start AND :end', { start: startDate, end: endDate })
       .groupBy('period')
-      .addGroupBy('tx.transactionType')
+      .addGroupBy('tx.type')
       .orderBy('period', 'ASC')
       .getRawMany();
 
