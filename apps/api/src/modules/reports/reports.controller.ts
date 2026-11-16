@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, Query, Res, Header } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch, Query, Res, Header, ParseUUIDPipe } from '@nestjs/common';
 import { Response } from 'express';
 import { ReportsService } from './reports.service';
 import { ExportService } from './export.service';
@@ -14,7 +14,7 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
-import { ScheduledReport } from './entities/scheduled-report.entity';
+import { CreateScheduledReportDto, UpdateScheduledReportDto } from './dto/scheduled-report.dto';
 
 @RequireFeature('reports')
 @Controller('reports')
@@ -137,13 +137,13 @@ export class ReportsController {
 
   @Post('scheduled')
   @Permissions('reports:manage')
-  createScheduledReport(@Body() dto: Partial<ScheduledReport>, @CurrentUser() user: RequestUser) {
+  createScheduledReport(@Body() dto: CreateScheduledReportDto, @CurrentUser() user: RequestUser) {
     return this.exportService.createScheduledReport(dto, user.userId, user.tenantId);
   }
 
   @Patch('scheduled/:id')
   @Permissions('reports:manage')
-  updateScheduledReport(@Param('id') id: string, @Body() dto: Partial<ScheduledReport>, @CurrentUser() user: RequestUser) {
+  updateScheduledReport(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateScheduledReportDto, @CurrentUser() user: RequestUser) {
     return this.exportService.updateScheduledReport(id, dto, user.tenantId);
   }
 

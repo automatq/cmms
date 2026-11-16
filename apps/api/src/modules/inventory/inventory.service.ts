@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In, Like, LessThanOrEqual } from 'typeorm';
+import { Repository, DataSource, EntityManager, In, Like, LessThanOrEqual } from 'typeorm';
 import { Part } from './entities/part.entity';
 import { Supplier } from './entities/supplier.entity';
 import { Storeroom } from './entities/storeroom.entity';
@@ -257,12 +257,55 @@ export class InventoryService {
     return { qtyOnHand, qtyReserved, qtyAvailable: qtyOnHand - qtyReserved };
   }
 
-  private async getOrCreateStock(partId: string, storeroomId: string, tenantId: string): Promise<InventoryStock> {
-    let stock = await this.stockRepo.findOne({ where: { partId, storeroomId, tenantId } });
-    if (!stock) {
-      stock = this.stockRepo.create({ partId, storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
-      stock = await this.stockRepo.save(stock);
+  // ==================== STOCK ROW LOCKING ====================
+  //
+  // Every stock mutation goes through lockStock(), which takes a row-level
+  // `SELECT ... FOR UPDATE` lock inside the caller's transaction. Without it,
+  // two concurrent requests under READ COMMITTED both read the same quantity,
+  // both pass the availability check and the second save overwrites the
+  // first (lost update / overselling).
+
+  /** Run `fn` in the caller's transaction if given, else in a new one. */
+  private inTransaction<T>(manager: EntityManager | undefined, fn: (m: EntityManager) => Promise<T>): Promise<T> {
+    return manager ? fn(manager) : this.dataSource.transaction(fn);
+  }
+
+  /**
+   * Lock (and optionally create) the stock row for a part/storeroom.
+   * Creation uses INSERT ... ON CONFLICT DO NOTHING on the
+   * (tenant_id, part_id, storeroom_id) unique key so concurrent first
+   * receipts can't race into a duplicate-key error.
+   */
+  private async lockStock(
+    manager: EntityManager,
+    partId: string,
+    storeroomId: string,
+    tenantId: string,
+    createIfMissing = false,
+  ): Promise<InventoryStock | null> {
+    if (createIfMissing) {
+      await manager
+        .createQueryBuilder()
+        .insert()
+        .into(InventoryStock)
+        .values({ partId, storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 })
+        .orIgnore()
+        .execute();
     }
+    return manager.getRepository(InventoryStock).findOne({
+      where: { partId, storeroomId, tenantId },
+      lock: { mode: 'pessimistic_write' },
+    });
+  }
+
+  private async lockStockOrFail(
+    manager: EntityManager,
+    partId: string,
+    storeroomId: string,
+    tenantId: string,
+  ): Promise<InventoryStock> {
+    const stock = await this.lockStock(manager, partId, storeroomId, tenantId);
+    if (!stock) throw new NotFoundException('Stock record not found');
     return stock;
   }
 
@@ -274,17 +317,9 @@ export class InventoryService {
       const part = await manager.getRepository(Part).findOne({ where: { id: dto.partId, tenantId } });
       if (!part) throw new NotFoundException(`Part ${dto.partId} not found`);
 
-      let stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
-      if (!stock) {
-        stock = stockRepo.create({ partId: dto.partId, storeroomId: dto.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
-      }
-
+      const stock = (await this.lockStock(manager, dto.partId, dto.storeroomId, tenantId, true))!;
       stock.qtyOnHand += dto.qty;
-      if (stock.qtyOnOrder >= dto.qty) {
-        stock.qtyOnOrder -= dto.qty;
-      } else {
-        stock.qtyOnOrder = 0;
-      }
+      stock.qtyOnOrder = Math.max(0, stock.qtyOnOrder - dto.qty);
       await stockRepo.save(stock);
 
       const tx = txRepo.create({
@@ -303,13 +338,12 @@ export class InventoryService {
     });
   }
 
-  async issueStock(dto: IssueStockDto, performedBy: string, tenantId: string): Promise<InventoryTransaction> {
-    return this.dataSource.transaction(async (manager) => {
-      const stockRepo = manager.getRepository(InventoryStock);
-      const txRepo = manager.getRepository(InventoryTransaction);
+  async issueStock(dto: IssueStockDto, performedBy: string, tenantId: string, manager?: EntityManager): Promise<InventoryTransaction> {
+    return this.inTransaction(manager, async (m) => {
+      const stockRepo = m.getRepository(InventoryStock);
+      const txRepo = m.getRepository(InventoryTransaction);
 
-      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
-      if (!stock) throw new NotFoundException('Stock record not found');
+      const stock = await this.lockStockOrFail(m, dto.partId, dto.storeroomId, tenantId);
 
       const available = stock.qtyOnHand - stock.qtyReserved;
       if (available < dto.qty) {
@@ -319,7 +353,7 @@ export class InventoryService {
       stock.qtyOnHand -= dto.qty;
       await stockRepo.save(stock);
 
-      const part = await manager.getRepository(Part).findOne({ where: { id: dto.partId, tenantId } });
+      const part = await m.getRepository(Part).findOne({ where: { id: dto.partId, tenantId } });
 
       const tx = txRepo.create({
         partId: dto.partId,
@@ -336,9 +370,81 @@ export class InventoryService {
       const savedTx = await txRepo.save(tx);
 
       // Check for low stock notification
-      await this.checkLowStock(dto.partId, tenantId, manager);
+      await this.checkLowStock(dto.partId, tenantId, m);
 
       return savedTx;
+    });
+  }
+
+  /**
+   * Consume stock that was previously reserved for a work order: releases the
+   * reservation and deducts on-hand in one locked step.
+   *
+   * Previously WO completion called issueStock() (which requires the qty to be
+   * *unreserved*) and then releaseReservation(). Because the stock was reserved
+   * by this very WO, the issue always failed when on-hand == reserved, the
+   * error was swallowed, and the parts were never deducted.
+   */
+  async issueReservedStock(
+    dto: { partId: string; storeroomId: string; qty: number; workOrderId: string; notes?: string },
+    performedBy: string,
+    tenantId: string,
+    manager?: EntityManager,
+  ): Promise<InventoryTransaction> {
+    return this.inTransaction(manager, async (m) => {
+      const stockRepo = m.getRepository(InventoryStock);
+      const txRepo = m.getRepository(InventoryTransaction);
+
+      const stock = await this.lockStockOrFail(m, dto.partId, dto.storeroomId, tenantId);
+
+      const releaseQty = Math.min(stock.qtyReserved, dto.qty);
+      // Any shortfall in the reservation must come from unreserved stock.
+      const unreservedNeeded = dto.qty - releaseQty;
+      const unreservedAvailable = stock.qtyOnHand - stock.qtyReserved;
+      if (stock.qtyOnHand < dto.qty || unreservedAvailable < unreservedNeeded) {
+        throw new BadRequestException(
+          `Insufficient stock to issue ${dto.qty}. On hand: ${stock.qtyOnHand}, reserved: ${stock.qtyReserved}`,
+        );
+      }
+
+      stock.qtyReserved -= releaseQty;
+      stock.qtyOnHand -= dto.qty;
+      await stockRepo.save(stock);
+
+      const part = await m.getRepository(Part).findOne({ where: { id: dto.partId, tenantId } });
+
+      if (releaseQty > 0) {
+        await txRepo.save(
+          txRepo.create({
+            partId: dto.partId,
+            storeroomId: dto.storeroomId,
+            tenantId,
+            type: TransactionType.RELEASE,
+            qty: -releaseQty,
+            referenceId: dto.workOrderId,
+            referenceType: 'WorkOrder',
+            performedBy,
+          }),
+        );
+      }
+
+      const issueTx = await txRepo.save(
+        txRepo.create({
+          partId: dto.partId,
+          storeroomId: dto.storeroomId,
+          tenantId,
+          type: TransactionType.ISSUE,
+          qty: -dto.qty,
+          unitCost: part?.unitCost,
+          notes: dto.notes,
+          referenceId: dto.workOrderId,
+          referenceType: 'WorkOrder',
+          performedBy,
+        }),
+      );
+
+      await this.checkLowStock(dto.partId, tenantId, m);
+      return issueTx;
     });
   }
 
@@ -347,10 +453,7 @@ export class InventoryService {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
-      let stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
-      if (!stock) {
-        stock = stockRepo.create({ partId: dto.partId, storeroomId: dto.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
-      }
+      const stock = (await this.lockStock(manager, dto.partId, dto.storeroomId, tenantId, true))!;
 
       const newQty = stock.qtyOnHand + dto.adjustmentQty;
       if (newQty < 0) {
@@ -376,12 +479,22 @@ export class InventoryService {
   }
 
   async transferStock(dto: TransferStockDto, performedBy: string, tenantId: string): Promise<{ issueTransaction: InventoryTransaction; receiveTransaction: InventoryTransaction }> {
+    if (dto.fromStoreroomId === dto.toStoreroomId) {
+      throw new BadRequestException('Source and destination storerooms must differ');
+    }
     return this.dataSource.transaction(async (manager) => {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
-      // Check source stock
-      const fromStock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.fromStoreroomId, tenantId } });
+      // Lock both rows in a deterministic order so two opposite transfers
+      // (A->B and B->A) can't deadlock.
+      const [firstId, secondId] = [dto.fromStoreroomId, dto.toStoreroomId].sort();
+      const locked: Record<string, InventoryStock | null> = {};
+      locked[firstId] = await this.lockStock(manager, dto.partId, firstId, tenantId, firstId === dto.toStoreroomId);
+      locked[secondId] = await this.lockStock(manager, dto.partId, secondId, tenantId, secondId === dto.toStoreroomId);
+
+      const fromStock = locked[dto.fromStoreroomId];
+      const toStock = locked[dto.toStoreroomId]!;
       if (!fromStock) throw new NotFoundException('Source stock record not found');
 
       const available = fromStock.qtyOnHand - fromStock.qtyReserved;
@@ -389,17 +502,9 @@ export class InventoryService {
         throw new BadRequestException(`Insufficient stock in source. Available: ${available}, Requested: ${dto.qty}`);
       }
 
-      // Deduct from source
       fromStock.qtyOnHand -= dto.qty;
-      await stockRepo.save(fromStock);
-
-      // Add to destination
-      let toStock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.toStoreroomId, tenantId } });
-      if (!toStock) {
-        toStock = stockRepo.create({ partId: dto.partId, storeroomId: dto.toStoreroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
-      }
       toStock.qtyOnHand += dto.qty;
-      await stockRepo.save(toStock);
+      await stockRepo.save([fromStock, toStock]);
 
       // Create transactions
       const issueTx = txRepo.create({
@@ -429,13 +534,12 @@ export class InventoryService {
     });
   }
 
-  async reserveStock(dto: ReserveStockDto, performedBy: string, tenantId: string): Promise<InventoryTransaction> {
-    return this.dataSource.transaction(async (manager) => {
-      const stockRepo = manager.getRepository(InventoryStock);
-      const txRepo = manager.getRepository(InventoryTransaction);
+  async reserveStock(dto: ReserveStockDto, performedBy: string, tenantId: string, manager?: EntityManager): Promise<InventoryTransaction> {
+    return this.inTransaction(manager, async (m) => {
+      const stockRepo = m.getRepository(InventoryStock);
+      const txRepo = m.getRepository(InventoryTransaction);
 
-      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
-      if (!stock) throw new NotFoundException('Stock record not found');
+      const stock = await this.lockStockOrFail(m, dto.partId, dto.storeroomId, tenantId);
 
       const available = stock.qtyOnHand - stock.qtyReserved;
       if (available < dto.qty) {
@@ -460,13 +564,12 @@ export class InventoryService {
     });
   }
 
-  async releaseReservation(dto: ReleaseReservationDto, performedBy: string, tenantId: string): Promise<InventoryTransaction> {
-    return this.dataSource.transaction(async (manager) => {
-      const stockRepo = manager.getRepository(InventoryStock);
-      const txRepo = manager.getRepository(InventoryTransaction);
+  async releaseReservation(dto: ReleaseReservationDto, performedBy: string, tenantId: string, manager?: EntityManager): Promise<InventoryTransaction> {
+    return this.inTransaction(manager, async (m) => {
+      const stockRepo = m.getRepository(InventoryStock);
+      const txRepo = m.getRepository(InventoryTransaction);
 
-      const stock = await stockRepo.findOne({ where: { partId: dto.partId, storeroomId: dto.storeroomId, tenantId } });
-      if (!stock) throw new NotFoundException('Stock record not found');
+      const stock = await this.lockStockOrFail(m, dto.partId, dto.storeroomId, tenantId);
 
       const releaseQty = dto.qty || stock.qtyReserved;
       if (stock.qtyReserved < releaseQty) {
@@ -625,10 +728,7 @@ export class InventoryService {
         await lineRepo.save(lineItem);
 
         // Update qty on order
-        let stock = await stockRepo.findOne({ where: { partId: item.partId, storeroomId: item.storeroomId, tenantId } });
-        if (!stock) {
-          stock = stockRepo.create({ partId: item.partId, storeroomId: item.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
-        }
+        const stock = (await this.lockStock(manager, item.partId, item.storeroomId, tenantId, true))!;
         stock.qtyOnOrder += item.qtyOrdered;
         await stockRepo.save(stock);
       }
@@ -673,6 +773,15 @@ export class InventoryService {
     const data = await qb.getMany();
 
     return { data, total, page: query.page || 1, limit: query.limit || 20 };
+  }
+
+  /** Row-lock a PO (without relations: FOR UPDATE can't apply to outer joins). */
+  private async lockPurchaseOrder(manager: EntityManager, id: string, tenantId: string): Promise<void> {
+    const locked = await manager.getRepository(PurchaseOrder).findOne({
+      where: { id, tenantId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!locked) throw new NotFoundException(`Purchase Order ${id} not found`);
   }
 
   async findPurchaseOrderById(id: string, tenantId: string, manager?: any): Promise<PurchaseOrder> {
@@ -720,6 +829,9 @@ export class InventoryService {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
+      // Lock the PO row first so two clerks receiving the same PO serialise
+      // (the second sees the first's qtyReceived and is capped below).
+      await this.lockPurchaseOrder(manager, id, tenantId);
       const po = await this.findPurchaseOrderById(id, tenantId, manager);
 
       if (po.status === PurchaseOrderStatus.RECEIVED || po.status === PurchaseOrderStatus.CANCELLED) {
@@ -734,15 +846,18 @@ export class InventoryService {
         if (!lineItem) throw new NotFoundException(`Line item ${item.lineItemId} not found`);
 
         if (item.qtyReceived > 0) {
+          const outstanding = lineItem.qtyOrdered - lineItem.qtyReceived;
+          if (item.qtyReceived > outstanding) {
+            throw new BadRequestException(
+              `Cannot receive ${item.qtyReceived} of ${lineItem.part?.name ?? lineItem.partId}: only ${outstanding} outstanding on this line`,
+            );
+          }
           anyReceived = true;
           lineItem.qtyReceived += item.qtyReceived;
           await lineRepo.save(lineItem);
 
           // Update stock
-          let stock = await stockRepo.findOne({ where: { partId: lineItem.partId, storeroomId: lineItem.storeroomId, tenantId } });
-          if (!stock) {
-            stock = stockRepo.create({ partId: lineItem.partId, storeroomId: lineItem.storeroomId, tenantId, qtyOnHand: 0, qtyReserved: 0, qtyOnOrder: 0 });
-          }
+          const stock = (await this.lockStock(manager, lineItem.partId, lineItem.storeroomId, tenantId, true))!;
           stock.qtyOnHand += item.qtyReceived;
           stock.qtyOnOrder = Math.max(0, stock.qtyOnOrder - item.qtyReceived);
           await stockRepo.save(stock);
@@ -786,17 +901,18 @@ export class InventoryService {
       const poRepo = manager.getRepository(PurchaseOrder);
       const stockRepo = manager.getRepository(InventoryStock);
 
+      await this.lockPurchaseOrder(manager, id, tenantId);
       const po = await this.findPurchaseOrderById(id, tenantId, manager);
 
-      if (po.status === PurchaseOrderStatus.RECEIVED) {
-        throw new BadRequestException('Cannot cancel a received PO');
+      if (po.status === PurchaseOrderStatus.RECEIVED || po.status === PurchaseOrderStatus.CANCELLED) {
+        throw new BadRequestException('Cannot cancel a received or already-cancelled PO');
       }
 
       // Reduce qtyOnOrder for unreceived quantities
       for (const lineItem of po.lineItems) {
         const unreceived = lineItem.qtyOrdered - lineItem.qtyReceived;
         if (unreceived > 0) {
-          const stock = await stockRepo.findOne({ where: { partId: lineItem.partId, storeroomId: lineItem.storeroomId, tenantId } });
+          const stock = await this.lockStock(manager, lineItem.partId, lineItem.storeroomId, tenantId);
           if (stock) {
             stock.qtyOnOrder = Math.max(0, stock.qtyOnOrder - unreceived);
             await stockRepo.save(stock);

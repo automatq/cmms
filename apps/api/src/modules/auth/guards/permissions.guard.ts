@@ -9,6 +9,8 @@ import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 
+export const PLATFORM_PERMISSION_PREFIX = 'admin:';
+
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
@@ -37,6 +39,16 @@ export class PermissionsGuard implements CanActivate {
 
     if (!user) {
       throw new ForbiddenException('No user found in request');
+    }
+
+    // Platform-level permissions (admin:*) are reserved for superadmins. The
+    // org-owner wildcard '*' must NOT satisfy them, otherwise every self-serve
+    // org owner could manage every tenant on the platform.
+    const needsPlatformAdmin = requiredPermissions.some((p) =>
+      p.startsWith(PLATFORM_PERMISSION_PREFIX),
+    );
+    if (needsPlatformAdmin && user.systemRole !== 'superadmin') {
+      throw new ForbiddenException('Superadmin access required');
     }
 
     if (user.permissions.includes('*')) {

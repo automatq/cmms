@@ -13,15 +13,13 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Plus, CalendarClock, Trash2, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 
+// Values must match the API's ScheduledReportType enum (snake_case).
 const REPORT_TYPES = [
-  { value: 'work-orders', label: 'Work Orders' },
+  { value: 'work_orders', label: 'Work Orders' },
   { value: 'assets', label: 'Assets' },
   { value: 'inventory', label: 'Inventory' },
   { value: 'costs', label: 'Costs' },
-  { value: 'pm-compliance', label: 'PM Compliance' },
-  { value: 'technician-performance', label: 'Technician Performance' },
-  { value: 'downtime', label: 'Downtime' },
-  { value: 'warranties', label: 'Warranties' },
+  { value: 'pm_compliance', label: 'PM Compliance' },
 ]
 
 const SCHEDULE_PRESETS = [
@@ -35,7 +33,7 @@ export default function ScheduledReportsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({
     name: '',
-    reportType: 'work-orders',
+    reportType: 'work_orders',
     schedule: '0 8 * * 1',
     format: 'csv' as 'csv' | 'pdf',
     recipientEmails: '',
@@ -51,7 +49,7 @@ export default function ScheduledReportsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-reports'] })
       setShowCreate(false)
-      setForm({ name: '', reportType: 'work-orders', schedule: '0 8 * * 1', format: 'csv', recipientEmails: '' })
+      setForm({ name: '', reportType: 'work_orders', schedule: '0 8 * * 1', format: 'csv', recipientEmails: '' })
       toast.success('Scheduled report created')
     },
     onError: () => toast.error('Failed to create scheduled report'),

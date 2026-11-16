@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import PDFDocument from 'pdfkit';
 import { ReportsService } from './reports.service';
 import { ScheduledReport, ScheduledReportType, ReportFormat } from './entities/scheduled-report.entity';
+import { CreateScheduledReportDto, UpdateScheduledReportDto } from './dto/scheduled-report.dto';
 
 @Injectable()
 export class ExportService {
@@ -268,9 +269,10 @@ export class ExportService {
 
   // ==================== SCHEDULED REPORTS CRUD ====================
 
-  async createScheduledReport(dto: Partial<ScheduledReport>, userId: string, tenantId: string): Promise<ScheduledReport> {
+  async createScheduledReport(dto: CreateScheduledReportDto, userId: string, tenantId: string): Promise<ScheduledReport> {
+    const { name, reportType, filters, schedule, recipientEmails, format, isActive } = dto;
     const report = this.scheduledReportRepo.create({
-      ...dto,
+      name, reportType, filters, schedule, recipientEmails, format, isActive,
       createdBy: userId,
       tenantId,
     });
@@ -290,9 +292,14 @@ export class ExportService {
     return report;
   }
 
-  async updateScheduledReport(id: string, dto: Partial<ScheduledReport>, tenantId: string): Promise<ScheduledReport> {
+  async updateScheduledReport(id: string, dto: UpdateScheduledReportDto, tenantId: string): Promise<ScheduledReport> {
     const report = await this.findOneScheduledReport(id, tenantId);
-    Object.assign(report, dto);
+    // Copy only the editable fields; never id / tenantId / createdBy.
+    const editable = ['name', 'reportType', 'filters', 'schedule', 'recipientEmails', 'format', 'isActive'] as const;
+    for (const key of editable) {
+      if (dto[key] !== undefined) (report as any)[key] = dto[key];
+    }
+    report.tenantId = tenantId;
     return this.scheduledReportRepo.save(report);
   }
 
