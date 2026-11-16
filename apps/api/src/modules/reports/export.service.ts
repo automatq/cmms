@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import { ReportsService } from './reports.service';
 import { ScheduledReport, ScheduledReportType, ReportFormat } from './entities/scheduled-report.entity';
 import { CreateScheduledReportDto, UpdateScheduledReportDto } from './dto/scheduled-report.dto';
+import { resolveTimeZone } from '../../common/time/tenant-time';
 
 @Injectable()
 export class ExportService {
@@ -310,6 +311,18 @@ export class ExportService {
 
   async getActiveScheduledReports(): Promise<ScheduledReport[]> {
     return this.scheduledReportRepo.find({ where: { isActive: true } });
+  }
+
+  /** IANA timezone per tenant (organizations.timezone), for schedule matching. */
+  async getTenantTimeZones(tenantIds: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    if (tenantIds.length === 0) return map;
+    const rows: Array<{ id: string; timezone: string | null }> = await this.scheduledReportRepo.manager.query(
+      `SELECT id, timezone FROM organizations WHERE id = ANY($1::uuid[])`,
+      [tenantIds],
+    );
+    for (const r of rows) map.set(r.id, resolveTimeZone(r.timezone));
+    return map;
   }
 
   async markAsRun(id: string): Promise<void> {

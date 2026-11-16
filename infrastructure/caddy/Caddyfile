@@ -1,4 +1,7 @@
-:80 {
+# SITE_ADDRESS is your public hostname (e.g. maintek.example.com); Caddy then
+# obtains and renews a TLS certificate automatically and redirects HTTP->HTTPS.
+# It defaults to :80 (plain HTTP) for local use only.
+{$SITE_ADDRESS::80} {
 	header {
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
@@ -6,6 +9,8 @@
 		Referrer-Policy strict-origin-when-cross-origin
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' wss:; frame-src 'self'"
+		# Only honoured by browsers over HTTPS; harmless on plain HTTP.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-Server
 	}
 

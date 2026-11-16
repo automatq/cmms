@@ -15,7 +15,7 @@ Built as a full-stack TypeScript monorepo with a NestJS API, Next.js web dashboa
 - **Teams & Permissions** — Role-based access control, crew management, multi-tenant isolation
 - **Reports & Analytics** — Dashboard KPIs, export to CSV/PDF, scheduled report delivery, budget vs. actual tracking
 - **Real-time Updates** — WebSocket notifications, live activity feeds
-- **AI Assistant** — Natural language queries against your maintenance data (AWS Bedrock or Ollama)
+- **AI Assistant** — Natural language queries against your maintenance data (Anthropic, AWS Bedrock or Ollama)
 - **Public Request Portal** — External users submit work requests without an account
 - **Outbound Webhooks** — Push events to external systems with retry logic
 - **Data Import** — Bulk CSV import with column mapping and validation
@@ -27,16 +27,16 @@ Built as a full-stack TypeScript monorepo with a NestJS API, Next.js web dashboa
 
 | Layer | Technology |
 |-------|-----------|
-| **API** | NestJS 10, TypeORM, PostgreSQL, Redis, BullMQ |
-| **Web** | Next.js 14, React 18, Tailwind CSS, Shadcn/ui, Recharts |
-| **Mobile** | Expo 50, React Native 0.73, Expo Router |
-| **Auth** | None — single shared workspace mode |
+| **API** | NestJS 11, TypeORM, PostgreSQL, Redis, BullMQ |
+| **Web** | Next.js 15, React 18, Tailwind CSS, Shadcn/ui, Recharts |
+| **Mobile** | Expo SDK 58, React Native 0.88, Expo Router |
+| **Auth** | Better Auth (email/password, organizations, invitations) |
 | **Storage** | MinIO / AWS S3 |
 | **Real-time** | Socket.io with Redis adapter |
 | **Jobs** | BullMQ (PM scheduling, exports, webhooks, imports, warranty checks, budget alerts) |
-| **AI** | AWS Bedrock / Ollama |
+| **AI** | Anthropic / AWS Bedrock / Ollama |
 | **Billing** | Stripe |
-| **Infra** | Docker Compose, Terraform (AWS ECS/RDS/ElastiCache/S3), Caddy reverse proxy |
+| **Infra** | Docker Compose, Caddy reverse proxy (automatic HTTPS), Railway |
 
 ---
 
@@ -52,9 +52,11 @@ Built as a full-stack TypeScript monorepo with a NestJS API, Next.js web dashboa
 │   └── shared/         Shared types and utilities
 ├── infrastructure/
 │   ├── caddy/          Reverse proxy config
-│   ├── postgres/       DB initialization scripts
-│   └── terraform/      AWS infrastructure as code
-├── docker-compose.yml  Development environment
+│   ├── minio/          Object storage config
+│   └── postgres/       DB initialization scripts
+├── docker-compose.yml           Full stack (dev / self-host)
+├── docker-compose.override.yml  Publishes DB/Redis/MinIO/Mailpit on localhost
+├── docker-compose.prod.yml      Production (pre-built images)
 └── Makefile            Common commands
 ```
 
@@ -73,9 +75,9 @@ modules/
 ├── imports/         CSV data import with validation
 ├── files/           S3/MinIO file storage
 ├── realtime/        WebSocket gateway
-├── ai/              AI-powered assistant (Bedrock/Ollama)
+├── ai/              AI-powered assistant (Anthropic/Bedrock/Ollama)
 ├── billing/         Stripe subscriptions
-└── auth/            JWT guards, permissions (auth currently stubbed)
+└── auth/            Better Auth sessions, membership + permission guards
 ```
 
 ---
@@ -84,63 +86,88 @@ modules/
 
 ### Prerequisites
 
-- Node.js 20+
-- Docker & Docker Compose
+- Node.js 20+ and npm 10+
+- Docker with Compose v2
 
-### 1. Clone and install
-
-```bash
-git clone https://github.com/automatq/maintek.git
-cd maintek
-npm install
-```
-
-### 2. Configure environment
+### Option A — everything in Docker (quickest)
 
 ```bash
+git clone https://github.com/automatq/cmms.git
+cd cmms
 cp .env.example .env
-```
-
-`.env.example` has working defaults for the single shared workspace
-(default tenant + admin user are seeded automatically by migrations).
-
-### 3. Start services
-
-```bash
+# Set BETTER_AUTH_SECRET in .env (required — compose refuses to start without it):
+#   openssl rand -base64 32
 make up
 ```
 
-This starts PostgreSQL, Redis, MinIO, the API, web app, and supporting services.
+Open **http://localhost**, sign up, and create your organization. Caddy is the only entry point: `/api/*` and `/socket.io/*` go
+to the API, everything else to the web app. Database migrations run
+automatically when the API starts.
 
-### 4. Run migrations
+The API and worker containers run with `NODE_ENV=production`, so Swagger is
+disabled in this mode. Useful extras (bound to 127.0.0.1 by
+`docker-compose.override.yml`):
+
+- **Mailpit** (captured sign-up / invite / report emails): http://localhost:8025
+- **MinIO console:** http://localhost:9001
+- **Postgres:** `localhost:5432`, **Redis:** `localhost:6379`
+
+### Option B — API and web on the host (hot reload)
+
+Run only the backing services in Docker and the apps with Node:
 
 ```bash
-make migrate
+npm install                     # .npmrc already sets legacy-peer-deps
+cp .env.example .env            # still needed for the container credentials
+docker compose up -d postgres redis minio mailpit
+
+cp apps/api/.env.example apps/api/.env
+# Set BETTER_AUTH_SECRET in apps/api/.env (openssl rand -base64 32)
+
+npm run dev:api                 # API on http://localhost:4000 (Swagger: /api/docs)
+npm run dev:web                 # Web on http://localhost:3000
 ```
 
-### 5. Open the app
+The defaults in `apps/api/.env.example` match the credentials in the root
+`.env.example`; if you change one, change the other. The web app talks to
+`http://localhost:4000/api/v1` unless `NEXT_PUBLIC_API_URL` is set.
 
-- **Web dashboard:** http://localhost:3000
-- **API:** http://localhost:4000/api/v1
-- **API docs (Swagger):** http://localhost:4000/api/docs
+### Mobile app
 
-### 6. Promote a superadmin (optional)
+```bash
+npm run dev:mobile              # expo start
+```
+
+Set `expo.extra.apiUrl` in `apps/mobile/app.json` to an API your device can
+reach (e.g. `http://<your-LAN-IP>:4000/api/v1`, and add that origin to
+`CORS_ORIGINS`). The app uses Expo SDK 58, so use a development build
+(`npx expo run:android` / `npx expo run:ios`) or an EAS build if your Expo Go
+doesn't support that SDK yet.
+
+### AI assistant
+
+Set `ANTHROPIC_API_KEY` to use Claude, or run Ollama locally:
+
+```bash
+docker compose --profile ai up -d ollama
+make pull-models
+```
+
+### Promote a superadmin (optional)
 
 The MainTek HQ admin console at `/dashboard/admin/tenants` lets operators
 manage customer organizations, change plans, suspend tenants, and
 impersonate users for support. It is hidden behind a `superadmin` role
 that is not granted to anyone by default.
 
-To promote yourself (after you've signed up via the normal flow):
+Sign up first, then:
 
 ```bash
+make promote-superadmin EMAIL=you@example.com               # Docker stack
+make promote-superadmin EMAIL=you@example.com REVOKE=true   # revoke
+
+# or from the host, using apps/api/.env for the DB connection:
 EMAIL=you@example.com npm run promote-superadmin --workspace=@maintek/api
-```
-
-To revoke:
-
-```bash
-EMAIL=you@example.com REVOKE=true npm run promote-superadmin --workspace=@maintek/api
 ```
 
 All superadmin actions are logged to the `audit_log` table. Treat the
@@ -151,84 +178,93 @@ role as you would a database root account.
 ## Development
 
 ```bash
-# Start everything
-make up
+make up / make down       # Start / stop the Docker stack
+make logs                 # Follow logs
+make migrate              # Run migrations manually (they also run on API start)
+make migration-generate name=AddSomething   # Host-side, uses apps/api/.env
+make reset                # Full reset (drops all volumes — asks first)
 
-# Or run individual services
-npm run dev:api          # API on :4000
-npm run dev:web          # Web on :3000
-npm run dev:mobile       # Expo dev server
-
-# Database
-make migrate             # Run migrations
-make seed                # Seed sample data
-make reset               # Full reset (drops volumes)
-
-# Code quality
-npm run lint
+# Tests and checks
+npm test --workspace=@maintek/api
 npm run typecheck
+npm run lint
 ```
 
 ---
 
 ## Deployment
 
-### Railway (current setup)
-
-The API and web app deploy as separate Railway services. See `docs/railway-minio.md` for storage configuration.
-
 ### Docker (self-hosted)
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+cp .env.production.example .env
+# Set BETTER_AUTH_SECRET, strong DB/Redis/MinIO passwords, and:
+#   SITE_ADDRESS=maintek.example.com
+#   PUBLIC_URL=https://maintek.example.com
+make prod-up               # docker compose -f docker-compose.prod.yml up -d
 ```
 
-### AWS (Terraform)
+Point DNS at the server and open ports 80 and 443; Caddy obtains and renews
+the TLS certificate automatically. `docker-compose.prod.yml` uses pre-built
+images from a registry — build and push your own (`make docker-build`,
+`make docker-push`) and update the image tags so you are running current code.
 
-```bash
-cd infrastructure/terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
-terraform init
-terraform apply
-```
+### Railway
 
-Provisions ECS, RDS, ElastiCache, S3, SES, ALB with SSL, and CloudWatch.
+The API and web app deploy as separate Railway services. See
+`docs/railway-setup.md` and `docs/railway-minio.md`.
 
 ---
 
 ## Environment Variables
 
+Root `.env` (Docker Compose):
+
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `JWT_SECRET` | Yes | Random 64-char string for JWT signing |
-| `POSTGRES_USER` | Yes | Database username |
-| `POSTGRES_PASSWORD` | Yes | Database password |
-| `POSTGRES_DB` | Yes | Database name |
-| `REDIS_URL` | Yes | Redis connection string |
-| `PUBLIC_URL` | Yes | Public-facing URL of the app |
-| `DEFAULT_TENANT_ID` | No | UUID of the seeded shared tenant |
-| `DEFAULT_USER_ID` | No | UUID of the seeded admin user |
-| `DEFAULT_USER_EMAIL` | No | Email shown on the seeded admin user |
-| `MINIO_ENDPOINT` | No | MinIO/S3 endpoint for file storage |
-| `MINIO_BUCKET` | No | Storage bucket name |
-| `STRIPE_SECRET_KEY` | No | Stripe billing integration |
-| `AI_PROVIDER` | No | `bedrock` or `ollama` |
-| `SMTP_HOST` | No | Email server for notifications |
+| `BETTER_AUTH_SECRET` | Yes | Session signing secret (`openssl rand -base64 32`) |
+| `PUBLIC_URL` | Yes | Public URL of the app (`http://localhost`, or `https://<SITE_ADDRESS>`) |
+| `SITE_ADDRESS` | Prod | Public hostname; enables automatic HTTPS in Caddy |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Yes | Database credentials |
+| `REDIS_PASSWORD` | Yes | Redis password |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | Yes | Object storage credentials |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | No | Billing |
 
-Full examples in `.env.example` and `.env.production.example`.
+API (`apps/api/.env`, or the container environment). In production the API
+refuses to start without `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
+`PUBLIC_WEB_URL`, `CORS_ORIGINS` and a database connection (`DATABASE_URL` or
+`DB_HOST`/`DB_USERNAME`/`DB_PASSWORD`/`DB_DATABASE`).
+
+| Variable | Description |
+|----------|-------------|
+| `BETTER_AUTH_URL` | Public URL of the API |
+| `PUBLIC_WEB_URL` | Public URL of the web app (auth redirects, email links) |
+| `CORS_ORIGINS` | Comma-separated allowed browser origins |
+| `DB_RUN_MIGRATIONS` | Run migrations on startup (default `true`) |
+| `EMAIL_PROVIDER` | `smtp`, `resend` or `ses` (plus `SMTP_*` / `RESEND_API_KEY`) |
+| `AI_PROVIDER` | `anthropic`, `bedrock` or `ollama` (`ANTHROPIC_API_KEY`, `OLLAMA_BASE_URL`) |
+| `WEBHOOK_ALLOW_HTTP` / `WEBHOOK_ALLOW_PRIVATE_TARGETS` | Relax webhook URL rules (development only) |
+
+Full examples in `.env.example`, `.env.production.example` and `apps/api/.env.example`.
 
 ---
 
 ## Architecture
 
-**Multi-tenant schema, single shared workspace** — Every record is still scoped to a `tenant_id` and the data model supports multiple tenants, but the app currently runs in single shared workspace mode: a default tenant and admin user are seeded by migration and used for all requests.
+**Multi-tenant** — Every record is scoped to a `tenant_id`. Each signed-up
+organization is a tenant; users belong to tenants through memberships with a
+role, and roles map to permissions checked on every request.
 
-**Auth flow** — Auth is currently stubbed: `JwtAuthGuard` returns a hardcoded `RequestUser` from `DEFAULT_TENANT_ID` / `DEFAULT_USER_ID` env vars instead of verifying tokens. The guard, permissions, and Socket.io auth path are kept in place so a real provider can be wired back in later.
+**Auth flow** — Better Auth issues sessions (web and the Expo client on
+mobile). A global guard resolves the session and the active organization
+membership into a `RequestUser`; a permissions guard enforces the route's
+required permissions. Socket.io connections are authenticated the same way.
 
-**Background jobs** — Six BullMQ processors run in a separate worker process: PM scheduling, warranty checks, report exports, budget alerts, webhook delivery, and data imports.
+**Background jobs** — BullMQ processors run in a separate worker process:
+PM scheduling, warranty checks, report exports and scheduled reports, budget
+alerts, webhook delivery, and data imports.
 
-**Real-time** — Socket.io with Redis adapter for horizontal scaling. WebSocket connections currently inherit the same stubbed user as the REST API.
+**Real-time** — Socket.io with Redis adapter for horizontal scaling.
 
 ---
 

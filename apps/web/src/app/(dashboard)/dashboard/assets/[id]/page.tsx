@@ -31,7 +31,7 @@ export default function AssetDetailPage() {
   const params = useParams()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { user } = useAuth()
+  const { can } = useAuth()
   const id = params?.id as string
 
   const [showMeterDialog, setShowMeterDialog] = useState(false)
@@ -163,7 +163,7 @@ export default function AssetDetailPage() {
   }
 
   const imageUrl = asset.customFields?.imageUrl
-  const canManageQr = !!user?.permissions?.includes('assets:write')
+  const canManageQr = can('assets:write')
 
   return (
     <div className="space-y-6 pb-12">

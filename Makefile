@@ -1,4 +1,4 @@
-.PHONY: up down build logs shell-api shell-db migrate seed pull-models reset prod-up prod-down prod-build prod-logs docker-build docker-push
+.PHONY: up down build logs shell-api shell-db migrate promote-superadmin pull-models reset prod-up prod-down prod-build prod-logs docker-build docker-push
 
 up:
 	docker compose up -d
@@ -18,19 +18,26 @@ shell-api:
 shell-db:
 	docker compose exec postgres psql -U $${POSTGRES_USER} -d $${POSTGRES_DB}
 
+# Migrations also run automatically when the API starts (DB_RUN_MIGRATIONS=true).
+# The container only ships compiled code, so run the compiled data source.
 migrate:
-	docker compose exec maintek-api npm run migration:run
+	docker compose exec maintek-api npx typeorm migration:run -d dist/config/data-source.js
 
+# Needs the TypeScript sources, so it runs on the host against the published
+# Postgres port (see docker-compose.override.yml) using apps/api/.env.
 migration-generate:
-	docker compose exec maintek-api npm run migration:generate -- src/database/migrations/$(name)
+	npm run migration:generate --workspace=@maintek/api -- src/database/migrations/$(name)
 
-seed:
-	docker compose exec maintek-api npm run seed
+# Usage: make promote-superadmin EMAIL=you@example.com  (add REVOKE=true to revoke)
+# The account must already exist (sign up in the web app first).
+promote-superadmin:
+	@test -n "$(EMAIL)" || (echo "Usage: make promote-superadmin EMAIL=you@example.com" && exit 1)
+	@echo "UPDATE users SET role = $(if $(filter true,$(REVOKE)),NULL,'superadmin'), updated_at = now() WHERE email = :'email' RETURNING email, role;" | \
+		docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -v email="$$1" -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' _ "$(EMAIL)"
 
+# Ollama is in the `ai` profile: start it with `docker compose --profile ai up -d ollama`.
 pull-models:
-	docker compose exec ollama ollama pull llama3.1:8b
-	docker compose exec ollama ollama pull nomic-embed-text
-	docker compose exec ollama ollama pull qwen2.5-coder:7b
+	docker compose --profile ai exec ollama ollama pull llama3.2
 
 reset:
 	@echo "WARNING: This will delete ALL data volumes (database, redis, minio)."

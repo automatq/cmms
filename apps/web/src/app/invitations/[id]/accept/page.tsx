@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { authClient, useSession } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
@@ -11,18 +11,28 @@ import { Mail, CheckCircle2, AlertTriangle } from 'lucide-react'
 export default function AcceptInvitationPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const invitationId = params?.id as string
   const { data: session, isPending: sessionLoading } = useSession()
+  const sessionUserId = session?.user?.id
+  const returnTo = encodeURIComponent(`/invitations/${invitationId}/accept`)
 
   const [invitation, setInvitation] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [accepting, setAccepting] = useState(false)
 
-  // Fetch invitation details
+  // Fetch invitation details. Better Auth only returns an invitation to a
+  // signed-in recipient, so wait for the session and skip the call when signed out.
   useEffect(() => {
-    if (!invitationId) return
+    if (!invitationId || sessionLoading) return
+    if (!sessionUserId) {
+      setLoading(false)
+      return
+    }
     let cancelled = false
+    setLoading(true)
+    setError(null)
     ;(async () => {
       try {
         const res = await authClient.organization.getInvitation({
@@ -41,7 +51,7 @@ export default function AcceptInvitationPage() {
       }
     })()
     return () => { cancelled = true }
-  }, [invitationId])
+  }, [invitationId, sessionLoading, sessionUserId])
 
   async function handleAccept() {
     setAccepting(true)
@@ -65,10 +75,39 @@ export default function AcceptInvitationPage() {
     }
   }
 
-  if (loading || sessionLoading) {
+  if (sessionLoading || (session && loading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/20 p-4">
         <p className="text-muted-foreground">Loading invitation…</p>
+      </div>
+    )
+  }
+
+  // Not signed in — prompt to sign in or sign up, then come back here
+  if (!session) {
+    const emailParam = searchParams?.get('email')
+    const signUpHref = `/sign-up?returnTo=${returnTo}${emailParam ? `&email=${encodeURIComponent(emailParam)}` : ''}`
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/20 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center space-y-3">
+            <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Mail className="h-6 w-6 text-primary" />
+            </div>
+            <CardTitle>You've been invited to join a workspace</CardTitle>
+            <CardDescription>
+              Sign in or create an account with the email address this invitation was sent to.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex-col gap-2">
+            <Button asChild className="w-full">
+              <Link href={signUpHref}>Create account</Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full">
+              <Link href={`/sign-in?returnTo=${returnTo}`}>I already have an account</Link>
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     )
   }
@@ -86,7 +125,7 @@ export default function AcceptInvitationPage() {
           </CardHeader>
           <CardFooter>
             <Button asChild className="w-full" variant="outline">
-              <Link href="/sign-in">Go to sign in</Link>
+              <Link href={`/sign-in?returnTo=${returnTo}`}>Go to sign in</Link>
             </Button>
           </CardFooter>
         </Card>
@@ -96,36 +135,6 @@ export default function AcceptInvitationPage() {
 
   const orgName = invitation.organizationName || invitation.organization?.name || 'this workspace'
   const inviteEmail = invitation.email
-
-  // Not signed in — prompt to sign in or sign up
-  if (!session) {
-    const returnTo = encodeURIComponent(`/invitations/${invitationId}/accept`)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/20 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center space-y-3">
-            <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <Mail className="h-6 w-6 text-primary" />
-            </div>
-            <CardTitle>You're invited to join {orgName}</CardTitle>
-            <CardDescription>
-              Sign in or create an account with <strong>{inviteEmail}</strong> to accept.
-            </CardDescription>
-          </CardHeader>
-          <CardFooter className="flex-col gap-2">
-            <Button asChild className="w-full">
-              <Link href={`/sign-up?returnTo=${returnTo}&email=${encodeURIComponent(inviteEmail)}`}>
-                Create account
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full">
-              <Link href={`/sign-in?returnTo=${returnTo}`}>I already have an account</Link>
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-    )
-  }
 
   // Signed in but with the wrong email
   if (session.user.email.toLowerCase() !== inviteEmail.toLowerCase()) {

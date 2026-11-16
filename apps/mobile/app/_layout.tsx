@@ -72,7 +72,10 @@ export default function RootLayout() {
             <OfflineInit>
               <StatusBar style="auto" />
               <OfflineBanner />
-              <Stack screenOptions={{ headerShown: false }}>
+              {/* headerTransparent: false keeps the opaque header (and content
+                  below it) on iOS 26+, where expo-router now defaults to a
+                  transparent Liquid Glass header. */}
+              <Stack screenOptions={{ headerShown: false, headerTransparent: false }}>
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="sign-in" />
                 <Stack.Screen

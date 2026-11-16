@@ -6,10 +6,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, Between } from 'typeorm';
+import { Repository, LessThanOrEqual, LessThan, Between } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { addDays, addWeeks, addMonths, addYears, startOfDay, endOfDay } from 'date-fns';
+import { addDays, addWeeks, addMonths, addYears } from 'date-fns';
 import { PmPlan, TriggerType, FrequencyUnit, ChecklistTemplate, PmHistory, PmHistoryStatus } from './entities';
 import {
   CreatePmPlanDto,
@@ -26,6 +26,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
 import { BlackoutsService } from '../blackouts/blackouts.service';
+import { startOfZonedDay, endOfZonedDay } from '../../common/time/tenant-time';
 
 /**
  * Any non-terminal WO for a plan blocks generating another one. New WOs start
@@ -150,11 +151,12 @@ export class PmService {
 
   async getDueToday(tenantId: string): Promise<PmPlan[]> {
     const today = new Date();
+    const tz = await this.blackoutsService.getTimeZone(tenantId);
     return this.pmPlanRepository.find({
       where: {
         tenantId,
         isActive: true,
-        nextDueAt: Between(startOfDay(today), endOfDay(today)),
+        nextDueAt: Between(startOfZonedDay(today, tz), endOfZonedDay(today, tz)),
       },
       relations: ['asset'],
     });
@@ -163,11 +165,12 @@ export class PmService {
   async getDueThisWeek(tenantId: string): Promise<PmPlan[]> {
     const today = new Date();
     const weekEnd = addDays(today, 7);
+    const tz = await this.blackoutsService.getTimeZone(tenantId);
     return this.pmPlanRepository.find({
       where: {
         tenantId,
         isActive: true,
-        nextDueAt: Between(startOfDay(today), endOfDay(weekEnd)),
+        nextDueAt: Between(startOfZonedDay(today, tz), endOfZonedDay(weekEnd, tz)),
       },
       relations: ['asset'],
       order: { nextDueAt: 'ASC' },
@@ -176,11 +179,12 @@ export class PmService {
 
   async getOverdue(tenantId: string): Promise<PmPlan[]> {
     const today = new Date();
+    const tz = await this.blackoutsService.getTimeZone(tenantId);
     return this.pmPlanRepository.find({
       where: {
         tenantId,
         isActive: true,
-        nextDueAt: LessThanOrEqual(startOfDay(today)),
+        nextDueAt: LessThan(startOfZonedDay(today, tz)),
       },
       relations: ['asset'],
       order: { nextDueAt: 'ASC' },

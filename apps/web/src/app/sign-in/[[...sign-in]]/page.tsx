@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from '@/lib/auth-client'
+import { safeRedirect } from '@/lib/safe-redirect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,7 +14,8 @@ import { Wrench } from 'lucide-react'
 export default function SignInPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnTo = searchParams?.get('returnTo') || '/dashboard'
+  const returnToParam = searchParams?.get('returnTo')
+  const returnTo = safeRedirect(returnToParam)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -87,7 +89,9 @@ export default function SignInPage() {
             </Button>
             <p className="text-sm text-muted-foreground text-center">
               Don't have an account?{' '}
-              <Link href="/sign-up" className="text-primary hover:underline">
+              <Link
+                href={returnToParam ? `/sign-up?returnTo=${encodeURIComponent(returnTo)}` : '/sign-up'}
+                className="text-primary hover:underline">
                 Sign up
               </Link>
             </p>

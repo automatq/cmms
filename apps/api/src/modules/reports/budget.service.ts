@@ -1,3 +1,4 @@
+import { format } from 'date-fns';
 import {
   Injectable,
   NotFoundException,
@@ -95,7 +96,7 @@ export class BudgetService {
       .select('COALESCE(SUM(wo.actual_cost), 0)', 'totalCost')
       .where('wo.tenantId = :tenantId', { tenantId })
       .andWhere('wo.completed_at >= :start', { start: budget.periodStart })
-      .andWhere('wo.completed_at <= :end', { end: budget.periodEnd })
+      .andWhere("wo.completed_at < (CAST(:end AS date) + INTERVAL '1 day')", { end: budget.periodEnd })
       .andWhere(
         budget.locationId
           ? 'wo.location_id = :locationId'
@@ -110,13 +111,20 @@ export class BudgetService {
     // Get labor vs parts breakdown
     const breakdown = await this.workOrderRepository
       .createQueryBuilder('wo')
-      .leftJoin('wo.labor', 'labor')
-      .leftJoin('wo.parts', 'parts')
-      .select('COALESCE(SUM(labor.hours * labor.hourly_rate), 0)', 'laborCost')
-      .addSelect('COALESCE(SUM(parts.qty_used * parts.unit_cost), 0)', 'partsCost')
+      // Aggregate labour and parts in correlated subqueries. Joining both
+      // tables at once produced a labour x parts cross product, multiplying
+      // each total by the other's row count.
+      .select(
+        'COALESCE(SUM((SELECT COALESCE(SUM(l.hours * COALESCE(l.hourly_rate, 0)), 0) FROM wo_labor l WHERE l.wo_id = wo.id)), 0)',
+        'laborCost',
+      )
+      .addSelect(
+        'COALESCE(SUM((SELECT COALESCE(SUM(p.qty_used * COALESCE(p.unit_cost, 0)), 0) FROM wo_parts p WHERE p.wo_id = wo.id)), 0)',
+        'partsCost',
+      )
       .where('wo.tenantId = :tenantId', { tenantId })
       .andWhere('wo.completed_at >= :start', { start: budget.periodStart })
-      .andWhere('wo.completed_at <= :end', { end: budget.periodEnd })
+      .andWhere("wo.completed_at < (CAST(:end AS date) + INTERVAL '1 day')", { end: budget.periodEnd })
       .andWhere(
         budget.locationId
           ? 'wo.location_id = :locationId'
@@ -151,7 +159,7 @@ export class BudgetService {
         .select('COALESCE(SUM(wo.actual_cost), 0)', 'totalCost')
         .where('wo.tenantId = :tenantId', { tenantId })
         .andWhere('wo.completed_at >= :start', { start: budget.periodStart })
-        .andWhere('wo.completed_at <= :end', { end: budget.periodEnd })
+        .andWhere("wo.completed_at < (CAST(:end AS date) + INTERVAL '1 day')", { end: budget.periodEnd })
         .andWhere(
           budget.locationId
             ? 'wo.location_id = :locationId'
@@ -177,7 +185,14 @@ export class BudgetService {
     Array<{ budgetId: string; budgetName: string; percentUsed: number }>
   > {
     const summary = await this.getBudgetSummary(tenantId);
+    // Only alert on budgets whose period includes today; past budgets that
+    // ended over-spent used to re-alert every day forever.
+    // node-postgres parses DATE columns to a local-midnight Date, so compare
+    // using local calendar fields (toISOString() could shift by a day).
+    const dateOnly = (d: Date | string) => (typeof d === 'string' ? d.slice(0, 10) : format(d, 'yyyy-MM-dd'));
+    const today = dateOnly(new Date());
     return summary
+      .filter((s) => dateOnly(s.budget.periodStart) <= today && today <= dateOnly(s.budget.periodEnd))
       .filter((s) => s.percentUsed >= 80)
       .map((s) => ({
         budgetId: s.budget.id,

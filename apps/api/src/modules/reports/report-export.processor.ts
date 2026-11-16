@@ -6,6 +6,8 @@ import { Queue } from 'bullmq';
 import { ExportService } from './export.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendScheduledReportEmail } from '../auth/email-sender';
+import { cronMatches } from './cron-match';
+import { zonedParts } from '../../common/time/tenant-time';
 
 @Injectable()
 @Processor('report-export')
@@ -47,9 +49,11 @@ export class ReportExportProcessor extends WorkerHost implements OnModuleInit {
   private async checkScheduledReports(): Promise<void> {
     const reports = await this.exportService.getActiveScheduledReports();
     const now = new Date();
+    const zones = await this.exportService.getTenantTimeZones([...new Set(reports.map((r) => r.tenantId))]);
 
     for (const report of reports) {
-      if (this.shouldRunNow(report.schedule, report.lastRunAt, now)) {
+      // Schedules are written in the organization's local time ("Mon 8 AM").
+      if (this.shouldRunNow(report.schedule, report.lastRunAt, now, zones.get(report.tenantId) ?? 'UTC')) {
         await this.exportQueue.add('run-scheduled-report', {
           reportId: report.id,
           reportType: report.reportType,
@@ -62,34 +66,8 @@ export class ReportExportProcessor extends WorkerHost implements OnModuleInit {
     }
   }
 
-  private shouldRunNow(cron: string, lastRunAt: Date | null, now: Date): boolean {
-    // Simple cron matching — checks if the current minute matches the cron pattern
-    // Format: minute hour dayOfMonth month dayOfWeek
-    const parts = cron.split(' ');
-    if (parts.length < 5) return false;
-
-    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-
-    const matches = (field: string, value: number): boolean => {
-      if (field === '*') return true;
-      if (field.includes('/')) {
-        const [, step] = field.split('/');
-        return value % parseInt(step, 10) === 0;
-      }
-      if (field.includes(',')) {
-        return field.split(',').map(Number).includes(value);
-      }
-      return parseInt(field, 10) === value;
-    };
-
-    const cronMatches =
-      matches(minute, now.getMinutes()) &&
-      matches(hour, now.getHours()) &&
-      matches(dayOfMonth, now.getDate()) &&
-      matches(month, now.getMonth() + 1) &&
-      matches(dayOfWeek, now.getDay());
-
-    if (!cronMatches) return false;
+  private shouldRunNow(cron: string, lastRunAt: Date | null, now: Date, timeZone: string): boolean {
+    if (!cronMatches(cron, zonedParts(now, timeZone))) return false;
 
     // Avoid double-runs within the same minute
     if (lastRunAt) {
