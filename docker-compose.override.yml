@@ -1,7 +1,23 @@
-version: "3.9"
+# Loaded automatically by `docker compose` / `make up` (not by docker-compose.prod.yml).
+# Publishes the backing services on 127.0.0.1 so the API and web app can run
+# on the host with hot reload (`npm run dev:api`, `npm run dev:web`).
 services:
   caddy:
-    ports:
-      - "80:80"
-      - "443:443"
     restart: always
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+  minio:
+    ports:
+      - "127.0.0.1:9000:9000"   # S3 API
+      - "127.0.0.1:9001:9001"   # console
+  mailpit:
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP
+      - "127.0.0.1:8025:8025"   # web UI for captured email
+  ollama:
+    ports:
+      - "127.0.0.1:11434:11434"

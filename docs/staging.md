@@ -92,16 +92,11 @@ deploy-production:
     - run: railway up --service cmms-api --environment production
 ```
 
-### 5. Seed staging with realistic data
+### 5. Load staging with realistic data
 
-After first deploy:
-
-```bash
-railway run --service cmms-api-staging npm run seed --workspace=@maintek/api
-```
-
-If you maintain a "demo workspace" snapshot, restore it instead of
-seeding fresh — it makes the staging env immediately usable for QA.
+There is no seed script. After first deploy, sign up through the web app
+to create a workspace, or restore a "demo workspace" snapshot — it makes
+the staging env immediately usable for QA.
 
 ### 6. Robots / discovery
 
