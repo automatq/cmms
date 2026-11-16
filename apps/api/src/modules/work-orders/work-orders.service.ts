@@ -312,27 +312,36 @@ export class WorkOrdersService {
       // Calculate actual cost from labor and parts
       await this.calculateActualCost(workOrder);
 
-      // Issue reserved stock (deduct from inventory)
-      const woParts = await this.partRepository.find({ where: { woId: id, tenantId } });
-      for (const part of woParts) {
-        if (part.reserved && part.storeroomId) {
-          try {
-            await this.inventoryService.issueStock(
-              { partId: part.partId, storeroomId: part.storeroomId, qty: part.qtyUsed, workOrderId: id, notes: 'Issued on WO completion' },
+      // Consume reserved parts. All parts are issued in ONE transaction and
+      // before the WO is saved as completed: if any part can't be issued the
+      // whole completion fails with a clear error instead of silently leaving
+      // stock un-deducted and reserved forever (the previous behaviour).
+      // Rows are processed in a stable order so concurrent completions that
+      // share parts lock stock rows in the same sequence (no deadlocks).
+      const woParts = (await this.partRepository.find({ where: { woId: id, tenantId } }))
+        .filter((p) => p.reserved && p.storeroomId)
+        .sort((a, b) => `${a.storeroomId}:${a.partId}`.localeCompare(`${b.storeroomId}:${b.partId}`));
+      if (woParts.length > 0) {
+        await this.dataSource.transaction(async (manager) => {
+          const woPartRepo = manager.getRepository(WoPart);
+          for (const candidate of woParts) {
+            // Re-read under lock: a concurrent completion (double-click, retry)
+            // may already have consumed this part. Skip it rather than deduct twice.
+            const part = await woPartRepo.findOne({
+              where: { id: candidate.id, tenantId },
+              lock: { mode: 'pessimistic_write' },
+            });
+            if (!part || !part.reserved || !part.storeroomId) continue;
+            await this.inventoryService.issueReservedStock(
+              { partId: part.partId, storeroomId: part.storeroomId!, qty: part.qtyUsed, workOrderId: id, notes: `Issued on completion of WO ${workOrder.woNumber}` },
               userId,
               tenantId,
-            );
-            await this.inventoryService.releaseReservation(
-              { partId: part.partId, storeroomId: part.storeroomId, workOrderId: id, qty: part.qtyUsed },
-              userId,
-              tenantId,
+              manager,
             );
             part.reserved = false;
-            await this.partRepository.save(part);
-          } catch (error) {
-            this.logger.error(`Failed to issue stock for part ${part.partId}:`, error);
+            await woPartRepo.save(part);
           }
-        }
+        });
       }
     }
 
@@ -369,10 +378,10 @@ export class WorkOrdersService {
     await this.notificationsService.onWoStatusChanged(savedWo, oldStatus, tenantId);
 
     // Trigger webhooks
+    let event = 'wo.status_changed';
+    if (status === WorkOrderStatus.COMPLETED) event = 'wo.completed';
+    else if (status === WorkOrderStatus.CANCELLED) event = 'wo.cancelled';
     try {
-      let event = 'wo.status_changed';
-      if (status === WorkOrderStatus.COMPLETED) event = 'wo.completed';
-      else if (status === WorkOrderStatus.CANCELLED) event = 'wo.cancelled';
       await this.webhooksService.trigger(event, {
         id: savedWo.id,
         woNumber: savedWo.woNumber,

@@ -11,9 +11,8 @@ import {
 } from 'class-validator';
 
 export class CreateUserDto {
-  @ApiProperty({ description: 'User ID (UUID)' })
-  @IsUUID()
-  id: string;
+  // NOTE: no client-supplied `id`. The server generates it; accepting one let
+  // callers upsert over an existing user row (account takeover).
 
   @ApiProperty()
   @IsString()

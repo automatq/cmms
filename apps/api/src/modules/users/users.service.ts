@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -44,16 +45,19 @@ export class UsersService {
   async create(dto: CreateUserDto, tenantId: string): Promise<User> {
     await this.usageService.enforceUserLimit(tenantId);
 
-    // Email is globally unique now
+    // Email is globally unique. Never silently attach an existing global
+    // account to this tenant: that let any org admin pull arbitrary users
+    // (including platform operators) into their org and then edit them.
+    // Existing accounts must join through Better Auth's invitation flow,
+    // which requires the account holder to accept.
     const existingByEmail = await this.userRepository.findOne({ where: { email: dto.email } });
     if (existingByEmail) {
-      // If user exists but isn't a member of this tenant, add them
       const isMember = await this.isMemberOfTenant(existingByEmail.id, tenantId);
-      if (isMember) {
-        throw new ConflictException('User already exists in this organization');
-      }
-      await this.addMember(existingByEmail.id, tenantId, 'member');
-      return this.findOne(existingByEmail.id, tenantId);
+      throw new ConflictException(
+        isMember
+          ? 'User already exists in this organization'
+          : 'An account with this email already exists. Send them an invitation instead.',
+      );
     }
 
     const roles = dto.roleIds?.length
@@ -61,8 +65,9 @@ export class UsersService {
       : [];
 
     const { roleIds, ...userData } = dto;
-    const user = this.userRepository.create(userData);
-    const savedUser = await this.userRepository.save(user);
+    // insert() (not save()) so a colliding id can never update an existing row.
+    const savedUser = { id: randomUUID() };
+    await this.userRepository.insert({ ...userData, id: savedUser.id });
 
     await this.addMember(savedUser.id, tenantId, 'member');
 
@@ -143,7 +148,15 @@ export class UsersService {
       user.roles = roles;
     }
 
-    const { roleIds, ...updateData } = dto;
+    // Users are global identities shared across orgs. A tenant admin must not
+    // be able to change the login email of an account (that enables takeover
+    // via password reset). Unchanged emails are tolerated so existing forms
+    // that echo the whole record back keep working.
+    if (dto.email !== undefined && dto.email.toLowerCase() !== (user.email || '').toLowerCase()) {
+      throw new BadRequestException('Email cannot be changed here. Users change their own email from their account settings.');
+    }
+
+    const { roleIds, email: _email, ...updateData } = dto;
     Object.assign(user, updateData);
 
     await this.userRepository.save(user);

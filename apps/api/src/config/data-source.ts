@@ -1,3 +1,4 @@
+import '../database/pg-numeric';
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 

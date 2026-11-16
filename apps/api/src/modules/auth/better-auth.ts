@@ -10,6 +10,7 @@ import {
   sendPasswordResetEmail,
   sendInvitationEmail,
 } from './email-sender';
+import { USER_ADDITIONAL_FIELDS, ORGANIZATION_ADDITIONAL_FIELDS } from './better-auth-fields';
 
 const authLogger = new Logger('BetterAuth');
 
@@ -178,23 +179,7 @@ export const auth: any = betterAuth({
       createdAt: 'created_at',
       updatedAt: 'updated_at',
     },
-    additionalFields: {
-      firstName: { type: 'string', required: false, fieldName: 'first_name' },
-      lastName: { type: 'string', required: false, fieldName: 'last_name' },
-      username: { type: 'string', required: false, fieldName: 'username' },
-      phone: { type: 'string', required: false, fieldName: 'phone' },
-      jobTitle: { type: 'string', required: false, fieldName: 'job_title' },
-      department: { type: 'string', required: false, fieldName: 'department' },
-      avatarUrl: { type: 'string', required: false, fieldName: 'avatar_url' },
-      status: { type: 'string', defaultValue: 'active', fieldName: 'status' },
-      lastLoginAt: { type: 'date', required: false, fieldName: 'last_login_at' },
-      // Better Auth admin plugin — platform-wide role distinct from per-org members.role.
-      // NULL for normal customers, 'superadmin' for MainTek HQ operators.
-      role: { type: 'string', required: false, fieldName: 'role' },
-      banned: { type: 'boolean', required: false, defaultValue: false, fieldName: 'banned' },
-      banReason: { type: 'string', required: false, fieldName: 'ban_reason' },
-      banExpires: { type: 'date', required: false, fieldName: 'ban_expires' },
-    },
+    additionalFields: USER_ADDITIONAL_FIELDS,
   },
 
   session: {
@@ -258,21 +243,7 @@ export const auth: any = betterAuth({
             createdAt: 'created_at',
             logo: 'logo_url',
           },
-          additionalFields: {
-            timezone: { type: 'string', required: false, defaultValue: 'UTC', fieldName: 'timezone' },
-            currency: { type: 'string', required: false, defaultValue: 'CAD', fieldName: 'currency' },
-            status: { type: 'string', required: false, defaultValue: 'trial', fieldName: 'status' },
-            plan: { type: 'string', required: false, defaultValue: 'free', fieldName: 'plan' },
-            modules: { type: 'string', required: false, fieldName: 'modules' },
-            settings: { type: 'string', required: false, fieldName: 'settings' },
-            polarCustomerId: { type: 'string', required: false, fieldName: 'polar_customer_id' },
-            polarSubscriptionId: { type: 'string', required: false, fieldName: 'polar_subscription_id' },
-            userCount: { type: 'number', required: false, defaultValue: 0, fieldName: 'user_count' },
-            assetCount: { type: 'number', required: false, defaultValue: 0, fieldName: 'asset_count' },
-            storageBytesUsed: { type: 'number', required: false, defaultValue: 0, fieldName: 'storage_bytes_used' },
-            onboardingCompleted: { type: 'boolean', required: false, defaultValue: false, fieldName: 'onboarding_completed' },
-            updatedAt: { type: 'date', required: false, defaultValue: () => new Date(), fieldName: 'updated_at' },
-          },
+          additionalFields: ORGANIZATION_ADDITIONAL_FIELDS,
         },
         member: {
           modelName: 'members',
