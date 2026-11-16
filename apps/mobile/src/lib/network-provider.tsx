@@ -42,7 +42,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
 
     // Re-check connectivity when app returns to foreground
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      if (appState.current?.match(/inactive|background/) && nextAppState === 'active') {
         checkConnectivity();
       }
       appState.current = nextAppState;
