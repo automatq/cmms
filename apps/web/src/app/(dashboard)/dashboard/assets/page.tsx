@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 
 export default function AssetsPage() {
   const queryClient = useQueryClient()
-  const { user } = useAuth()
+  const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [page, setPage] = useState(1)
@@ -46,7 +46,7 @@ export default function AssetsPage() {
 
   const assets = data?.data || []
   const total = data?.total || 0
-  const canManageQr = !!user?.permissions?.includes('assets:write')
+  const canManageQr = can('assets:write')
   const visibleAssetIds = useMemo(() => assets.map((asset: any) => asset.id), [assets])
   const allVisibleSelected = visibleAssetIds.length > 0 && visibleAssetIds.every((id: string) => selectedAssetIds.includes(id))
 

@@ -2,7 +2,20 @@
 
 import React, { createContext, useCallback, useContext } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSession, signOut as betterSignOut, clearStoredToken } from '@/lib/auth-client'
+import { api } from '@/lib/api'
+
+// Permissions with this prefix are platform-level and only granted to
+// superadmins — the tenant wildcard '*' does not satisfy them (mirrors the
+// API's PermissionsGuard).
+const PLATFORM_PERMISSION_PREFIX = 'admin:'
+
+interface MyPermissions {
+  permissions: string[]
+  roles: string[]
+  systemRole: 'superadmin' | null
+}
 
 interface User {
   id: string
@@ -25,6 +38,10 @@ interface AuthContextType {
   activeOrgId: string | null
   impersonatedBy: string | null
   token: string | null
+  permissions: string[]
+  roles: string[]
+  permissionsLoading: boolean
+  can: (permission: string) => boolean
   login: () => void
   logout: () => void
 }
@@ -36,6 +53,10 @@ const AuthContext = createContext<AuthContextType>({
   activeOrgId: null,
   impersonatedBy: null,
   token: null,
+  permissions: [],
+  roles: [],
+  permissionsLoading: true,
+  can: () => false,
   login: () => {},
   logout: () => {},
 })
@@ -47,6 +68,7 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = useSession()
   const router = useRouter()
+  const queryClient = useQueryClient()
 
   const login = useCallback(() => {
     router.push('/sign-in')
@@ -57,9 +79,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await betterSignOut()
     } finally {
       clearStoredToken()
+      // Drop cached tenant data so the next user on this device starts clean.
+      queryClient.clear()
       router.push('/sign-in')
     }
-  }, [router])
+  }, [router, queryClient])
 
   const sessionUser = session?.user as any
   const activeOrgId = (session?.session as any)?.activeOrganizationId ?? null
@@ -68,6 +92,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const systemRole: 'superadmin' | null =
     sessionUser?.role === 'superadmin' ? 'superadmin' : null
 
+  // Effective permissions for the active organization, as computed by the API.
+  const { data: myPermissions, isLoading: permissionsQueryLoading } = useQuery<MyPermissions>({
+    queryKey: ['my-permissions', sessionUser?.id ?? null, activeOrgId],
+    queryFn: async () => (await api.getMyPermissions()).data,
+    enabled: !!sessionUser,
+  })
+  const permissions = myPermissions?.permissions ?? []
+  const roles = myPermissions?.roles ?? []
+  const permissionsLoading = !!sessionUser && permissionsQueryLoading
+
+  const can = useCallback(
+    (permission: string) => {
+      if (!myPermissions) return false
+      if (permission.startsWith(PLATFORM_PERMISSION_PREFIX)) {
+        return myPermissions.systemRole === 'superadmin'
+      }
+      return myPermissions.permissions.includes('*') || myPermissions.permissions.includes(permission)
+    },
+    [myPermissions],
+  )
+
   const user: User | null = sessionUser
     ? {
         id: sessionUser.id,
@@ -75,8 +120,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         firstName: sessionUser.firstName || sessionUser.name?.split(' ')[0] || '',
         lastName: sessionUser.lastName || sessionUser.name?.split(' ').slice(1).join(' ') || '',
         username: sessionUser.username || sessionUser.email,
-        roles: systemRole ? ['superadmin'] : ['admin'],
-        permissions: ['*'],
+        roles,
+        permissions,
         systemRole,
         banned: !!sessionUser.banned,
       }
@@ -91,6 +136,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeOrgId,
         impersonatedBy,
         token: null,
+        permissions,
+        roles,
+        permissionsLoading,
+        can,
         login,
         logout,
       }}

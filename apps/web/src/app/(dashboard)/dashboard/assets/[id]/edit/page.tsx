@@ -20,7 +20,7 @@ export default function EditAssetPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const params = useParams()
-  const { user } = useAuth()
+  const { can } = useAuth()
   const id = params?.id as string
 
   // State for form data
@@ -77,7 +77,7 @@ export default function EditAssetPage() {
     }
   }, [asset])
 
-  const canManageQr = !!user?.permissions?.includes('assets:write')
+  const canManageQr = can('assets:write')
 
   // Fetch categories and locations
   const { data: categories } = useQuery({

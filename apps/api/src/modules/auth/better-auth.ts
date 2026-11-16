@@ -269,7 +269,7 @@ export const auth: any = betterAuth({
         },
       },
       sendInvitationEmail: async ({ email, organization, inviter, id }) => {
-        const url = `${PUBLIC_WEB_URL}/invitations/${id}/accept`;
+        const url = `${PUBLIC_WEB_URL}/invitations/${id}/accept?email=${encodeURIComponent(email)}`;
         const inviterName =
           (inviter as any)?.user?.name ||
           (inviter as any)?.user?.email ||

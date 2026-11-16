@@ -50,6 +50,17 @@ export class UsersController {
     return this.usersService.findOne(user.userId, user.tenantId);
   }
 
+  @Get('me/permissions')
+  @ApiOperation({ summary: 'Get the current user\'s effective permissions in the active organization' })
+  @ApiResponse({ status: 200, description: 'Effective permissions, roles and platform role' })
+  getMyPermissions(@CurrentUser() user: RequestUser) {
+    return {
+      permissions: user.permissions ?? [],
+      roles: user.roles ?? [],
+      systemRole: user.systemRole ?? null,
+    };
+  }
+
   @Patch('me/preferences')
   @ApiOperation({ summary: 'Update current user notification preferences' })
   @ApiResponse({ status: 200, description: 'Preferences updated' })

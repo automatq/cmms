@@ -380,6 +380,10 @@ class ApiClient {
     return this.client.get('/users/me')
   }
 
+  async getMyPermissions() {
+    return this.client.get('/users/me/permissions')
+  }
+
   async updateNotificationPreferences(preferences: Record<string, boolean>) {
     return this.client.patch('/users/me/preferences', { notificationPreferences: preferences })
   }
