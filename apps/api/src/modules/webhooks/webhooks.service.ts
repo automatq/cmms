@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { assertSafeOutboundUrl } from './outbound-url';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -24,9 +25,11 @@ export class WebhooksService {
     dto: { url: string; events: string[] },
     tenantId: string,
   ): Promise<WebhookSubscription> {
+    await assertSafeOutboundUrl(dto.url);
     const secret = crypto.randomBytes(32).toString('hex');
     const subscription = this.subscriptionRepository.create({
-      ...dto,
+      url: dto.url,
+      events: dto.events,
       secret,
       tenantId,
     });
@@ -54,7 +57,9 @@ export class WebhooksService {
     tenantId: string,
   ): Promise<WebhookSubscription> {
     const sub = await this.findOne(id, tenantId);
-    Object.assign(sub, dto);
+    if (dto.url !== undefined) await assertSafeOutboundUrl(dto.url);
+    const { url, events, isActive } = dto;
+    Object.assign(sub, Object.fromEntries(Object.entries({ url, events, isActive }).filter(([, v]) => v !== undefined)));
     if (dto.isActive === true) {
       sub.failCount = 0; // Reset fail count when re-enabling
     }

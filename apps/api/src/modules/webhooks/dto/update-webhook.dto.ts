@@ -19,10 +19,6 @@ export class UpdateWebhookDto {
   @IsString({ each: true })
   events?: string[];
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  secret?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

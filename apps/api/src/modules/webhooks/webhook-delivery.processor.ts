@@ -4,6 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import axios from 'axios';
 import { WebhooksService } from './webhooks.service';
+import { assertSafeOutboundUrl, safeHttpAgent, safeHttpsAgent } from './outbound-url';
 
 interface WebhookJobData {
   subscriptionId: string;
@@ -36,7 +37,16 @@ export class WebhookDeliveryProcessor extends WorkerHost {
       .digest('hex');
 
     try {
+      // Re-validate at delivery time (the URL may predate this check, and IP
+      // literals bypass the agent's DNS lookup hook).
+      await assertSafeOutboundUrl(url);
+
       const response = await axios.post(url, body, {
+        httpAgent: safeHttpAgent,
+        httpsAgent: safeHttpsAgent,
+        maxRedirects: 0, // never follow redirects to (possibly internal) hosts
+        proxy: false,
+        maxContentLength: 64 * 1024,
         headers: {
           'Content-Type': 'application/json',
           'X-Webhook-Signature': `sha256=${signature}`,
@@ -53,7 +63,9 @@ export class WebhookDeliveryProcessor extends WorkerHost {
         event,
         payload,
         response.status,
-        typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
+        // Don't persist the receiver's response body: it is shown back to the
+        // tenant in delivery logs, which turned webhooks into a read primitive.
+        null,
         success,
         attemptNumber,
         tenantId,
@@ -63,7 +75,7 @@ export class WebhookDeliveryProcessor extends WorkerHost {
         throw new Error(`Webhook returned status ${response.status}`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = (error instanceof Error ? error.message : String(error)).slice(0, 500);
 
       await this.webhooksService.recordDelivery(
         subscriptionId,

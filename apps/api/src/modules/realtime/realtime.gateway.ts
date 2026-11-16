@@ -1,3 +1,4 @@
+import { resolveMembership } from '../auth/membership';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -58,6 +59,15 @@ export class RealtimeGateway
         this.logger.warn(`Socket connect rejected (no active org): user=${userId}`);
         client.disconnect(true);
         return;
+      }
+
+      if ((session.user as any).role !== 'superadmin') {
+        const membership = await resolveMembership(userId, tenantId);
+        if (!membership.ok) {
+          this.logger.warn(`Socket connect rejected (${membership.reason}): user=${userId}`);
+          client.disconnect(true);
+          return;
+        }
       }
 
       client.userId = userId;
