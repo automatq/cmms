@@ -13,6 +13,10 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    environment:
+      # Your public hostname (e.g. maintek.example.com) enables automatic HTTPS.
+      # Leave unset for plain HTTP on :80 (local use only).
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
     ports:
       - "80:80"
       - "443:443"
@@ -46,15 +50,15 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: maintek-files
-      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
-      DEFAULT_USER_ID: ${DEFAULT_USER_ID:-00000000-0000-0000-0000-000000000002}
-      DEFAULT_USER_EMAIL: ${DEFAULT_USER_EMAIL:-admin@local}
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
       OLLAMA_URL: http://ollama:11434
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
-      JWT_SECRET: ${JWT_SECRET}
+      # Better Auth (required in production; the API refuses to start without them)
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET (openssl rand -base64 32)}
+      BETTER_AUTH_URL: ${PUBLIC_URL}
+      PUBLIC_WEB_URL: ${PUBLIC_URL}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       CORS_ORIGINS: ${PUBLIC_URL}
@@ -92,6 +96,10 @@ services:
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
+      # The worker loads the same auth config (better-auth) as the API.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET (openssl rand -base64 32)}
+      BETTER_AUTH_URL: ${PUBLIC_URL}
+      PUBLIC_WEB_URL: ${PUBLIC_URL}
     depends_on:
       postgres:
         condition: service_healthy
