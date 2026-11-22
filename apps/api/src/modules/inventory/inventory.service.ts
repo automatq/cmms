@@ -28,6 +28,8 @@ import {
   ReceivePODto,
 } from './dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { Location } from '../assets/entities/location.entity';
+import { assertTenantRefs } from '../../common/tenant/assert-tenant-refs';
 
 @Injectable()
 export class InventoryService {
@@ -84,6 +86,9 @@ export class InventoryService {
   async createPart(dto: CreatePartDto, tenantId: string): Promise<Part> {
     const existingSku = await this.partRepo.findOne({ where: { sku: dto.sku, tenantId } });
     if (existingSku) throw new ConflictException(`SKU ${dto.sku} already exists`);
+    await assertTenantRefs(this.partRepo.manager, tenantId, [
+      { entity: Supplier, id: dto.supplierId, field: 'supplierId' },
+    ]);
 
     const part = this.partRepo.create({ ...dto, tenantId });
     return this.partRepo.save(part);
@@ -172,6 +177,9 @@ export class InventoryService {
 
   async updatePart(id: string, dto: UpdatePartDto, tenantId: string): Promise<Part> {
     const part = await this.findPartById(id, tenantId);
+    await assertTenantRefs(this.partRepo.manager, tenantId, [
+      { entity: Supplier, id: dto.supplierId, field: 'supplierId' },
+    ]);
     Object.assign(part, dto);
     return this.partRepo.save(part);
   }
@@ -195,6 +203,9 @@ export class InventoryService {
   // ==================== STOREROOMS ====================
 
   async createStoreroom(dto: CreateStoreroomDto, tenantId: string): Promise<Storeroom> {
+    await assertTenantRefs(this.storeroomRepo.manager, tenantId, [
+      { entity: Location, id: dto.locationId, field: 'locationId' },
+    ]);
     const storeroom = this.storeroomRepo.create({ ...dto, tenantId });
     return this.storeroomRepo.save(storeroom);
   }
@@ -219,6 +230,9 @@ export class InventoryService {
 
   async updateStoreroom(id: string, dto: UpdateStoreroomDto, tenantId: string): Promise<Storeroom> {
     const storeroom = await this.findStoreroomById(id, tenantId);
+    await assertTenantRefs(this.storeroomRepo.manager, tenantId, [
+      { entity: Location, id: dto.locationId, field: 'locationId' },
+    ]);
     Object.assign(storeroom, dto);
     return this.storeroomRepo.save(storeroom);
   }
@@ -316,6 +330,10 @@ export class InventoryService {
 
       const part = await manager.getRepository(Part).findOne({ where: { id: dto.partId, tenantId } });
       if (!part) throw new NotFoundException(`Part ${dto.partId} not found`);
+      await assertTenantRefs(manager, tenantId, [
+        { entity: Storeroom, id: dto.storeroomId, field: 'storeroomId' },
+        { entity: PurchaseOrder, id: dto.purchaseOrderId, field: 'purchaseOrderId' },
+      ]);
 
       const stock = (await this.lockStock(manager, dto.partId, dto.storeroomId, tenantId, true))!;
       stock.qtyOnHand += dto.qty;
@@ -453,6 +471,10 @@ export class InventoryService {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
 
+      await assertTenantRefs(manager, tenantId, [
+        { entity: Part, id: dto.partId, field: 'partId' },
+        { entity: Storeroom, id: dto.storeroomId, field: 'storeroomId' },
+      ]);
       const stock = (await this.lockStock(manager, dto.partId, dto.storeroomId, tenantId, true))!;
 
       const newQty = stock.qtyOnHand + dto.adjustmentQty;
@@ -485,6 +507,12 @@ export class InventoryService {
     return this.dataSource.transaction(async (manager) => {
       const stockRepo = manager.getRepository(InventoryStock);
       const txRepo = manager.getRepository(InventoryTransaction);
+
+      await assertTenantRefs(manager, tenantId, [
+        { entity: Part, id: dto.partId, field: 'partId' },
+        { entity: Storeroom, id: dto.fromStoreroomId, field: 'fromStoreroomId' },
+        { entity: Storeroom, id: dto.toStoreroomId, field: 'toStoreroomId' },
+      ]);
 
       // Lock both rows in a deterministic order so two opposite transfers
       // (A->B and B->A) can't deadlock.
@@ -682,6 +710,12 @@ export class InventoryService {
       const poRepo = manager.getRepository(PurchaseOrder);
       const lineRepo = manager.getRepository(PoLineItem);
       const stockRepo = manager.getRepository(InventoryStock);
+
+      await assertTenantRefs(manager, tenantId, [
+        { entity: Supplier, id: dto.supplierId, field: 'supplierId' },
+        { entity: Part, id: dto.lineItems.map((i) => i.partId), field: 'partId' },
+        { entity: Storeroom, id: dto.lineItems.map((i) => i.storeroomId), field: 'storeroomId' },
+      ]);
 
       // Generate PO number
       const year = new Date().getFullYear();

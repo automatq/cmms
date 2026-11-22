@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Team } from './entities/team.entity';
 import { User } from './entities/user.entity';
+import { assertTenantRefs, TENANT_MEMBER } from '../../common/tenant/assert-tenant-refs';
 
 @Injectable()
 export class TeamsService {
@@ -21,6 +22,9 @@ export class TeamsService {
     dto: { name: string; description?: string; leaderId?: string },
     tenantId: string,
   ): Promise<Team> {
+    await assertTenantRefs(this.teamRepository.manager, tenantId, [
+      { entity: TENANT_MEMBER, id: dto.leaderId, field: 'leaderId' },
+    ]);
     const team = this.teamRepository.create({
       ...dto,
       tenantId,
@@ -55,6 +59,11 @@ export class TeamsService {
     tenantId: string,
   ): Promise<Team> {
     const team = await this.findOne(id, tenantId);
+    if (dto.leaderId && dto.leaderId !== team.leaderId) {
+      await assertTenantRefs(this.teamRepository.manager, tenantId, [
+        { entity: TENANT_MEMBER, id: dto.leaderId, field: 'leaderId' },
+      ]);
+    }
     Object.assign(team, dto);
     return this.teamRepository.save(team);
   }
@@ -66,6 +75,9 @@ export class TeamsService {
 
   async addMember(teamId: string, userId: string, tenantId: string): Promise<Team> {
     const team = await this.findOne(teamId, tenantId);
+    await assertTenantRefs(this.teamRepository.manager, tenantId, [
+      { entity: TENANT_MEMBER, id: userId, field: 'userId' },
+    ]);
     const user = await this.userRepository
       .createQueryBuilder('user')
       .innerJoin('members', 'm', 'm.user_id = user.id AND m.organization_id = :tenantId', { tenantId })

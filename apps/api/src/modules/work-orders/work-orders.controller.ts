@@ -43,6 +43,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
 import { TenantService } from '../../common/tenant/tenant.service';
+import { isPublicPortalOpen } from './public-portal';
 
 @ApiTags('Work Orders')
 @ApiBearerAuth()
@@ -380,7 +381,7 @@ export class WorkRequestsController {
     @Body() dto: CreateWorkRequestDto,
   ) {
     const tenant = await this.tenantService.findBySlug(slug);
-    if (!tenant || tenant.status === 'suspended' || tenant.status === 'cancelled') {
+    if (!isPublicPortalOpen(tenant)) {
       throw new NotFoundException('Organization not found');
     }
     return this.workOrdersService.createRequest(dto, tenant.id);

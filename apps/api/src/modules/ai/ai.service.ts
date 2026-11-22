@@ -187,7 +187,7 @@ Provide a brief 2-3 sentence summary.`;
         take: 20,
       }),
       this.meterRepo.find({
-        where: { assetId: dto.assetId },
+        where: { assetId: dto.assetId, tenantId },
         order: { recordedAt: 'DESC' },
         take: 20,
       }),

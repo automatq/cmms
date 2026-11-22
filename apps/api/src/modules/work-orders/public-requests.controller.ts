@@ -17,6 +17,9 @@ import { Asset } from '../assets/entities/asset.entity';
 import { Public } from '../auth/decorators/public.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePublicWorkRequestDto } from './dto/create-public-work-request.dto';
+import { Location } from '../assets/entities/location.entity';
+import { assertTenantRefs } from '../../common/tenant/assert-tenant-refs';
+import { isPublicPortalOpen } from './public-portal';
 
 @ApiTags('Public Requests')
 @Controller('public')
@@ -37,21 +40,52 @@ export class PublicRequestsController {
   @ApiOperation({ summary: 'List assets for public submission form' })
   @ApiResponse({ status: 200, description: 'Minimal asset list' })
   async listAssets(@Param('tenantSlug') tenantSlug: string) {
-    const tenant = await this.tenantRepository.findOne({
-      where: { slug: tenantSlug },
-    });
+    const tenant = await this.findPortalTenant(tenantSlug);
 
-    if (!tenant) {
-      throw new NotFoundException('Organization not found');
-    }
-
+    // Minimal fields only: the asset tag token is a capability used by the
+    // authenticated scan flow and must never be exposed anonymously.
     const assets = await this.assetRepository.find({
       where: { tenantId: tenant.id },
-      select: ['id', 'assetNumber', 'name', 'locationId', 'assetTagToken'],
+      select: ['id', 'assetNumber', 'name', 'locationId'],
       order: { assetNumber: 'ASC' },
     });
 
-    return assets;
+    return assets.map((a) => ({
+      id: a.id,
+      assetNumber: a.assetNumber,
+      name: a.name,
+      locationId: a.locationId ?? null,
+    }));
+  }
+
+  @Public()
+  @Get(':tenantSlug/assets/by-tag/:token')
+  @Throttle({ default: { ttl: 60000, limit: 30 } })
+  @ApiOperation({ summary: 'Resolve a scanned asset QR tag for the public submission form' })
+  @ApiResponse({ status: 200, description: 'Minimal asset info' })
+  async findAssetByTag(
+    @Param('tenantSlug') tenantSlug: string,
+    @Param('token') token: string,
+  ) {
+    const tenant = await this.findPortalTenant(tenantSlug);
+    if (!token || !/^[A-Za-z0-9_-]{1,128}$/.test(token)) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    const asset = await this.assetRepository.findOne({
+      where: { tenantId: tenant.id, assetTagToken: token },
+      select: ['id', 'assetNumber', 'name', 'locationId'],
+    });
+    if (!asset) {
+      throw new NotFoundException('Asset not found');
+    }
+
+    return {
+      id: asset.id,
+      assetNumber: asset.assetNumber,
+      name: asset.name,
+      locationId: asset.locationId ?? null,
+    };
   }
 
   @Public()
@@ -63,13 +97,12 @@ export class PublicRequestsController {
     @Param('tenantSlug') tenantSlug: string,
     @Body() body: CreatePublicWorkRequestDto,
   ) {
-    const tenant = await this.tenantRepository.findOne({
-      where: { slug: tenantSlug },
-    });
+    const tenant = await this.findPortalTenant(tenantSlug);
 
-    if (!tenant) {
-      throw new NotFoundException('Organization not found');
-    }
+    await assertTenantRefs(this.workRequestRepository.manager, tenant.id, [
+      { entity: Asset, id: body.assetId, field: 'assetId' },
+      { entity: Location, id: body.locationId, field: 'locationId' },
+    ]);
 
     const trackingToken = uuidv4();
 
@@ -141,5 +174,15 @@ export class PublicRequestsController {
       createdAt: request.createdAt,
       rejectionReason: request.status === WorkRequestStatus.REJECTED ? request.rejectionReason : undefined,
     };
+  }
+
+  private async findPortalTenant(tenantSlug: string): Promise<Tenant> {
+    const tenant = await this.tenantRepository.findOne({
+      where: { slug: tenantSlug },
+    });
+    if (!isPublicPortalOpen(tenant)) {
+      throw new NotFoundException('Organization not found');
+    }
+    return tenant;
   }
 }

@@ -7,6 +7,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { Asset, AssetStatus, AssetDowntime } from './entities';
+import { WorkOrder } from '../work-orders/entities/work-order.entity';
+import { assertTenantRefs } from '../../common/tenant/assert-tenant-refs';
 
 @Injectable()
 export class DowntimeService {
@@ -42,6 +44,10 @@ export class DowntimeService {
     if (!asset) {
       throw new NotFoundException(`Asset ${assetId} not found`);
     }
+
+    await assertTenantRefs(this.downtimeRepository.manager, tenantId, [
+      { entity: WorkOrder, id: workOrderId, field: 'workOrderId' },
+    ]);
 
     const downtime = this.downtimeRepository.create({
       assetId,

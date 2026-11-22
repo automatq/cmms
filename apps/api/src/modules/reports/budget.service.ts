@@ -7,6 +7,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MaintenanceBudget } from './entities/maintenance-budget.entity';
 import { WorkOrder } from '../work-orders/entities/work-order.entity';
+import { Location } from '../assets/entities/location.entity';
+import {
+  assertTenantRefs,
+  stripForeignTenantRelations,
+} from '../../common/tenant/assert-tenant-refs';
 
 @Injectable()
 export class BudgetService {
@@ -28,6 +33,9 @@ export class BudgetService {
     },
     tenantId: string,
   ): Promise<MaintenanceBudget> {
+    await assertTenantRefs(this.budgetRepository.manager, tenantId, [
+      { entity: Location, id: dto.locationId, field: 'locationId' },
+    ]);
     const budget = this.budgetRepository.create({
       ...dto,
       tenantId,
@@ -53,7 +61,7 @@ export class BudgetService {
       throw new NotFoundException(`Budget ${id} not found`);
     }
 
-    return budget;
+    return stripForeignTenantRelations(budget, tenantId);
   }
 
   async update(
@@ -69,6 +77,9 @@ export class BudgetService {
     tenantId: string,
   ): Promise<MaintenanceBudget> {
     const budget = await this.findOne(id, tenantId);
+    await assertTenantRefs(this.budgetRepository.manager, tenantId, [
+      { entity: Location, id: dto.locationId, field: 'locationId' },
+    ]);
     Object.assign(budget, dto);
     return this.budgetRepository.save(budget);
   }

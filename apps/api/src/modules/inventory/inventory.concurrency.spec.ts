@@ -4,6 +4,7 @@ import { InventoryService } from './inventory.service';
 import { InventoryStock } from './entities/inventory-stock.entity';
 import { InventoryTransaction } from './entities/inventory-transaction.entity';
 import { Part } from './entities/part.entity';
+import { Storeroom } from './entities/storeroom.entity';
 import { PurchaseOrder } from './entities/purchase-order.entity';
 import { PoLineItem } from './entities/po-line-item.entity';
 
@@ -66,7 +67,18 @@ class FakeDb {
           return { create: (o: any) => ({ ...o }), save: async (o: any) => (db.txLog.push(o), o) };
         }
         if (entity === Part) {
-          return { findOne: async () => ({ id: 'p1', name: 'Filter', unitCost: 10 }) };
+          return {
+            findOne: async () => ({ id: 'p1', name: 'Filter', unitCost: 10 }),
+            // tenant reference check: every requested id exists in tenant T
+            find: async (opts: any) =>
+              opts.where.tenantId === 't1' ? opts.where.id.value.map((id: string) => ({ id })) : [],
+          };
+        }
+        if (entity === Storeroom) {
+          return {
+            find: async (opts: any) =>
+              opts.where.tenantId === 't1' ? opts.where.id.value.map((id: string) => ({ id })) : [],
+          };
         }
         if (entity === PurchaseOrder) {
           return {
