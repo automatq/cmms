@@ -216,7 +216,7 @@ export class WorkOrdersService {
     // Treat empty string as an explicit unassign.
     if (dto.assignedToId === '') workOrder.assignedToId = null as unknown as string;
 
-    await this.workOrderRepository.save(workOrder);
+    await this.saveWorkOrderColumns(workOrder);
     const updated = await this.findOne(id, tenantId);
 
     // Notify the newly-assigned technician (not when self-assigning).
@@ -251,6 +251,22 @@ export class WorkOrdersService {
     }
 
     await this.workOrderRepository.remove(workOrder);
+  }
+
+  /**
+   * Persist only the work order's own columns. findOne() loads the parts,
+   * labor, attachments and checklist relations, all marked `cascade: true`;
+   * saving the entity would write those (possibly stale) child rows back and
+   * undo changes made to them elsewhere, e.g. the completion transaction
+   * clearing `reserved` on issued parts.
+   */
+  private async saveWorkOrderColumns(workOrder: WorkOrder): Promise<WorkOrder> {
+    const relationProps = new Set(this.workOrderRepository.metadata.relations.map((r) => r.propertyName));
+    const columns = Object.fromEntries(
+      Object.entries(workOrder).filter(([key]) => !relationProps.has(key)),
+    ) as Partial<WorkOrder>;
+    const saved = await this.workOrderRepository.save(columns);
+    return Object.assign(workOrder, saved);
   }
 
   // ==================== STATUS TRANSITIONS ====================
@@ -388,7 +404,7 @@ export class WorkOrdersService {
       }
     }
 
-    const savedWo = await this.workOrderRepository.save(workOrder);
+    const savedWo = await this.saveWorkOrderColumns(workOrder);
 
     if (workOrder.pmPlanId && (status === WorkOrderStatus.COMPLETED || status === WorkOrderStatus.CANCELLED)) {
       await this.recordPmOutcome(workOrder, status, tenantId);
@@ -875,7 +891,7 @@ export class WorkOrdersService {
     workOrder.completionSignature = storageKey;
     workOrder.signedOffBy = userId;
     workOrder.signedOffAt = new Date();
-    await this.workOrderRepository.save(workOrder);
+    await this.saveWorkOrderColumns(workOrder);
 
     const signatureUrl = await this.filesService.getSignedUrl(storageKey);
     return { signatureUrl };

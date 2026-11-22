@@ -7,11 +7,15 @@ import { PmService, OPEN_PM_WORK_ORDER_STATUSES } from './pm.service';
 import { FrequencyUnit, TriggerType } from './entities/pm-plan.entity';
 import { WorkOrderStatus } from '../work-orders/entities/work-order.entity';
 
-function makeService(opts: { openWoTotal?: number } = {}) {
+function makeService(opts: { openWoTotal?: number; actorId?: string | null } = {}) {
   const plans: any[] = [];
+  const query = jest.fn().mockResolvedValue(
+    opts.actorId === null ? [] : [{ user_id: opts.actorId ?? 'owner-user' }],
+  );
   const pmPlanRepository = {
     find: jest.fn().mockImplementation(async () => plans.filter((p) => p.nextDueAt <= new Date())),
     save: jest.fn().mockImplementation(async (p) => p),
+    manager: { query },
   };
   const workOrdersService = {
     findAll: jest.fn().mockResolvedValue({ total: opts.openWoTotal ?? 0 }),
@@ -28,7 +32,7 @@ function makeService(opts: { openWoTotal?: number } = {}) {
     { isBlackout: jest.fn().mockResolvedValue(false), nextWorkingDay: jest.fn(async (d: Date) => d) } as any,
     {} as any,
   );
-  return { svc, plans, workOrdersService };
+  return { svc, plans, workOrdersService, query };
 }
 
 const monthlyPlan = (nextDueAt: Date) => ({
@@ -74,6 +78,32 @@ describe('PM scheduling', () => {
     // Next hourly tick: nothing more is due.
     await svc.processScheduledPMs();
     expect(workOrdersService.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates scheduled PM work orders as the org owner (created_by_id is a user FK)', async () => {
+    const { svc, plans, workOrdersService, query } = makeService({ actorId: 'owner-123' });
+    plans.push(monthlyPlan(new Date(Date.now() - 1000)));
+    plans.push({ ...monthlyPlan(new Date(Date.now() - 1000)), id: 'plan2' });
+    await svc.processScheduledPMs();
+    expect(workOrdersService.create).toHaveBeenCalledTimes(2);
+    for (const call of workOrdersService.create.mock.calls) expect(call[1]).toBe('owner-123');
+    expect(workOrdersService.create.mock.calls.some((c: any[]) => c[1] === 'system')).toBe(false);
+    // resolved once per tenant per run, only active owner/admin memberships
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toMatch(/role IN \('owner', 'admin'\)/);
+    expect(query.mock.calls[0][0]).toMatch(/'inactive'/);
+    expect(query.mock.calls[0][1]).toEqual(['t1']);
+  });
+
+  it('skips (without advancing) when the tenant has no active owner/admin', async () => {
+    const { svc, plans, workOrdersService } = makeService({ actorId: null });
+    const due = new Date(Date.now() - 1000);
+    const plan = monthlyPlan(due);
+    plans.push(plan);
+    const result = await svc.processScheduledPMs();
+    expect(workOrdersService.create).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(1);
+    expect(plan.nextDueAt).toBe(due);
   });
 
   it('rolling schedules are anchored on now', async () => {

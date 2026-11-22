@@ -14,6 +14,7 @@ function setup(wo: any, opts: { otherActive?: number; history?: any; planNextDue
     findOne: jest.fn().mockResolvedValue({ parts: [], ...wo }),
     save: jest.fn().mockImplementation(async (w) => w),
     count: jest.fn().mockResolvedValue(opts.otherActive ?? 0),
+    metadata: { relations: ['asset', 'location', 'createdBy', 'assignedTo', 'labor', 'parts', 'attachments', 'checklistResults', 'pmPlan', 'checklistTemplate'].map((propertyName) => ({ propertyName })) },
   };
   const historyRepo = {
     findOne: jest.fn().mockResolvedValue(opts.history ?? null),

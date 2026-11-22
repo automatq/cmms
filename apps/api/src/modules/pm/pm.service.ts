@@ -27,6 +27,7 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
 import { BlackoutsService } from '../blackouts/blackouts.service';
 import { startOfZonedDay, endOfZonedDay } from '../../common/time/tenant-time';
+import { automationActorCache } from '../../common/tenant/automation-actor';
 
 /**
  * Any non-terminal WO for a plan blocks generating another one. New WOs start
@@ -252,6 +253,7 @@ export class PmService {
         nextDueAt: LessThanOrEqual(now),
       },
     });
+    const actorFor = automationActorCache(this.pmPlanRepository.manager);
 
     // Group by tenantId so each tenant is processed independently.
     const plansByTenant = new Map<string, PmPlan[]>();
@@ -285,6 +287,14 @@ export class PmService {
             continue;
           }
 
+          // work_orders.created_by_id is a user FK, so act as the org owner/admin.
+          const actorId = await actorFor(tenantId);
+          if (!actorId) {
+            this.logger.error(`PM plan ${plan.id}: tenant ${tenantId} has no active owner/admin to create work orders as`);
+            skipped++;
+            continue;
+          }
+
           // Create work order
           const workOrder = await this.workOrdersService.create(
             {
@@ -296,7 +306,7 @@ export class PmService {
               pmPlanId: plan.id,
               checklistTemplateId: plan.checklistTemplateId,
             },
-            'system',
+            actorId,
             tenantId,
           );
 
@@ -359,6 +369,7 @@ export class PmService {
    * meter PM intervals are coarse enough that hourly polling is sufficient.
    */
   async processMeterPms(): Promise<{ triggered: number; initialized: number; skipped: number }> {
+    const actorFor = automationActorCache(this.pmPlanRepository.manager);
     let triggered = 0;
     let initialized = 0;
     let skipped = 0;
@@ -415,6 +426,13 @@ export class PmService {
           continue;
         }
 
+        const actorId = await actorFor(plan.tenantId);
+        if (!actorId) {
+          this.logger.error(`PM plan ${plan.id}: tenant ${plan.tenantId} has no active owner/admin to create work orders as`);
+          skipped++;
+          continue;
+        }
+
         const workOrder = await this.workOrdersService.create(
           {
             title: `PM: ${plan.name}`,
@@ -425,7 +443,7 @@ export class PmService {
             pmPlanId: plan.id,
             checklistTemplateId: plan.checklistTemplateId,
           },
-          'system',
+          actorId,
           plan.tenantId,
         );
 
