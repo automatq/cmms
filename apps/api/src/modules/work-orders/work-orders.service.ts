@@ -33,6 +33,7 @@ import {
 } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { FilesService } from '../files/files.service';
+import { contentTypeForKey } from '../../common/uploads/upload-options';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { DowntimeService } from '../assets/downtime.service';
@@ -686,7 +687,7 @@ export class WorkOrdersService {
       tenantId,
       name: file.originalname,
       storageKey,
-      mimeType: file.mimetype,
+      mimeType: contentTypeForKey(storageKey),
       sizeBytes: file.size,
       uploadedBy: userId,
     });
@@ -716,7 +717,7 @@ export class WorkOrdersService {
       throw new NotFoundException(`Attachment with ID ${attachmentId} not found`);
     }
 
-    return this.filesService.getSignedUrl(attachment.storageKey);
+    return this.filesService.getSignedUrl(attachment.storageKey, { filename: attachment.name });
   }
 
   // ==================== CHECKLIST ====================

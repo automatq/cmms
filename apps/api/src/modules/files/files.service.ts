@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -16,6 +17,33 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuid } from 'uuid';
 import { Readable } from 'stream';
+import { UsageService } from '../../common/tenant/usage.service';
+import { TenantService } from '../../common/tenant/tenant.service';
+import {
+  ATTACHMENT_EXTENSIONS,
+  buildContentDisposition,
+  contentTypeForKey,
+  FORBIDDEN_MIME_TYPES,
+  getExtension,
+  isInlineSafe,
+  resolveFileType,
+} from '../../common/uploads/upload-options';
+
+/** Default lifetime of presigned GET URLs (1 hour). */
+export const SIGNED_URL_TTL_SECONDS = 3600;
+
+export interface SignedUrlOptions {
+  expiresIn?: number;
+  /** Suggested download filename (used for attachment disposition). */
+  filename?: string;
+}
+
+export interface StoredFileObject {
+  stream: NodeJS.ReadableStream;
+  /** Safe content type to serve with (canonical, never client-controlled). */
+  contentType: string;
+  contentLength?: number;
+}
 
 @Injectable()
 export class FilesService {
@@ -30,7 +58,11 @@ export class FilesService {
   private readonly logger = new Logger(FilesService.name);
   private readonly ready: Promise<void>;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly usageService: UsageService,
+    private readonly tenantService: TenantService,
+  ) {
     const provider = this.configService.get<string>('STORAGE_PROVIDER', 'minio');
 
     if (provider === 's3') {
@@ -103,15 +135,38 @@ export class FilesService {
     }
   }
 
+  /**
+   * Store an uploaded file. The storage key extension and the stored
+   * Content-Type come from the server-side allowlist (validated against both
+   * the client extension and mimetype), never from client input directly.
+   * When a tenantId is given the tenant's storage quota is enforced and the
+   * usage is recorded.
+   */
   async uploadFile(
     file: Express.Multer.File,
     path: string,
     tenantId?: string,
+    allowedExtensions: readonly string[] = ATTACHMENT_EXTENSIONS,
   ): Promise<string> {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('No file uploaded');
+    }
+    const resolved = resolveFileType(file.originalname, file.mimetype, allowedExtensions);
+    if (!resolved) {
+      throw new BadRequestException('Unsupported file type');
+    }
+
+    if (tenantId) {
+      await this.usageService.enforceStorageLimit(tenantId, file.size);
+    }
+
     await this.ready;
-    const extension = file.originalname.split('.').pop();
     const prefix = tenantId ? `${tenantId}/` : '';
-    const key = `${prefix}${path}/${uuid()}.${extension}`;
+    const key = `${prefix}${path}/${uuid()}.${resolved.ext}`;
+    const disposition = buildContentDisposition(
+      isInlineSafe(resolved.contentType) ? 'inline' : 'attachment',
+      file.originalname,
+    );
 
     try {
       await this.s3.send(new PutObjectCommand({
@@ -119,14 +174,23 @@ export class FilesService {
         Key: key,
         Body: file.buffer,
         ContentLength: file.size,
-        ContentType: file.mimetype,
+        ContentType: resolved.contentType,
+        ContentDisposition: disposition,
       }));
-
-      return key;
     } catch (error) {
       this.logger.error('Upload error:', error);
       throw new InternalServerErrorException('Failed to upload file');
     }
+
+    if (tenantId) {
+      try {
+        await this.tenantService.updateStorageUsage(tenantId, file.size);
+      } catch (error) {
+        this.logger.error('Failed to record storage usage:', error);
+      }
+    }
+
+    return key;
   }
 
   async uploadBuffer(
@@ -137,13 +201,20 @@ export class FilesService {
   ): Promise<string> {
     await this.ready;
     const actualKey = tenantId ? `${tenantId}/${key}` : key;
+    // Server-generated content only; still never store a script-capable type.
+    const keyType = contentTypeForKey(actualKey);
+    const storedType = keyType !== 'application/octet-stream' ? keyType : contentType;
+    if (FORBIDDEN_MIME_TYPES.has(storedType.toLowerCase().split(';')[0].trim())) {
+      throw new BadRequestException('Unsupported file type');
+    }
     try {
       await this.s3.send(new PutObjectCommand({
         Bucket: this.bucket,
         Key: actualKey,
         Body: buffer,
         ContentLength: buffer.length,
-        ContentType: contentType,
+        ContentType: storedType,
+        ...(isInlineSafe(storedType) ? {} : { ContentDisposition: 'attachment' }),
       }));
 
       return actualKey;
@@ -153,13 +224,32 @@ export class FilesService {
     }
   }
 
-  async getSignedUrl(key: string, expirySeconds = 86400): Promise<string> {
+  /**
+   * Presigned GET URL. The response Content-Type is forced to the canonical
+   * type for the key's extension (application/octet-stream if unknown), and
+   * anything that is not inline-safe is served as an attachment.
+   */
+  async getSignedUrl(key: string, options: SignedUrlOptions = {}): Promise<string> {
+    const contentType = contentTypeForKey(key);
+    const inline = isInlineSafe(contentType);
+    const keyName = key.split('/').pop() || 'download';
+    const keyExt = getExtension(keyName);
+    let filename = options.filename || keyName;
+    if (keyExt && getExtension(filename) !== keyExt) {
+      filename = `${filename}.${keyExt}`;
+    }
     try {
       const command = new GetObjectCommand({
         Bucket: this.bucket,
         Key: key,
+        ResponseContentType: contentType,
+        ResponseContentDisposition: inline
+          ? 'inline'
+          : buildContentDisposition('attachment', filename),
       });
-      return await getSignedUrl(this.s3UrlSigner, command, { expiresIn: expirySeconds });
+      return await getSignedUrl(this.s3UrlSigner, command, {
+        expiresIn: options.expiresIn ?? SIGNED_URL_TTL_SECONDS,
+      });
     } catch (error) {
       this.logger.error('Signed URL error:', error);
       throw new InternalServerErrorException('Failed to generate download URL');
@@ -213,6 +303,27 @@ export class FilesService {
         Key: key,
       }));
       return response.Body as Readable;
+    } catch (error) {
+      this.logger.error('Get file error:', error);
+      throw new InternalServerErrorException('Failed to get file');
+    }
+  }
+
+  /**
+   * Fetch an object for direct download. The returned content type is the
+   * canonical type for the key's extension, never the stored client value.
+   */
+  async getFileObject(key: string): Promise<StoredFileObject> {
+    try {
+      const response = await this.s3.send(new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }));
+      return {
+        stream: response.Body as Readable,
+        contentType: contentTypeForKey(key),
+        contentLength: response.ContentLength,
+      };
     } catch (error) {
       this.logger.error('Get file error:', error);
       throw new InternalServerErrorException('Failed to get file');

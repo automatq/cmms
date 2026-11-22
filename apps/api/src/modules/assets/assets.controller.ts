@@ -16,6 +16,7 @@ import {
 import { Express } from 'express';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { attachmentUploadOptions, imageUploadOptions, requireFile } from '../../common/uploads/upload-options';
 import {
   ApiTags,
   ApiOperation,
@@ -181,7 +182,7 @@ export class AssetsController {
 
   @Post(':id/documents')
   @Permissions('assets:write')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload document to asset' })
   @ApiResponse({ status: 201, description: 'Document uploaded' })
@@ -191,7 +192,7 @@ export class AssetsController {
     @Body() meta: DocumentMetaDto,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.assetsService.uploadDocument(id, file, meta, user.userId, user.tenantId);
+    return this.assetsService.uploadDocument(id, requireFile(file), meta, user.userId, user.tenantId);
   }
 
   @Get(':id/documents/:docId/url')
@@ -283,7 +284,7 @@ export class AssetsController {
 
   @Post(':id/image')
   @Permissions('assets:write')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload image for asset' })
   @ApiResponse({ status: 201, description: 'Asset image uploaded' })
@@ -292,7 +293,7 @@ export class AssetsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.assetsService.uploadAssetImage(id, file, user.userId, user.tenantId);
+    return this.assetsService.uploadAssetImage(id, requireFile(file), user.userId, user.tenantId);
   }
 }
 

@@ -34,6 +34,7 @@ import {
 } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { FilesService } from '../files/files.service';
+import { contentTypeForKey } from '../../common/uploads/upload-options';
 import { UsageService } from '../../common/tenant/usage.service';
 import { TenantService } from '../../common/tenant/tenant.service';
 import {
@@ -446,7 +447,7 @@ export class AssetsService {
       name: meta.name,
       type: meta.type,
       storageKey,
-      mimeType: file.mimetype,
+      mimeType: contentTypeForKey(storageKey),
       sizeBytes: file.size,
       uploadedBy: userId,
       tenantId,
@@ -464,7 +465,7 @@ export class AssetsService {
       throw new NotFoundException(`Document with ID ${documentId} not found`);
     }
 
-    return this.filesService.getSignedUrl(doc.storageKey);
+    return this.filesService.getSignedUrl(doc.storageKey, { filename: doc.name });
   }
 
   async deleteDocument(documentId: string, tenantId: string): Promise<void> {
