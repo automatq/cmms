@@ -10,6 +10,7 @@ export function safeRedirect(
 ): string {
   if (!target || typeof target !== 'string') return fallback
   // Browsers strip tabs/newlines from URLs, which could turn `/\t/host` into `//host`.
+  // eslint-disable-next-line no-control-regex -- matching control chars is the point
   if (/[\u0000-\u001F\u007F]/.test(target)) return fallback
   if (!target.startsWith('/')) return fallback
   if (target.startsWith('//') || target.startsWith('/\\')) return fallback

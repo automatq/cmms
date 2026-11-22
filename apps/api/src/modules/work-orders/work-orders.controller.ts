@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { Express } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { attachmentUploadOptions, imageUploadOptions, requireFile } from '../../common/uploads/upload-options';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
@@ -43,6 +44,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
 import { TenantService } from '../../common/tenant/tenant.service';
+import { isPublicPortalOpen } from './public-portal';
 
 @ApiTags('Work Orders')
 @ApiBearerAuth()
@@ -246,7 +248,7 @@ export class WorkOrdersController {
 
   @Post(':id/attachments')
   @Permissions('work_orders:write')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload attachment to work order' })
   @ApiResponse({ status: 201, description: 'Attachment uploaded' })
@@ -255,7 +257,7 @@ export class WorkOrdersController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.workOrdersService.addAttachment(id, file, user.userId, user.tenantId);
+    return this.workOrdersService.addAttachment(id, requireFile(file), user.userId, user.tenantId);
   }
 
   @Get(':id/attachments/:attachmentId/url')
@@ -297,7 +299,7 @@ export class WorkOrdersController {
 
   @Post(':id/checklist/:stepIndex/photo')
   @Permissions('work_orders:write')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload photo for checklist item' })
   @ApiResponse({ status: 201, description: 'Photo uploaded and linked to checklist item' })
@@ -308,7 +310,7 @@ export class WorkOrdersController {
     @CurrentUser() user: RequestUser,
   ) {
     const stepIndexNum = parseInt(stepIndex, 10);
-    const storageKey = await this.workOrdersService.uploadChecklistPhoto(woId, stepIndexNum, file, user.userId, user.tenantId);
+    const storageKey = await this.workOrdersService.uploadChecklistPhoto(woId, stepIndexNum, requireFile(file), user.userId, user.tenantId);
     return { storageKey };
   }
 
@@ -380,7 +382,7 @@ export class WorkRequestsController {
     @Body() dto: CreateWorkRequestDto,
   ) {
     const tenant = await this.tenantService.findBySlug(slug);
-    if (!tenant || tenant.status === 'suspended' || tenant.status === 'cancelled') {
+    if (!isPublicPortalOpen(tenant)) {
       throw new NotFoundException('Organization not found');
     }
     return this.workOrdersService.createRequest(dto, tenant.id);

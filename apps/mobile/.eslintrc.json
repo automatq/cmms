@@ -16,6 +16,12 @@
     "browser": true
   },
   "ignorePatterns": ["node_modules", ".expo", "dist", "babel.config.js"],
+  "overrides": [
+    {
+      "files": ["*.config.js"],
+      "rules": { "@typescript-eslint/no-var-requires": "off" }
+    }
+  ],
   "rules": {
     "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "@typescript-eslint/no-explicit-any": "off",

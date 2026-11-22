@@ -3,35 +3,12 @@ import { MulterModule } from '@nestjs/platform-express';
 import { FilesService } from './files.service';
 import { FilesController } from './files.controller';
 import { TenantModule } from '../../common/tenant/tenant.module';
-
-const ALLOWED_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/csv',
-  'text/plain',
-];
+import { attachmentUploadOptions } from '../../common/uploads/upload-options';
 
 @Module({
   imports: [
-    MulterModule.register({
-      limits: {
-        fileSize: 50 * 1024 * 1024, // 50MB max
-      },
-      fileFilter: (_req, file, cb) => {
-        if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-          cb(null, true);
-        } else {
-          cb(new Error(`File type ${file.mimetype} is not allowed`), false);
-        }
-      },
-    }),
+    // Module-wide defaults; each upload route also passes its preset explicitly.
+    MulterModule.register(attachmentUploadOptions),
     TenantModule,
   ],
   providers: [FilesService],

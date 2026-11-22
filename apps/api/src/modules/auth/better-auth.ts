@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { organization, bearer, admin } from 'better-auth/plugins';
 import { adminAc, userAc } from 'better-auth/plugins/admin/access';
 import { expo } from '@better-auth/expo';
@@ -11,6 +12,12 @@ import {
   sendInvitationEmail,
 } from './email-sender';
 import { USER_ADDITIONAL_FIELDS, ORGANIZATION_ADDITIONAL_FIELDS } from './better-auth-fields';
+import {
+  createPgOrgPolicyDeps,
+  evaluateOrganizationRequest,
+  isOrganizationPath,
+  ORG_PATHS_WITHOUT_MEMBERSHIP,
+} from './org-endpoint-policy';
 
 const authLogger = new Logger('BetterAuth');
 
@@ -42,6 +49,8 @@ const pool = databaseUrl
           ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
           : undefined,
     });
+
+const orgPolicyDeps = createPgOrgPolicyDeps((sql, params) => pool.query(sql, params as any[]));
 
 const PUBLIC_WEB_URL = process.env.PUBLIC_WEB_URL || 'http://localhost:3000';
 
@@ -83,6 +92,42 @@ export const auth: any = betterAuth({
   // `before` (INSERT) because Better Auth's create path doesn't always
   // forward plugin-extended fields like `activeOrganizationId` from the
   // before-hook merge.
+  // Better Auth's organization endpoints only check that a member row exists.
+  // Enforce our membership status (deactivated members keep their row) and
+  // the owner > admin > member hierarchy on every /organization/* call.
+  // Decision logic lives in org-endpoint-policy.ts so it is unit-testable.
+  hooks: {
+    before: createAuthMiddleware(async (ctx: any) => {
+      if (!isOrganizationPath(ctx.path) || ORG_PATHS_WITHOUT_MEMBERSHIP.has(ctx.path)) return;
+      // User before-hooks run ahead of plugin hooks, and plugin changes to the
+      // request (the bearer plugin turning `Authorization: Bearer` into a
+      // session cookie) only reach the endpoint, not other hooks. Resolve the
+      // session through getSession so bearer-token clients (web, mobile) are
+      // covered, not just cookie sessions.
+      const headers: Headers | undefined = ctx.request?.headers ?? ctx.headers;
+      const session = headers
+        ? await auth.api
+            .getSession({ headers, query: { disableRefresh: true } })
+            .catch(() => null)
+        : null;
+      // Unauthenticated: the endpoint's own session middleware rejects it.
+      if (!session?.user) return;
+      const decision = await evaluateOrganizationRequest(
+        {
+          path: ctx.path,
+          body: ctx.body,
+          query: ctx.query,
+          user: session.user as any,
+          activeOrganizationId: (session.session as any)?.activeOrganizationId ?? null,
+        },
+        orgPolicyDeps,
+      );
+      if (!decision.ok) {
+        throw new APIError('FORBIDDEN', { message: decision.message });
+      }
+    }),
+  },
+
   databaseHooks: {
     session: {
       create: {
@@ -96,6 +141,7 @@ export const auth: any = betterAuth({
               `SELECT organization_id
                  FROM members
                 WHERE user_id = $1
+                  AND COALESCE(status, 'active') <> 'inactive'
                 ORDER BY
                   CASE role
                     WHEN 'owner' THEN 0
@@ -234,6 +280,16 @@ export const auth: any = betterAuth({
       // Only users whose `role` is in this list can call /api/auth/admin/* endpoints
       // (list-users, set-role, ban-user, impersonate-user, etc.).
       adminRoles: ['superadmin'],
+      // Plugin-contributed fields need their column mapping here; the
+      // top-level session.fields map isn't applied to them, and Better Auth
+      // 1.7 refuses every request when it can't find the column.
+      schema: {
+        session: {
+          fields: {
+            impersonatedBy: 'impersonated_by',
+          },
+        },
+      },
     }),
     organization({
       schema: {

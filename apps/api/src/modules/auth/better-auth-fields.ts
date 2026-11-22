@@ -33,7 +33,9 @@ export const ORGANIZATION_ADDITIONAL_FIELDS = {
   status: { type: 'string', required: false, input: false, defaultValue: 'trial', fieldName: 'status' },
   plan: { type: 'string', required: false, input: false, defaultValue: 'free', fieldName: 'plan' },
   modules: { type: 'string', required: false, input: false, fieldName: 'modules' },
-  settings: { type: 'string', required: false, fieldName: 'settings' },
+  // Tenant settings are written only through the API's PATCH /organization,
+  // which whitelists fields and requires settings:write.
+  settings: { type: 'string', required: false, input: false, fieldName: 'settings' },
   polarCustomerId: { type: 'string', required: false, input: false, fieldName: 'polar_customer_id' },
   polarSubscriptionId: { type: 'string', required: false, input: false, fieldName: 'polar_subscription_id' },
   userCount: { type: 'number', required: false, input: false, defaultValue: 0, fieldName: 'user_count' },

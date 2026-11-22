@@ -27,6 +27,8 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { SEED_TEMPLATES, SeedTemplate } from './data/seed-templates';
 import { BlackoutsService } from '../blackouts/blackouts.service';
 import { startOfZonedDay, endOfZonedDay } from '../../common/time/tenant-time';
+import { automationActorCache } from '../../common/tenant/automation-actor';
+import { assertTenantRefs, stripForeignTenantRelations } from '../../common/tenant/assert-tenant-refs';
 
 /**
  * Any non-terminal WO for a plan blocks generating another one. New WOs start
@@ -68,6 +70,7 @@ export class PmService {
   // ==================== PM PLAN CRUD ====================
 
   async create(dto: CreatePmPlanDto, tenantId: string): Promise<PmPlan> {
+    await this.assertPlanRefs(dto, tenantId);
     const plan = this.pmPlanRepository.create({
       ...dto,
       tenantId,
@@ -122,11 +125,12 @@ export class PmService {
       throw new NotFoundException(`PM Plan with ID ${id} not found`);
     }
 
-    return plan;
+    return stripForeignTenantRelations(plan, tenantId);
   }
 
   async update(id: string, dto: UpdatePmPlanDto, tenantId: string): Promise<PmPlan> {
     const plan = await this.findOne(id, tenantId);
+    await this.assertPlanRefs(dto, tenantId);
 
     if (dto.nextDueAt) {
       dto.nextDueAt = new Date(dto.nextDueAt).toISOString();
@@ -134,6 +138,13 @@ export class PmService {
 
     Object.assign(plan, dto);
     return this.pmPlanRepository.save(plan);
+  }
+
+  private assertPlanRefs(dto: { assetId?: string; checklistTemplateId?: string }, tenantId: string) {
+    return assertTenantRefs(this.pmPlanRepository.manager, tenantId, [
+      { entity: Asset, id: dto.assetId, field: 'assetId' },
+      { entity: ChecklistTemplate, id: dto.checklistTemplateId, field: 'checklistTemplateId' },
+    ]);
   }
 
   async toggleActive(id: string, tenantId: string): Promise<PmPlan> {
@@ -252,6 +263,7 @@ export class PmService {
         nextDueAt: LessThanOrEqual(now),
       },
     });
+    const actorFor = automationActorCache(this.pmPlanRepository.manager);
 
     // Group by tenantId so each tenant is processed independently.
     const plansByTenant = new Map<string, PmPlan[]>();
@@ -285,6 +297,14 @@ export class PmService {
             continue;
           }
 
+          // work_orders.created_by_id is a user FK, so act as the org owner/admin.
+          const actorId = await actorFor(tenantId);
+          if (!actorId) {
+            this.logger.error(`PM plan ${plan.id}: tenant ${tenantId} has no active owner/admin to create work orders as`);
+            skipped++;
+            continue;
+          }
+
           // Create work order
           const workOrder = await this.workOrdersService.create(
             {
@@ -296,7 +316,7 @@ export class PmService {
               pmPlanId: plan.id,
               checklistTemplateId: plan.checklistTemplateId,
             },
-            'system',
+            actorId,
             tenantId,
           );
 
@@ -359,6 +379,7 @@ export class PmService {
    * meter PM intervals are coarse enough that hourly polling is sufficient.
    */
   async processMeterPms(): Promise<{ triggered: number; initialized: number; skipped: number }> {
+    const actorFor = automationActorCache(this.pmPlanRepository.manager);
     let triggered = 0;
     let initialized = 0;
     let skipped = 0;
@@ -415,6 +436,13 @@ export class PmService {
           continue;
         }
 
+        const actorId = await actorFor(plan.tenantId);
+        if (!actorId) {
+          this.logger.error(`PM plan ${plan.id}: tenant ${plan.tenantId} has no active owner/admin to create work orders as`);
+          skipped++;
+          continue;
+        }
+
         const workOrder = await this.workOrdersService.create(
           {
             title: `PM: ${plan.name}`,
@@ -425,7 +453,7 @@ export class PmService {
             pmPlanId: plan.id,
             checklistTemplateId: plan.checklistTemplateId,
           },
-          'system',
+          actorId,
           plan.tenantId,
         );
 

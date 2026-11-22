@@ -17,6 +17,7 @@ function setup(opts: { issueFails?: boolean; partsInDb?: any[] } = {}) {
   const workOrderRepository = {
     findOne: jest.fn().mockResolvedValue(wo),
     save: jest.fn().mockImplementation(async (w) => w),
+    metadata: { relations: ['asset', 'location', 'createdBy', 'assignedTo', 'labor', 'parts', 'attachments', 'checklistResults', 'pmPlan', 'checklistTemplate'].map((propertyName) => ({ propertyName })) },
   };
   const partRepository = { find: jest.fn().mockResolvedValue(parts.map((p) => ({ ...p }))) };
   const laborRepository = { find: jest.fn().mockResolvedValue([]) };
@@ -54,6 +55,28 @@ function setup(opts: { issueFails?: boolean; partsInDb?: any[] } = {}) {
 }
 
 describe('WorkOrdersService completion consumes reserved parts', () => {
+  it('saving the completed WO does not write stale part rows back (cascade)', async () => {
+    const { svc, workOrderRepository, parts } = setup();
+    // findOne() returns the WO with its own (soon stale) copies of the parts,
+    // as TypeORM does when loading relations.
+    const stale = parts.map((p) => ({ ...p }));
+    workOrderRepository.findOne.mockResolvedValue({
+      id: 'wo1', woNumber: 'WO-1', status: WorkOrderStatus.IN_PROGRESS, actualStart: new Date(), parts: stale,
+    });
+    // Emulate `cascade: true`: any parts on the saved entity overwrite the DB rows.
+    workOrderRepository.save.mockImplementation(async (w: any) => {
+      for (const p of w.parts ?? []) Object.assign(parts.find((x) => x.id === p.id)!, p);
+      return w;
+    });
+
+    await svc.updateStatus('wo1', WorkOrderStatus.COMPLETED, 'u1', 't1');
+
+    expect(parts[0].reserved).toBe(false);
+    const savedArg = workOrderRepository.save.mock.calls[0][0];
+    expect(savedArg).not.toHaveProperty('parts');
+    expect(savedArg).toMatchObject({ id: 'wo1', status: WorkOrderStatus.COMPLETED });
+  });
+
   it('issues reserved parts via issueReservedStock inside a transaction', async () => {
     const { svc, inventoryService, parts, manager } = setup();
     await svc.updateStatus('wo1', WorkOrderStatus.COMPLETED, 'u1', 't1');

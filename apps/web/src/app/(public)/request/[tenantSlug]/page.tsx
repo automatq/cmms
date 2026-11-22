@@ -14,7 +14,6 @@ type PublicAsset = {
   assetNumber: string
   name: string
   locationId: string | null
-  assetTagToken: string
 }
 
 const initialForm = {
@@ -66,6 +65,8 @@ export default function PublicRequestPage() {
     }
 
     let scanner: any = null
+    let busy = false
+    let lastToken: string | null = null
     const init = async () => {
       try {
         const { Html5Qrcode } = await import('html5-qrcode')
@@ -74,13 +75,29 @@ export default function PublicRequestPage() {
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText: string) => {
+          async (decodedText: string) => {
             // Asset QR codes encode .../scan/asset/<token>
             const match = decodedText.match(/\/scan\/asset\/([A-Za-z0-9_-]+)/)
             const token = match ? match[1] : decodedText.trim()
-            const asset = assets.find((a) => a.assetTagToken === token)
+            // The scanner fires on every frame; resolve each code only once.
+            if (busy || token === lastToken) return
+            busy = true
+            lastToken = token
+            let asset: PublicAsset | null = null
+            try {
+              const res = await fetch(
+                `${API_URL}/public/${tenantSlug}/assets/by-tag/${encodeURIComponent(token)}`
+              )
+              if (res.ok) asset = await res.json()
+            } catch {
+              asset = null
+            } finally {
+              busy = false
+            }
             if (asset) {
-              setForm((f) => ({ ...f, assetId: asset.id }))
+              const found = asset
+              setAssets((list) => (list.some((a) => a.id === found.id) ? list : [...list, found]))
+              setForm((f) => ({ ...f, assetId: found.id }))
               scanner.stop().catch(() => {})
               setScannerOpen(false)
               setError('')
@@ -103,7 +120,7 @@ export default function PublicRequestPage() {
         scannerRef.current = null
       }
     }
-  }, [scannerOpen, assets])
+  }, [scannerOpen, tenantSlug])
 
   const handleSubmit = async () => {
     setLoading(true)

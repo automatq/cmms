@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { spreadsheetUploadOptions } from '../../common/uploads/upload-options';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -73,7 +74,7 @@ export class PartCsvController {
 
   @Post('import')
   @Permissions('inventory:write')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', spreadsheetUploadOptions))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Import parts from CSV' })
   @ApiResponse({ status: 201, description: 'Import results' })

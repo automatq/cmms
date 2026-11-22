@@ -31,6 +31,12 @@ import { toast } from 'sonner'
 
 const ROLE_OPTIONS = ['member', 'admin'] as const
 
+// Mirrors the API's hierarchy: owner > admin > member. Only owners can grant
+// admin, and you can only remove members ranked below you.
+const roleRank = (role?: string) =>
+  (role ?? '').split(',').map((r) => r.trim()).includes('owner') ? 3
+    : (role ?? '').split(',').map((r) => r.trim()).includes('admin') ? 2 : 1
+
 export default function MembersPage() {
   const { activeOrgId, user } = useAuth()
   const queryClient = useQueryClient()
@@ -102,6 +108,8 @@ export default function MembersPage() {
   })
 
   const members = membersQuery.data ?? []
+  const myRole: string | undefined = members.find((m: any) => m.user?.id === user?.id)?.role
+  const roleOptions = ROLE_OPTIONS.filter((r) => r !== 'admin' || roleRank(myRole) >= 3)
   const invitations = (invitationsQuery.data ?? []).filter(
     (inv: any) => inv.status === 'pending',
   )
@@ -151,7 +159,7 @@ export default function MembersPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {m.user?.id !== user?.id && m.role !== 'owner' && (
+                    {m.user?.id !== user?.id && roleRank(myRole) > roleRank(m.role) && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -266,7 +274,7 @@ export default function MembersPage() {
                   value={role}
                   onChange={(e) => setRole(e.target.value as any)}
                 >
-                  {ROLE_OPTIONS.map((r) => (
+                  {roleOptions.map((r) => (
                     <option key={r} value={r}>
                       {r.charAt(0).toUpperCase() + r.slice(1)}
                     </option>

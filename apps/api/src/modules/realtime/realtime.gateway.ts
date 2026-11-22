@@ -1,4 +1,4 @@
-import { resolveMembership } from '../auth/membership';
+import { isUserBanned, resolveMembership } from '../auth/membership';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -53,6 +53,13 @@ export class RealtimeGateway
       }
 
       const userId = session.user.id;
+
+      if (isUserBanned(session.user as any)) {
+        this.logger.warn(`Socket connect rejected (banned): user=${userId}`);
+        client.disconnect(true);
+        return;
+      }
+
       const tenantId = (session.session as any).activeOrganizationId;
 
       if (!tenantId) {

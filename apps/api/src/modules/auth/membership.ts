@@ -60,3 +60,16 @@ export async function resolveMembership(
   }
   return { ok: true, role: member.role || 'member' };
 }
+
+/**
+ * True when the Better Auth admin plugin has banned the user and the ban has
+ * not expired.
+ */
+export function isUserBanned(
+  user: { banned?: boolean | null; banExpires?: Date | string | null } | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!user?.banned) return false;
+  const expires = user.banExpires ? new Date(user.banExpires) : null;
+  return !expires || expires > now;
+}

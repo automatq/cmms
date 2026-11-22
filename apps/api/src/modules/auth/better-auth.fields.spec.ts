@@ -9,7 +9,7 @@ describe('Better Auth privileged fields', () => {
 
   it.each([
     'status', 'plan', 'modules', 'polarCustomerId', 'polarSubscriptionId',
-    'userCount', 'assetCount', 'storageBytesUsed',
+    'userCount', 'assetCount', 'storageBytesUsed', 'settings',
   ] as const)('organization.%s is input:false', (f) => {
     expect((ORGANIZATION_ADDITIONAL_FIELDS[f] as any).input).toBe(false);
   });

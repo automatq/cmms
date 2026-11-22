@@ -34,8 +34,14 @@ import {
 } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { FilesService } from '../files/files.service';
+import { contentTypeForKey } from '../../common/uploads/upload-options';
 import { UsageService } from '../../common/tenant/usage.service';
 import { TenantService } from '../../common/tenant/tenant.service';
+import {
+  assertTenantRefs,
+  assertNoParentCycle,
+  stripForeignTenantRelations,
+} from '../../common/tenant/assert-tenant-refs';
 
 export interface AssetQrMetadata {
   assetId: string;
@@ -185,6 +191,7 @@ export class AssetsService {
   // ==================== ASSET METHODS ====================
 
   async create(dto: CreateAssetDto, userId: string, tenantId: string): Promise<Asset> {
+    await this.assertAssetRefs(dto, tenantId);
     await this.usageService.enforceAssetLimit(tenantId);
 
     const assetNumber = await this.generateAssetNumber(tenantId);
@@ -265,7 +272,23 @@ export class AssetsService {
       throw new NotFoundException(`Asset with ID ${id} not found`);
     }
 
-    return this.decorateAsset(asset);
+    return this.decorateAsset(stripForeignTenantRelations(asset, tenantId));
+  }
+
+  private async assertAssetRefs(
+    dto: { categoryId?: string; parentId?: string; locationId?: string },
+    tenantId: string,
+    assetId?: string,
+  ): Promise<void> {
+    const manager = this.assetRepository.manager;
+    await assertTenantRefs(manager, tenantId, [
+      { entity: AssetCategory, id: dto.categoryId, field: 'categoryId' },
+      { entity: Asset, id: dto.parentId, field: 'parentId' },
+      { entity: Location, id: dto.locationId, field: 'locationId' },
+    ]);
+    if (assetId) {
+      await assertNoParentCycle(manager, Asset, tenantId, assetId, dto.parentId);
+    }
   }
 
   async findWithHistory(
@@ -287,6 +310,7 @@ export class AssetsService {
 
   async update(id: string, dto: UpdateAssetDto, tenantId: string): Promise<Asset> {
     const asset = await this.findOne(id, tenantId);
+    await this.assertAssetRefs(dto, tenantId, id);
     const normalizedCustomFields =
       dto.customFields !== undefined
         ? this.normalizeIncomingCustomFields(dto.customFields)
@@ -315,6 +339,7 @@ export class AssetsService {
       relations: ['children', 'children.children'],
       order: { name: 'ASC' },
     });
+    stripForeignTenantRelations(assets, tenantId);
     return Promise.all(assets.map((asset) => this.decorateAsset(asset)));
   }
 
@@ -324,6 +349,7 @@ export class AssetsService {
       relations: ['category', 'location'],
       order: { name: 'ASC' },
     });
+    stripForeignTenantRelations(assets, tenantId);
     return Promise.all(assets.map((asset) => this.decorateAsset(asset)));
   }
 
@@ -421,7 +447,7 @@ export class AssetsService {
       name: meta.name,
       type: meta.type,
       storageKey,
-      mimeType: file.mimetype,
+      mimeType: contentTypeForKey(storageKey),
       sizeBytes: file.size,
       uploadedBy: userId,
       tenantId,
@@ -439,7 +465,7 @@ export class AssetsService {
       throw new NotFoundException(`Document with ID ${documentId} not found`);
     }
 
-    return this.filesService.getSignedUrl(doc.storageKey);
+    return this.filesService.getSignedUrl(doc.storageKey, { filename: doc.name });
   }
 
   async deleteDocument(documentId: string, tenantId: string): Promise<void> {
@@ -662,6 +688,9 @@ export class AssetsService {
   // ==================== LOCATION METHODS ====================
 
   async createLocation(dto: CreateLocationDto, tenantId: string): Promise<Location> {
+    await assertTenantRefs(this.locationRepository.manager, tenantId, [
+      { entity: Location, id: dto.parentId, field: 'parentId' },
+    ]);
     const location = this.locationRepository.create({
       ...dto,
       tenantId,
@@ -677,11 +706,12 @@ export class AssetsService {
   }
 
   async getLocationTree(tenantId: string): Promise<Location[]> {
-    return this.locationRepository.find({
+    const locations = await this.locationRepository.find({
       where: { parentId: IsNull(), tenantId },
       relations: ['children', 'children.children', 'children.children.children'],
       order: { name: 'ASC' },
     });
+    return stripForeignTenantRelations(locations, tenantId);
   }
 
   async findLocationById(id: string, tenantId: string): Promise<Location> {
@@ -694,11 +724,16 @@ export class AssetsService {
       throw new NotFoundException(`Location with ID ${id} not found`);
     }
 
-    return location;
+    return stripForeignTenantRelations(location, tenantId);
   }
 
   async updateLocation(id: string, dto: UpdateLocationDto, tenantId: string): Promise<Location> {
     const location = await this.findLocationById(id, tenantId);
+    const manager = this.locationRepository.manager;
+    await assertTenantRefs(manager, tenantId, [
+      { entity: Location, id: dto.parentId, field: 'parentId' },
+    ]);
+    await assertNoParentCycle(manager, Location, tenantId, id, dto.parentId);
     Object.assign(location, dto);
     return this.locationRepository.save(location);
   }
@@ -722,6 +757,9 @@ export class AssetsService {
   // ==================== CATEGORY METHODS ====================
 
   async createCategory(dto: CreateCategoryDto, tenantId: string): Promise<AssetCategory> {
+    await assertTenantRefs(this.categoryRepository.manager, tenantId, [
+      { entity: AssetCategory, id: dto.parentId, field: 'parentId' },
+    ]);
     const category = this.categoryRepository.create({
       ...dto,
       tenantId,
@@ -737,11 +775,12 @@ export class AssetsService {
   }
 
   async getCategoryTree(tenantId: string): Promise<AssetCategory[]> {
-    return this.categoryRepository.find({
+    const categories = await this.categoryRepository.find({
       where: { parentId: IsNull(), tenantId },
       relations: ['children', 'children.children'],
       order: { name: 'ASC' },
     });
+    return stripForeignTenantRelations(categories, tenantId);
   }
 
   async findCategoryById(id: string, tenantId: string): Promise<AssetCategory> {
@@ -754,11 +793,16 @@ export class AssetsService {
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
-    return category;
+    return stripForeignTenantRelations(category, tenantId);
   }
 
   async updateCategory(id: string, dto: UpdateCategoryDto, tenantId: string): Promise<AssetCategory> {
     const category = await this.findCategoryById(id, tenantId);
+    const manager = this.categoryRepository.manager;
+    await assertTenantRefs(manager, tenantId, [
+      { entity: AssetCategory, id: dto.parentId, field: 'parentId' },
+    ]);
+    await assertNoParentCycle(manager, AssetCategory, tenantId, id, dto.parentId);
     Object.assign(category, dto);
     return this.categoryRepository.save(category);
   }

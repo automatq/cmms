@@ -33,6 +33,7 @@ import {
 } from './dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { FilesService } from '../files/files.service';
+import { contentTypeForKey } from '../../common/uploads/upload-options';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { DowntimeService } from '../assets/downtime.service';
@@ -41,6 +42,16 @@ import { ChecklistTemplate } from '../pm/entities/checklist-template.entity';
 import { STATUS_TRANSITIONS } from './state-machine';
 import { PmHistory, PmHistoryStatus } from '../pm/entities/pm-history.entity';
 import { PmPlan } from '../pm/entities/pm-plan.entity';
+import { Asset } from '../assets/entities/asset.entity';
+import { Location } from '../assets/entities/location.entity';
+import { FailureCode } from '../assets/entities/failure-code.entity';
+import { Part } from '../inventory/entities/part.entity';
+import { Storeroom } from '../inventory/entities/storeroom.entity';
+import {
+  assertTenantRefs,
+  stripForeignTenantRelations,
+  TENANT_MEMBER,
+} from '../../common/tenant/assert-tenant-refs';
 
 @Injectable()
 export class WorkOrdersService {
@@ -79,6 +90,13 @@ export class WorkOrdersService {
   // ==================== CORE CRUD ====================
 
   async create(dto: CreateWorkOrderDto, userId: string, tenantId: string): Promise<WorkOrder> {
+    await assertTenantRefs(this.workOrderRepository.manager, tenantId, [
+      { entity: Asset, id: dto.assetId, field: 'assetId' },
+      { entity: Location, id: dto.locationId, field: 'locationId' },
+      { entity: PmPlan, id: dto.pmPlanId, field: 'pmPlanId' },
+      { entity: ChecklistTemplate, id: dto.checklistTemplateId, field: 'checklistTemplateId' },
+    ]);
+
     const woNumber = await this.generateWoNumber(tenantId);
 
     const workOrder = this.workOrderRepository.create({
@@ -205,18 +223,31 @@ export class WorkOrdersService {
       throw new NotFoundException(`Work order with ID ${id} not found`);
     }
 
-    return workOrder;
+    return stripForeignTenantRelations(workOrder, tenantId);
   }
 
   async update(id: string, dto: UpdateWorkOrderDto, userId: string, tenantId: string): Promise<WorkOrder> {
     const workOrder = await this.findOne(id, tenantId);
     const prevAssignee = workOrder.assignedToId || null;
 
+    await assertTenantRefs(this.workOrderRepository.manager, tenantId, [
+      { entity: Asset, id: dto.assetId, field: 'assetId' },
+      { entity: Location, id: dto.locationId, field: 'locationId' },
+      { entity: FailureCode, id: dto.failureCodeId, field: 'failureCodeId' },
+      // Only a change of assignee needs an active membership; re-saving the
+      // current assignee must not fail if they were deactivated meanwhile.
+      {
+        entity: TENANT_MEMBER,
+        id: dto.assignedToId && dto.assignedToId !== prevAssignee ? dto.assignedToId : null,
+        field: 'assignedToId',
+      },
+    ]);
+
     Object.assign(workOrder, dto);
     // Treat empty string as an explicit unassign.
     if (dto.assignedToId === '') workOrder.assignedToId = null as unknown as string;
 
-    await this.workOrderRepository.save(workOrder);
+    await this.saveWorkOrderColumns(workOrder);
     const updated = await this.findOne(id, tenantId);
 
     // Notify the newly-assigned technician (not when self-assigning).
@@ -251,6 +282,22 @@ export class WorkOrdersService {
     }
 
     await this.workOrderRepository.remove(workOrder);
+  }
+
+  /**
+   * Persist only the work order's own columns. findOne() loads the parts,
+   * labor, attachments and checklist relations, all marked `cascade: true`;
+   * saving the entity would write those (possibly stale) child rows back and
+   * undo changes made to them elsewhere, e.g. the completion transaction
+   * clearing `reserved` on issued parts.
+   */
+  private async saveWorkOrderColumns(workOrder: WorkOrder): Promise<WorkOrder> {
+    const relationProps = new Set(this.workOrderRepository.metadata.relations.map((r) => r.propertyName));
+    const columns = Object.fromEntries(
+      Object.entries(workOrder).filter(([key]) => !relationProps.has(key)),
+    ) as Partial<WorkOrder>;
+    const saved = await this.workOrderRepository.save(columns);
+    return Object.assign(workOrder, saved);
   }
 
   // ==================== STATUS TRANSITIONS ====================
@@ -388,7 +435,7 @@ export class WorkOrdersService {
       }
     }
 
-    const savedWo = await this.workOrderRepository.save(workOrder);
+    const savedWo = await this.saveWorkOrderColumns(workOrder);
 
     if (workOrder.pmPlanId && (status === WorkOrderStatus.COMPLETED || status === WorkOrderStatus.CANCELLED)) {
       await this.recordPmOutcome(workOrder, status, tenantId);
@@ -481,7 +528,10 @@ export class WorkOrdersService {
   // ==================== LABOR ====================
 
   async addLabor(woId: string, dto: AddLaborDto, userId: string, tenantId: string): Promise<WoLabor> {
-    const workOrder = await this.findOne(woId, tenantId);
+    await this.findOne(woId, tenantId);
+    await assertTenantRefs(this.laborRepository.manager, tenantId, [
+      { entity: TENANT_MEMBER, id: dto.userId, field: 'userId' },
+    ]);
 
     const labor = this.laborRepository.create({
       woId,
@@ -560,6 +610,10 @@ export class WorkOrdersService {
 
   async addPart(woId: string, dto: AddPartDto, userId: string, tenantId: string): Promise<WoPart> {
     const workOrder = await this.findOne(woId, tenantId);
+    await assertTenantRefs(this.partRepository.manager, tenantId, [
+      { entity: Part, id: dto.partId, field: 'partId' },
+      { entity: Storeroom, id: dto.storeroomId, field: 'storeroomId' },
+    ]);
 
     // Resolve storeroom: use provided or find one with available stock
     let storeroomId: string = dto.storeroomId as string;
@@ -633,7 +687,7 @@ export class WorkOrdersService {
       tenantId,
       name: file.originalname,
       storageKey,
-      mimeType: file.mimetype,
+      mimeType: contentTypeForKey(storageKey),
       sizeBytes: file.size,
       uploadedBy: userId,
     });
@@ -663,7 +717,7 @@ export class WorkOrdersService {
       throw new NotFoundException(`Attachment with ID ${attachmentId} not found`);
     }
 
-    return this.filesService.getSignedUrl(attachment.storageKey);
+    return this.filesService.getSignedUrl(attachment.storageKey, { filename: attachment.name });
   }
 
   // ==================== CHECKLIST ====================
@@ -756,6 +810,10 @@ export class WorkOrdersService {
   // ==================== WORK REQUESTS ====================
 
   async createRequest(dto: CreateWorkRequestDto, tenantId: string): Promise<WorkRequest> {
+    await assertTenantRefs(this.workRequestRepository.manager, tenantId, [
+      { entity: Asset, id: dto.assetId, field: 'assetId' },
+      { entity: Location, id: dto.locationId, field: 'locationId' },
+    ]);
     const request = this.workRequestRepository.create({
       ...dto,
       tenantId,
@@ -875,7 +933,7 @@ export class WorkOrdersService {
     workOrder.completionSignature = storageKey;
     workOrder.signedOffBy = userId;
     workOrder.signedOffAt = new Date();
-    await this.workOrderRepository.save(workOrder);
+    await this.saveWorkOrderColumns(workOrder);
 
     const signatureUrl = await this.filesService.getSignedUrl(storageKey);
     return { signatureUrl };

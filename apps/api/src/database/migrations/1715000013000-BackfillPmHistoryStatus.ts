@@ -21,7 +21,7 @@ export class BackfillPmHistoryStatus1715000013000 implements MigrationInterface 
                  plan.next_due_at
                ) AS next_due
         FROM pm_history ph
-        JOIN work_orders wo ON wo.id = ph.wo_id
+        JOIN work_orders wo ON wo.id::text = ph.wo_id
         JOIN pm_plans plan ON plan.id = ph.pm_plan_id
         WHERE ph.status IS NULL
       )

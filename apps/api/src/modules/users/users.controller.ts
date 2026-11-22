@@ -68,7 +68,7 @@ export class UsersController {
     @Body('notificationPreferences') preferences: Record<string, boolean>,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.usersService.update(user.userId, { notificationPreferences: preferences }, user.tenantId);
+    return this.usersService.update(user.userId, { notificationPreferences: preferences }, user.tenantId, user);
   }
 
   @Get()
@@ -94,7 +94,7 @@ export class UsersController {
   @ApiResponse({ status: 201, description: 'User created' })
   @ApiResponse({ status: 409, description: 'User already exists' })
   create(@Body() dto: CreateUserDto, @CurrentUser() user: RequestUser) {
-    return this.usersService.create(dto, user.tenantId);
+    return this.usersService.create(dto, user.tenantId, user);
   }
 
   @Patch(':id')
@@ -103,7 +103,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'User updated' })
   @ApiResponse({ status: 404, description: 'User not found' })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto, @CurrentUser() user: RequestUser) {
-    return this.usersService.update(id, dto, user.tenantId);
+    return this.usersService.update(id, dto, user.tenantId, user);
   }
 
   @Post(':id/deactivate')
@@ -111,7 +111,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Deactivate user' })
   @ApiResponse({ status: 200, description: 'User deactivated' })
   deactivate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
-    return this.usersService.deactivate(id, user.tenantId);
+    return this.usersService.deactivate(id, user.tenantId, user);
   }
 
   @Post(':id/activate')
@@ -119,7 +119,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Activate user' })
   @ApiResponse({ status: 200, description: 'User activated' })
   activate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
-    return this.usersService.activate(id, user.tenantId);
+    return this.usersService.activate(id, user.tenantId, user);
   }
 
   @Post(':userId/roles/:roleId')
@@ -131,7 +131,7 @@ export class UsersController {
     @Param('roleId', ParseUUIDPipe) roleId: string,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.usersService.assignRole(userId, roleId, user.tenantId);
+    return this.usersService.assignRole(userId, roleId, user.tenantId, user);
   }
 
   @Delete(':userId/roles/:roleId')
@@ -143,7 +143,7 @@ export class UsersController {
     @Param('roleId', ParseUUIDPipe) roleId: string,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.usersService.removeRole(userId, roleId, user.tenantId);
+    return this.usersService.removeRole(userId, roleId, user.tenantId, user);
   }
 }
 

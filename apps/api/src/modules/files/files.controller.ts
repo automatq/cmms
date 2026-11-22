@@ -14,6 +14,12 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  attachmentUploadOptions,
+  buildContentDisposition,
+  contentTypeForKey,
+  requireFile,
+} from '../../common/uploads/upload-options';
+import {
   ApiTags,
   ApiOperation,
   ApiResponse,
@@ -26,22 +32,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
-import { UsageService } from '../../common/tenant/usage.service';
-import { TenantService } from '../../common/tenant/tenant.service';
 
 @ApiTags('Files')
 @ApiBearerAuth()
 @Controller('files')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class FilesController {
-  constructor(
-    private readonly filesService: FilesService,
-    private readonly usageService: UsageService,
-    private readonly tenantService: TenantService,
-  ) {}
+  constructor(private readonly filesService: FilesService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', attachmentUploadOptions))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload a file' })
   @ApiResponse({ status: 201, description: 'File uploaded successfully' })
@@ -50,15 +50,18 @@ export class FilesController {
     @CurrentUser() user: RequestUser,
     @Query('path') path?: string,
   ) {
-    await this.usageService.enforceStorageLimit(user.tenantId, file.size);
+    requireFile(file);
+    if (path !== undefined && (!/^[A-Za-z0-9_\-/]{1,200}$/.test(path) || path.startsWith('/'))) {
+      throw new BadRequestException('Invalid upload path');
+    }
+    // uploadFile enforces the tenant storage quota and records usage.
     const key = await this.filesService.uploadFile(file, path || 'uploads', user.tenantId);
-    const url = await this.filesService.getSignedUrl(key);
-    await this.tenantService.updateStorageUsage(user.tenantId, file.size);
+    const url = await this.filesService.getSignedUrl(key, { filename: file.originalname });
     return {
       key,
       url,
       name: file.originalname,
-      mimeType: file.mimetype,
+      mimeType: contentTypeForKey(key),
       size: file.size,
     };
   }
@@ -83,7 +86,18 @@ export class FilesController {
   ) {
     const decodedKey = decodeURIComponent(key);
     this.validateFileAccess(decodedKey, user.tenantId);
-    const stream = await this.filesService.getFileStream(decodedKey);
+    const { stream, contentType, contentLength } =
+      await this.filesService.getFileObject(decodedKey);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader(
+      'Content-Disposition',
+      buildContentDisposition('attachment', decodedKey.split('/').pop()),
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (contentLength != null) {
+      res.setHeader('Content-Length', String(contentLength));
+    }
     stream.pipe(res);
   }
 
