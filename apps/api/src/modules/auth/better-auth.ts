@@ -1,5 +1,5 @@
 import { betterAuth } from 'better-auth';
-import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { organization, bearer, admin } from 'better-auth/plugins';
 import { adminAc, userAc } from 'better-auth/plugins/admin/access';
 import { expo } from '@better-auth/expo';
@@ -99,7 +99,17 @@ export const auth: any = betterAuth({
   hooks: {
     before: createAuthMiddleware(async (ctx: any) => {
       if (!isOrganizationPath(ctx.path) || ORG_PATHS_WITHOUT_MEMBERSHIP.has(ctx.path)) return;
-      const session = await getSessionFromCtx(ctx, { disableRefresh: true });
+      // User before-hooks run ahead of plugin hooks, and plugin changes to the
+      // request (the bearer plugin turning `Authorization: Bearer` into a
+      // session cookie) only reach the endpoint, not other hooks. Resolve the
+      // session through getSession so bearer-token clients (web, mobile) are
+      // covered, not just cookie sessions.
+      const headers: Headers | undefined = ctx.request?.headers ?? ctx.headers;
+      const session = headers
+        ? await auth.api
+            .getSession({ headers, query: { disableRefresh: true } })
+            .catch(() => null)
+        : null;
       // Unauthenticated: the endpoint's own session middleware rejects it.
       if (!session?.user) return;
       const decision = await evaluateOrganizationRequest(
@@ -270,6 +280,16 @@ export const auth: any = betterAuth({
       // Only users whose `role` is in this list can call /api/auth/admin/* endpoints
       // (list-users, set-role, ban-user, impersonate-user, etc.).
       adminRoles: ['superadmin'],
+      // Plugin-contributed fields need their column mapping here; the
+      // top-level session.fields map isn't applied to them, and Better Auth
+      // 1.7 refuses every request when it can't find the column.
+      schema: {
+        session: {
+          fields: {
+            impersonatedBy: 'impersonated_by',
+          },
+        },
+      },
     }),
     organization({
       schema: {

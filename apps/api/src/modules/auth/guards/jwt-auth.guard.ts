@@ -6,11 +6,12 @@ import {
   ForbiddenException,
   HttpException,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Auth } from 'better-auth';
-import { InjectBetterAuth } from 'nestjs-better-auth';
+import { BETTER_AUTH } from '../better-auth.token';
 import { getAuthPool as getPool, isUserBanned, resolveMembership } from '../membership';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
@@ -56,7 +57,7 @@ export class JwtAuthGuard implements CanActivate {
 
   constructor(
     private reflector: Reflector,
-    @InjectBetterAuth() private readonly auth: Auth,
+    @Inject(BETTER_AUTH) private readonly auth: Auth,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

@@ -51,7 +51,6 @@
     "jwks-rsa": "^4.0.1",
     "kysely": "^0.28.17",
     "multer": "^2.1.1",
-    "nestjs-better-auth": "^0.6.4",
     "nodemailer": "^10.6.0",
     "pdf-lib": "^1.17.1",
     "pdfkit": "^0.18.0",
