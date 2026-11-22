@@ -45,13 +45,13 @@ describe('UsersService account-takeover protections', () => {
 
   it('does not attach an existing global account to the caller tenant', async () => {
     const { service, addMember } = makeService({ existing: { id: 'victim', email: dto.email } });
-    await expect(service.create(dto, 'attacker-tenant')).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.create(dto, 'attacker-tenant', { userId: 'admin-1' })).rejects.toBeInstanceOf(ConflictException);
     expect(addMember).not.toHaveBeenCalled();
   });
 
   it('creates new users with insert() and a server-generated id', async () => {
     const { service, userRepository } = makeService();
-    await service.create(dto, 't1');
+    await service.create(dto, 't1', { userId: 'admin-1' });
     expect(userRepository.save).not.toHaveBeenCalled();
     const inserted = userRepository.insert.mock.calls[0][0];
     expect(inserted.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -59,7 +59,7 @@ describe('UsersService account-takeover protections', () => {
 
   it('refuses to change a user email from the tenant admin endpoint', async () => {
     const { service, userRepository } = makeService();
-    await expect(service.update('victim', { email: 'attacker@evil.com' }, 't1')).rejects.toBeInstanceOf(
+    await expect(service.update('victim', { email: 'attacker@evil.com' }, 't1', { userId: 'admin-1' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(userRepository.save).not.toHaveBeenCalled();
@@ -67,7 +67,7 @@ describe('UsersService account-takeover protections', () => {
 
   it('tolerates an unchanged email echoed back by the edit form', async () => {
     const { service, userRepository } = makeService();
-    await service.update('victim', { email: 'Victim@corp.com', firstName: 'V' }, 't1');
+    await service.update('victim', { email: 'Victim@corp.com', firstName: 'V' }, 't1', { userId: 'victim' });
     expect(userRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'victim@corp.com', firstName: 'V' }),
     );

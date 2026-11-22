@@ -1,4 +1,4 @@
-import { resolveMembership } from './membership';
+import { isUserBanned, resolveMembership } from './membership';
 
 const q = (rows: any[]) => jest.fn().mockResolvedValue({ rows });
 
@@ -24,5 +24,21 @@ describe('resolveMembership', () => {
     const query = q([]);
     await resolveMembership('user-1', 'org-1', query);
     expect(query.mock.calls[0][1]).toEqual(['user-1', 'org-1']);
+  });
+});
+
+describe('isUserBanned', () => {
+  it('is false for users that are not banned', () => {
+    expect(isUserBanned({ banned: false })).toBe(false);
+    expect(isUserBanned(null)).toBe(false);
+  });
+
+  it('is true for permanent bans and unexpired bans', () => {
+    expect(isUserBanned({ banned: true })).toBe(true);
+    expect(isUserBanned({ banned: true, banExpires: new Date(Date.now() + 60_000) })).toBe(true);
+  });
+
+  it('is false once the ban has expired', () => {
+    expect(isUserBanned({ banned: true, banExpires: new Date(Date.now() - 60_000) })).toBe(false);
   });
 });

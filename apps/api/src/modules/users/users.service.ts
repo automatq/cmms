@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { User, UserStatus } from './entities/user.entity';
@@ -9,6 +9,20 @@ import { CreateUserDto, UpdateUserDto, UserQueryDto, CreateRoleDto, UpdateRoleDt
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { UsageService } from '../../common/tenant/usage.service';
 import { TenantService } from '../../common/tenant/tenant.service';
+import {
+  checkInvitationRole,
+  checkMemberChange,
+  MemberChangeInput,
+  ROLE_OWNER,
+} from '../auth/member-hierarchy';
+
+/** The authenticated caller performing a membership change. */
+export interface MemberActor {
+  userId: string;
+  systemRole?: string | null;
+}
+
+type MemberRow = { role: string | null; status: string | null };
 
 /**
  * UsersService — works on Better Auth's `users` table.
@@ -42,7 +56,7 @@ export class UsersService {
    * Note: this creates BOTH the auth identity AND the member row;
    * for invitation flows, use Better Auth's invitation API instead.
    */
-  async create(dto: CreateUserDto, tenantId: string): Promise<User> {
+  async create(dto: CreateUserDto, tenantId: string, actor: MemberActor): Promise<User> {
     await this.usageService.enforceUserLimit(tenantId);
 
     // Email is globally unique. Never silently attach an existing global
@@ -63,6 +77,13 @@ export class UsersService {
     const roles = dto.roleIds?.length
       ? await this.findRolesByIds(dto.roleIds, tenantId)
       : [];
+    if (roles.length > 0) {
+      const decision = checkInvitationRole(
+        await this.resolveActorRole(actor, tenantId),
+        roles.map((r) => r.name),
+      );
+      if (!decision.ok) throw new ForbiddenException(decision.reason);
+    }
 
     const { roleIds, ...userData } = dto;
     // insert() (not save()) so a colliding id can never update an existing row.
@@ -137,16 +158,8 @@ export class UsersService {
       .getOne();
   }
 
-  async update(id: string, dto: UpdateUserDto, tenantId: string): Promise<User> {
+  async update(id: string, dto: UpdateUserDto, tenantId: string, actor: MemberActor): Promise<User> {
     const user = await this.findOne(id, tenantId);
-
-    if (dto.roleIds !== undefined) {
-      const roles = dto.roleIds.length
-        ? await this.findRolesByIds(dto.roleIds, tenantId)
-        : [];
-      await this.setUserRoleIds(id, roles.map((role) => role.id), tenantId);
-      user.roles = roles;
-    }
 
     // Users are global identities shared across orgs. A tenant admin must not
     // be able to change the login email of an account (that enables takeover
@@ -156,19 +169,55 @@ export class UsersService {
       throw new BadRequestException('Email cannot be changed here. Users change their own email from their account settings.');
     }
 
-    if (dto.status !== undefined) {
-      await this.setMembershipStatus(id, tenantId, dto.status === UserStatus.ACTIVE ? 'active' : 'inactive');
+    const { roleIds, email: _email, status, ...profile } = dto;
+
+    // Authorize every kind of change before writing anything.
+    if (Object.values(profile).some((v) => v !== undefined)) {
+      await this.assertMemberChange(actor, id, tenantId, { action: 'update_profile' });
     }
 
-    const { roleIds, email: _email, ...updateData } = dto;
-    Object.assign(user, updateData);
+    let membershipStatus: 'active' | 'inactive' | undefined;
+    if (status !== undefined) {
+      const desired = status === UserStatus.ACTIVE ? 'active' : 'inactive';
+      const current = (await this.getMemberRow(id, tenantId))?.status === 'inactive' ? 'inactive' : 'active';
+      if (desired !== current) {
+        await this.assertMemberChange(actor, id, tenantId, {
+          action: desired === 'active' ? 'activate' : 'deactivate',
+        });
+        membershipStatus = desired;
+      }
+    }
+
+    let newRoles: Role[] | undefined;
+    if (roleIds !== undefined) {
+      newRoles = roleIds.length ? await this.findRolesByIds(roleIds, tenantId) : [];
+      const currentNames = (user.roles || []).map((r) => r.name);
+      const newNames = newRoles.map((r) => r.name);
+      const grantRoles = newNames.filter((n) => !currentNames.includes(n));
+      const revokeRoles = currentNames.filter((n) => !newNames.includes(n));
+      if (grantRoles.length || revokeRoles.length) {
+        await this.assertMemberChange(actor, id, tenantId, { action: 'assign_roles', grantRoles, revokeRoles });
+      }
+    }
+
+    if (newRoles !== undefined) {
+      await this.setUserRoleIds(id, newRoles.map((role) => role.id), tenantId);
+      user.roles = newRoles;
+    }
+
+    if (membershipStatus !== undefined) {
+      await this.setMembershipStatus(id, tenantId, membershipStatus);
+    }
+
+    Object.assign(user, status !== undefined ? { ...profile, status } : profile);
 
     await this.userRepository.save(user);
     return this.findOne(id, tenantId);
   }
 
-  async deactivate(id: string, tenantId: string): Promise<User> {
+  async deactivate(id: string, tenantId: string, actor: MemberActor): Promise<User> {
     const user = await this.findOne(id, tenantId);
+    await this.assertMemberChange(actor, id, tenantId, { action: 'deactivate' });
     // Access is enforced per membership (see auth/membership.ts). users.status
     // is kept in sync for display in this org's user list.
     await this.setMembershipStatus(id, tenantId, 'inactive');
@@ -176,11 +225,70 @@ export class UsersService {
     return this.userRepository.save(user);
   }
 
-  async activate(id: string, tenantId: string): Promise<User> {
+  async activate(id: string, tenantId: string, actor: MemberActor): Promise<User> {
     const user = await this.findOne(id, tenantId);
+    await this.assertMemberChange(actor, id, tenantId, { action: 'activate' });
     await this.setMembershipStatus(id, tenantId, 'active');
     user.status = UserStatus.ACTIVE;
     return this.userRepository.save(user);
+  }
+
+  // ==================== ROLE HIERARCHY ====================
+
+  private async getMemberRow(userId: string, tenantId: string): Promise<MemberRow | null> {
+    const rows = await this.userRepository.query(
+      `SELECT role, status FROM members WHERE user_id = $1 AND organization_id = $2 LIMIT 1`,
+      [userId, tenantId],
+    );
+    return rows?.[0] ?? null;
+  }
+
+  private async countActiveOwners(tenantId: string): Promise<number> {
+    const rows = await this.userRepository.query(
+      `SELECT count(*)::int AS count FROM members
+        WHERE organization_id = $1
+          AND COALESCE(status, 'active') <> 'inactive'
+          AND 'owner' = ANY(string_to_array(replace(lower(role), ' ', ''), ','))`,
+      [tenantId],
+    );
+    return Number(rows?.[0]?.count ?? 0);
+  }
+
+  /** Platform superadmins act with owner rank; everyone else uses members.role. */
+  private async resolveActorRole(actor: MemberActor, tenantId: string): Promise<string | null> {
+    if (actor.systemRole === 'superadmin') return ROLE_OWNER;
+    return (await this.getMemberRow(actor.userId, tenantId))?.role ?? null;
+  }
+
+  /**
+   * Enforce the owner > admin > member hierarchy (see auth/member-hierarchy.ts)
+   * for a change made by `actor` to the membership of `targetUserId`.
+   */
+  private async assertMemberChange(
+    actor: MemberActor,
+    targetUserId: string,
+    tenantId: string,
+    change: Pick<MemberChangeInput, 'action' | 'newRole' | 'grantRoles' | 'revokeRoles'>,
+  ): Promise<void> {
+    const isSelf = actor.userId === targetUserId;
+    // Editing your own profile is always allowed.
+    if (isSelf && change.action === 'update_profile') return;
+
+    const target = await this.getMemberRow(targetUserId, tenantId);
+    const actorRole = isSelf && actor.systemRole !== 'superadmin'
+      ? target?.role ?? null
+      : await this.resolveActorRole(actor, tenantId);
+
+    const decision = checkMemberChange({
+      ...change,
+      actorRole,
+      targetRole: target?.role ?? null,
+      isSelf,
+      activeOwnerCount: isSelf ? await this.countActiveOwners(tenantId) : undefined,
+    });
+    if (!decision.ok) {
+      throw new ForbiddenException(decision.reason);
+    }
   }
 
   private async setMembershipStatus(userId: string, tenantId: string, status: 'active' | 'inactive'): Promise<void> {
@@ -190,7 +298,7 @@ export class UsersService {
     );
   }
 
-  async assignRole(userId: string, roleId: string, tenantId: string): Promise<User> {
+  async assignRole(userId: string, roleId: string, tenantId: string, actor: MemberActor): Promise<User> {
     const user = await this.findOne(userId, tenantId);
     const role = await this.roleRepository.findOne({ where: { id: roleId, tenantId } });
 
@@ -199,6 +307,7 @@ export class UsersService {
     }
 
     if (!user.roles.find((r) => r.id === roleId)) {
+      await this.assertMemberChange(actor, userId, tenantId, { action: 'assign_roles', grantRoles: [role.name] });
       await this.userRepository.query(
         `INSERT INTO user_roles (user_id, role_id, tenant_id)
          VALUES ($1, $2, $3)
@@ -210,9 +319,10 @@ export class UsersService {
     return this.findOne(userId, tenantId);
   }
 
-  async removeRole(userId: string, roleId: string, tenantId: string): Promise<User> {
+  async removeRole(userId: string, roleId: string, tenantId: string, actor: MemberActor): Promise<User> {
     await this.findOne(userId, tenantId);
-    await this.findRoleById(roleId, tenantId);
+    const role = await this.findRoleById(roleId, tenantId);
+    await this.assertMemberChange(actor, userId, tenantId, { action: 'assign_roles', revokeRoles: [role.name] });
     await this.userRepository.query(
       `DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2 AND tenant_id = $3`,
       [userId, roleId, tenantId],

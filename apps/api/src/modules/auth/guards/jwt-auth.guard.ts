@@ -11,7 +11,7 @@ import { Reflector } from '@nestjs/core';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Auth } from 'better-auth';
 import { InjectBetterAuth } from 'nestjs-better-auth';
-import { getAuthPool as getPool, resolveMembership } from '../membership';
+import { getAuthPool as getPool, isUserBanned, resolveMembership } from '../membership';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestUser } from '../../../common/interfaces/request-user.interface';
 import { PlanTier, TenantStatus } from '../../users/entities/tenant.entity';
@@ -86,11 +86,8 @@ export class JwtAuthGuard implements CanActivate {
 
     // Block banned users (Better Auth admin plugin sets this).
     const userRow = session.user as any;
-    if (userRow.banned) {
-      const expires = userRow.banExpires ? new Date(userRow.banExpires) : null;
-      if (!expires || expires > new Date()) {
-        throw new UnauthorizedException('Account banned');
-      }
+    if (isUserBanned(userRow)) {
+      throw new UnauthorizedException('Account banned');
     }
 
     const activeOrgId: string | null =
