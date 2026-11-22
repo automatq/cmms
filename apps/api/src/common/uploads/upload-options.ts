@@ -170,6 +170,7 @@ export function sanitizeFilename(filename?: string | null): string {
   const base = filename.split(/[\\/]/).pop() || '';
   // Strip control characters (incl. CR/LF) and quotes; cap the length.
   return base
+    // eslint-disable-next-line no-control-regex -- matching control chars is the point
     .replace(/[\x00-\x1f\x7f"]/g, '')
     .trim()
     .slice(0, 200);

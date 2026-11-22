@@ -37,6 +37,7 @@ class FakeDb {
   }
 
   manager(held: Array<() => void>): any {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- nested repo methods rebind `this`
     const db = this;
     const tick = () => new Promise((r) => setImmediate(r));
     return {
